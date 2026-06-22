@@ -1,0 +1,125 @@
+"""Per-DP header, source-breakdown card, and Custom Rules table.
+
+These are the cards / tables that sit at the top of each Data Product
+dashboard before the gauge + tab row.
+"""
+from __future__ import annotations
+
+import html
+
+import pandas as pd
+import streamlit as st
+
+from config.custom_dqr_catalog import get_available_custom_dqr_rules
+from config.dqr_sources import SOURCE_LABELS
+from ui.step_06._shared import (
+    _DEFAULT_ACCENT,
+    _SYSTEM_ACCENTS,
+    _SYSTEM_ICONS,
+    _status_class,
+)
+from utils.helpers import score_label
+
+
+def _render_source_breakdown(result) -> None:
+    """Show the per-source subscores + the source weights used."""
+    sources = list(result.source_weights.keys()) if result.source_weights else []
+    if not sources:
+        return
+    weights = result.source_weights
+    inline_parts = " · ".join(
+        f"<b>{html.escape(SOURCE_LABELS[s])}</b>: {weights.get(s, 0.0):.0f}%"
+        for s in sources
+    )
+    st.markdown(
+        f"""
+        <div class="src-mini">
+            <div class="src-mini-title">📐 Source weights</div>
+            <div>{inline_parts}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    sub_cols = []
+    if result.standard_score is not None:
+        sub_cols.append(("Standard score", result.standard_score))
+    if result.custom_score is not None:
+        sub_cols.append(("Custom score", result.custom_score))
+    if not sub_cols:
+        return
+    cols = st.columns(len(sub_cols))
+    for col, (label, value) in zip(cols, sub_cols):
+        col.metric(label, f"{value:.1f}")
+
+
+def _render_custom_rules_table(code: str, result) -> None:
+    catalog = {r.id: r for r in get_available_custom_dqr_rules(code)}
+    cfg = st.session_state.configs[code]
+    rows = []
+    for a in cfg.custom_assignments:
+        rule = catalog.get(a.rule_id)
+        not_evaluated_reason = result.not_evaluated_custom_rules.get(a.rule_id)
+        if not_evaluated_reason is not None:
+            status = "Not evaluated"
+            pass_rate_display = float("nan")
+        else:
+            status = "Evaluated"
+            pass_rate_display = round(
+                result.custom_rule_pass_rates.get(a.rule_id, 0.0), 2
+            )
+        rows.append({
+            "Rule ID": a.rule_id,
+            "Name": rule.name if rule is not None else a.rule_id,
+            "Type": rule.type if rule is not None else "-",
+            "Blocking": "Yes" if (rule is not None and rule.blocking) else "No",
+            "Status": status,
+            "Weight (%)": round(a.weight, 2),
+            "Pass rate (%)": pass_rate_display,
+        })
+    if not rows:
+        st.caption("No custom rules selected for this Data Product.")
+        return
+    df = pd.DataFrame(rows).sort_values("Pass rate (%)")
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Pass rate (%)": st.column_config.ProgressColumn(
+                "Pass rate (%)", min_value=0, max_value=100, format="%.1f%%",
+            ),
+            "Weight (%)": st.column_config.NumberColumn(format="%.2f%%"),
+        },
+    )
+    if result.not_evaluated_custom_rules:
+        for rule_id, reason in result.not_evaluated_custom_rules.items():
+            st.warning(f"⚠ **{rule_id}** not evaluated - {reason}")
+
+
+def _render_dp_card_header(code: str, dp, result) -> None:
+    """Polished header for each DP dashboard card: icon, name, code pill,
+    status pill on the right. Visually replaces the original ``## 📦 dp.name``
+    + plain `**Status:** ...` line."""
+    icon = _SYSTEM_ICONS.get(code, "📦")
+    accent = _SYSTEM_ACCENTS.get(code, _DEFAULT_ACCENT)
+    label = score_label(result.overall_score,
+                        result.threshold_green, result.threshold_yellow)
+    cls = _status_class(result.overall_score,
+                        result.threshold_green, result.threshold_yellow)
+    st.markdown(
+        f"""
+        <div class="dp-card-accent" style="background: {accent};"></div>
+        <div class="dp-card-title-row">
+            <span class="dp-icon">{icon}</span>
+            <span class="dp-name">{html.escape(dp.name)}</span>
+            <span class="dp-code">{html.escape(code)}</span>
+            <span class="dp-status-pill {cls}">{html.escape(label)}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    # Keep the markdown line that the original page rendered so that
+    # anything downstream relying on the literal "**Status:**" text still
+    # finds it.
+    st.markdown(f"**Status:** {label}")

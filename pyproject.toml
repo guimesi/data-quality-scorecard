@@ -1,0 +1,52 @@
+# Project configuration for tooling that reads pyproject.toml.
+# Build metadata is intentionally absent - this project ships as a
+# Streamlit app, not a PyPI package; dependencies live in
+# ``requirements.txt`` (dev) and ``requirements.lock`` (CI/prod).
+
+# Pyright / IDE: the import root is the project root (so ``from
+# config.domains import ...`` resolves), NOT ``src/``. ``src/`` is just one
+# of several top-level packages alongside ``config/``, ``ui/``, ``utils/``.
+[tool.pyright]
+include = ["app.py", "config", "src", "ui", "utils", "tests"]
+extraPaths = ["."]
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["."]
+extend-exclude = [
+    ".venv",
+    "documents",
+]
+
+[tool.ruff.lint]
+# Start conservative: pyflakes (F) catches genuine bugs / unused imports;
+# the rest is opt-in as the team grows comfortable with the tool.
+select = [
+    "F",     # pyflakes: undefined names, unused imports/variables, etc.
+    "I",     # isort: import ordering (auto-fixable)
+    "W291",  # trailing whitespace
+    "W292",  # no newline at end of file
+    "W293",  # whitespace on blank line
+]
+ignore = [
+    "F401",  # unused-import: catalog re-exports rely on top-level imports
+             #   that look unused to ruff (the catalog files import every
+             #   constant from src.custom_dqr_engine so each rule's
+             #   ``CustomRuleDef(...)`` can reference them).
+    "F811",  # re-defined name: re-exports in __all__-only modules trip this.
+]
+
+# Pytest defaults. ``--cov-fail-under`` is NOT set here on purpose so
+# local subset runs (``pytest tests/test_one_thing.py``) don't trip the
+# floor; CI passes it explicitly in ``.github/workflows/tests.yml``.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # Streamlit emits these whenever AppTest mocks fall back to the bare
+    # runtime; they're noise, not actionable.
+    "ignore::DeprecationWarning:streamlit.*",
+    "ignore:.*ScriptRunContext.*:UserWarning",
+]

@@ -1,0 +1,12 @@
+streamlit>=1.32.0,<2.0
+pandas>=2.0.0,<3.0
+numpy>=1.24.0,<3.0
+snowflake-connector-python>=3.6.0,<5.0
+plotly>=5.18.0,<7.0
+python-dotenv>=1.0.0,<2.0
+pytest>=7.4.0,<9.0
+pytest-cov>=4.1.0,<8.0
+# Optional: enables IsolationForest / KMeans / PCA / LogisticRegression in
+# Step 7: ML Lab. The lab works without it (numpy fallbacks), but a
+# scikit-learn install unlocks a "🔬 Use scikit-learn" toggle.
+scikit-learn>=1.3.0,<2.0

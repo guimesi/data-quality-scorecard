@@ -1,0 +1,33 @@
+# Pre-commit hooks - run ``pre-commit install`` once after cloning to
+# wire them into ``git commit``. They mirror what CI enforces so a
+# failing ``ruff check`` never lands a commit in the first place.
+#
+# Install:
+#     pip install pre-commit
+#     pre-commit install
+#
+# Run manually against the whole repo (matches CI):
+#     pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff           # ruff check --fix
+        args: [--fix]
+      - id: ruff-format    # opt-in formatter; off by default to avoid
+                           # large diffs - delete this comment + uncomment
+                           # the next line when the team is ready to adopt.
+        stages: [manual]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'   # leave markdown trailing spaces alone (some
+                           # use them for line breaks)
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
