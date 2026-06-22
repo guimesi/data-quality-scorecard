@@ -718,7 +718,7 @@ The ML Lab is the experimental Machine-Learning / statistical-analytics sandbox 
 | 🌿 **CDE Clustering** | Group CDEs that "behave the same". | Robust-standardized profile features → k-means + PCA-2D. Numpy fallback or `sklearn.cluster.KMeans` + `sklearn.decomposition.PCA`. |
 | ⚖️ **Weight Sensitivity** | Stress-test the Standard sub-score against weight perturbations. | Dirichlet Monte-Carlo around the current weights; concentration parametrised by a `jitter` slider. |
 | 🔭 **Cross-DP Comparison** | Flag DPs whose overall score sits far from peers. | Robust z (MAD); `|z| > 1.5` → `Anomalous`. |
-| 📜 **Run History** | Capture / upload / export scorecard snapshots and inspect drift. | Snapshot history in `st.session_state.ml_lab_runs` + JSON / CSV uploads + PSI + KS + per-rule / per-CDE / per-dim Δ tables. |
+| 📜 **Run History** | Capture / export scorecard snapshots and inspect drift. *(JSON / CSV upload temporarily under maintenance — snapshots will be persisted automatically.)* | Snapshot history in `st.session_state.ml_lab_runs` + PSI + KS + per-rule / per-CDE / per-dim Δ tables. Upload loaders (`load_snapshot_from_json` / `load_snapshot_from_csv`) retained for the upcoming auto-persist work. |
 | 🧠 **Risk Model** | Discover which rules best segregate RED rows. | L2-logistic regression on per-rule fail flags, target = `row_score < threshold_yellow`. sklearn LR or numpy gradient-descent LR. |
 | 💡 **DQR Recommendations** | Suggest DQRs to add per CDE. | Cosine similarity on robust-standardized profile vectors (cross-DP neighbours) + profile heuristics. |
 | 🧩 **Row Explainability** | Decompose `100 − row_score` into per-CDE deficits. | Exact decomposition (score is linear); rendered as a Plotly waterfall. |

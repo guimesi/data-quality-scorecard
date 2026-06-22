@@ -207,8 +207,8 @@ flowchart TD
     %% Tab 6 - Run History
     TABS -->|📜 Run History| T6BAR{Action?}
     T6BAR -->|📸 Snapshot| T6A["snapshot_scorecard()<br/>append to ml_lab_runs"]
-    T6BAR -->|📂 Upload JSON| T6B["load_snapshot_from_json"]
-    T6BAR -->|📂 Upload CSV| T6C["load_snapshot_from_csv<br/>(reconstructs histogram)"]
+    T6BAR -.->|📂 Upload JSON<br/>(under maintenance)| T6B["load_snapshot_from_json"]
+    T6BAR -.->|📂 Upload CSV<br/>(under maintenance)| T6C["load_snapshot_from_csv<br/>(reconstructs histogram)"]
     T6BAR -->|💾 Export| T6D["JSON download of full history"]
     T6BAR -->|🗑 Clear| T6E["session_state.ml_lab_runs = []"]
     T6BAR -->|Pick A, B| T6F["compute_drift(snap_a, snap_b)"]

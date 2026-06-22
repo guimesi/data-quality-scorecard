@@ -25,7 +25,6 @@ class _AttrDict(dict):
     def __setattr__(self, key, value):
         self[key] = value
 
-import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -240,7 +239,6 @@ def test_ml_lab_run_history_clear_button_resets_runs():
     assert clear_btn, "🗑 Clear button is expected when runs exist"
     clear_btn[0].click().run()
     assert at.session_state["ml_lab_runs"] == []
-    assert at.session_state["ml_lab_uploaded_fingerprints"] == set()
 
 
 def test_ml_lab_drift_renders_with_two_snapshots():
@@ -307,137 +305,20 @@ def test_ml_lab_back_to_dashboard_button_navigates_to_step6():
 
 
 # ===========================================================================
-# File upload + worst/median row buttons (mock-driven unit-style coverage)
+# Run History upload (temporarily under maintenance) + worst/median row
+# buttons (mock-driven unit-style coverage)
 # ===========================================================================
 
-def test_render_tab_run_history_imports_json_upload():
-    """File uploader with a valid JSON snapshot adds it to ml_lab_runs."""
-    import ui.step_07_ml_lab as s7
-    from src.ml_lab import snapshot_scorecard
-
-    state = _build_scored_state()
-    dp = state["data_products"]["EPT"]
-    res = state["scorecards"]["EPT"]
-    snap = snapshot_scorecard("EPT", dp, res, label="uploaded")
-    payload = json.dumps(snap).encode("utf-8")
-
-    class _UF:
-        name = "snap.json"
-        file_id = "uf-1"
-        size = len(payload)
-
-        def getvalue(self):
-            return payload
-
-    # Build a minimal fake_st that drives _render_tab_run_history's branches.
-    fake_session = _AttrDict({
-        "ml_lab_runs": [],
-        "data_products": state["data_products"],
-    })
-
-    class _RerunSignal(Exception):
-        pass
-
-    fake_st = MagicMock()
-    fake_st.session_state = fake_session
-    fake_st.columns = MagicMock(
-        side_effect=lambda spec: [_col() for _ in range(
-            spec if isinstance(spec, int) else len(spec))]
-    )
-    fake_st.button = MagicMock(return_value=False)
-    fake_st.file_uploader = MagicMock(return_value=[_UF()])
-    fake_st.rerun = MagicMock(side_effect=_RerunSignal)
-    fake_st.success = MagicMock()
-    fake_st.markdown = MagicMock()
-    fake_st.caption = MagicMock()
-
-    with _patch_step07_st(fake_st):
-        with pytest.raises(_RerunSignal):
-            s7._render_tab_run_history(state["scorecards"])
-
-    # The uploaded snapshot was parsed by load_snapshot_from_json. We don't
-    # need to match every field - we just need to confirm one snapshot was
-    # added and the fingerprint was cached so the next render won't re-add it.
-    assert len(fake_session["ml_lab_runs"]) == 1
-    fps = fake_session["ml_lab_uploaded_fingerprints"]
-    assert ("id", "uf-1") in fps
-
-
-def test_render_tab_run_history_uploader_warns_on_corrupt_file():
-    """Invalid uploads → warning + no entry written."""
-    import ui.step_07_ml_lab as s7
-
-    class _UF:
-        name = "garbage.json"
-        file_id = "g-1"
-        size = 4
-
-        def getvalue(self):
-            return b"\x00\x01\x02\x03"
-
-    fake_session = _AttrDict({
-        "ml_lab_runs": [],
-        "data_products": {},
-    })
-    fake_st = MagicMock()
-    fake_st.session_state = fake_session
-    fake_st.columns = MagicMock(
-        side_effect=lambda spec: [_col() for _ in range(
-            spec if isinstance(spec, int) else len(spec))]
-    )
-    fake_st.button = MagicMock(return_value=False)
-    fake_st.file_uploader = MagicMock(return_value=[_UF()])
-    fake_st.markdown = MagicMock()
-    fake_st.caption = MagicMock()
-    fake_st.warning = MagicMock()
-
-    with _patch_step07_st(fake_st):
-        s7._render_tab_run_history({})
-
-    fake_st.warning.assert_called()
-    assert fake_session["ml_lab_runs"] == []
-
-
-def test_render_tab_run_history_csv_upload_uses_filename_code_guess():
-    """CSV uploader path - the dp_code is guessed from the filename prefix."""
-    import ui.step_07_ml_lab as s7
-
-    # Step 6 CSV exports use ``_row_score`` (with underscore prefix).
-    csv_text = (
-        "_row_score,_status\n90.0,GREEN\n75.0,YELLOW\n40.0,RED\n82.5,GREEN\n"
-    ).encode("utf-8")
-
-    class _UF:
-        name = "EPT_row_scores.csv"
-        file_id = "csv-1"
-        size = len(csv_text)
-
-        def getvalue(self):
-            return csv_text
-
-    fake_session = _AttrDict({"ml_lab_runs": []})
-
-    class _RerunSignal(Exception):
-        pass
-
-    fake_st = MagicMock()
-    fake_st.session_state = fake_session
-    fake_st.columns = MagicMock(
-        side_effect=lambda spec: [_col() for _ in range(
-            spec if isinstance(spec, int) else len(spec))]
-    )
-    fake_st.button = MagicMock(return_value=False)
-    fake_st.file_uploader = MagicMock(return_value=[_UF()])
-    fake_st.rerun = MagicMock(side_effect=_RerunSignal)
-    fake_st.success = MagicMock()
-    fake_st.markdown = MagicMock()
-    fake_st.caption = MagicMock()
-
-    with _patch_step07_st(fake_st):
-        with pytest.raises(_RerunSignal):
-            s7._render_tab_run_history({"EPT": object()})
-    assert len(fake_session["ml_lab_runs"]) == 1
-    assert fake_session["ml_lab_runs"][0]["dp_code"] == "EPT"
+def test_ml_lab_run_history_upload_is_under_maintenance():
+    """Snapshot upload is temporarily disabled: the 📂 control renders but is
+    surfaced as 'under maintenance' rather than an active file uploader. The
+    loader functions remain unit-tested in test_ml_lab / test_coverage_gaps."""
+    at = _new_lab_app()
+    upload_buttons = [b for b in at.button if "Upload" in b.label]
+    assert upload_buttons, "📂 Upload (under maintenance) button expected"
+    assert any("maintenance" in b.label.lower() for b in upload_buttons)
+    # The feature being disabled, no upload-dedupe state is created.
+    assert "ml_lab_uploaded_fingerprints" not in at.session_state
 
 
 def _col():

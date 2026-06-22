@@ -78,8 +78,8 @@ is now a slim orchestrator that wires those tab renderers into
 | Function | Purpose |
 |----------|---------|
 | `snapshot_scorecard(dp_code, dp, result, label=None)` | Captures a JSON-serialisable snapshot of one DP's current scorecard (overall score, rule pass rates, CDE / dimension scores, row-score histogram in 20 bins of [0, 100], thresholds, row buckets). |
-| `load_snapshot_from_json(file_bytes, source="upload-json")` | Parses a `*_scorecard.json` exported by Step 6 into the same snapshot schema. Row-score histogram is `None` (JSON export doesn't carry per-row data). |
-| `load_snapshot_from_csv(file_bytes, dp_code="?", label=None)` | Parses a `*_row_scores.csv` exported by Step 6 into a snapshot - recovers the per-row histogram from `_row_score` and the per-rule pass rates by averaging the `STD · …` / `CUSTOM · …` columns. |
+| `load_snapshot_from_json(file_bytes, source="upload-json")` | Parses a `*_scorecard.json` exported by Step 6 into the same snapshot schema. Row-score histogram is `None` (JSON export doesn't carry per-row data). **UI upload entry point is temporarily under maintenance; this loader is retained for the upcoming auto-persist work.** |
+| `load_snapshot_from_csv(file_bytes, dp_code="?", label=None)` | Parses a `*_row_scores.csv` exported by Step 6 into a snapshot - recovers the per-row histogram from `_row_score` and the per-rule pass rates by averaging the `STD · …` / `CUSTOM · …` columns. **UI upload entry point temporarily under maintenance (loader retained).** |
 | `compute_drift(snap_a, snap_b, rule_delta_threshold=5.0)` | PSI + KS on row-score histograms (when both snapshots carry them) + per-rule / per-CDE / per-dimension Δ tables with a `flagged` column (`|Δ| ≥ threshold`). |
 | `_psi_from_histograms`, `_ks_from_histograms` | Internal helpers; clipped against `eps = 1e-4` to avoid `log(0)`. |
 
@@ -421,7 +421,7 @@ Mirrors the dashboard's quick-glance metrics: `overall_score`, `total_rows`, `�
 | 3 | 🌿 **CDE Clustering** | 2-D PCA scatter + cluster summary table |
 | 4 | ⚖️ **Weight Sensitivity** | Histogram of perturbed sub-scores + baseline / P05 / P95 markers |
 | 5 | 🔭 **Cross-DP Comparison** | Bar chart per DP + comparison table + Anomalous flag(s) |
-| 6 | 📜 **Run History** | Snapshot/upload/export/clear bar + snapshots table + per-DP trend lines + drift analyzer (PSI / KS / per-rule / per-CDE / per-dim Δ) |
+| 6 | 📜 **Run History** | Snapshot/export/clear bar (📂 upload temporarily under maintenance) + snapshots table + per-DP trend lines + drift analyzer (PSI / KS / per-rule / per-CDE / per-dim Δ) |
 | 7 | 🧠 **Risk Model** | Backend ("sklearn LR" / "numpy LR") + accuracy / base rate / TP / FP + coefficient table + top-15 coefficient bar chart + per-row risk-probability histogram |
 | 8 | 💡 **DQR Recommendations** | Recommendations table (cde, recommendation, source, reason, similar_to, similarity) + summary metrics |
 | 9 | 🧩 **Row Explainability** | Row picker (number input + 🔴/🟡 shortcuts) + status pill + waterfall + per-CDE table + per-rule table |
@@ -592,6 +592,12 @@ Runs in ~3 seconds. All 27 pass on the default suite.
 ---
 
 ## 10. Limitations & Caveats
+
+> ⚠ **Snapshot upload (JSON / CSV) is temporarily under maintenance.** The 📂
+> upload control in Run History is disabled while the feature is reworked to
+> persist snapshots automatically, so users won't need to export and re-import
+> files. The `load_snapshot_from_json` / `load_snapshot_from_csv` loaders remain
+> in `src/ml_lab.py` and are still unit-tested for that upcoming work.
 
 1. **Session-local history.** `ml_lab_runs` lives in `st.session_state` and is wiped by Restart or by closing the browser tab. Use the 💾 *Export history (JSON)* button to persist.
 2. **JSON uploads lack row-score histograms.** Step 6's JSON export only carries the summary (overall, bucket counts, per-CDE / per-dim scores). PSI / KS therefore need either a session snapshot or a CSV upload. Per-rule / per-CDE / per-dim drift still works either way.

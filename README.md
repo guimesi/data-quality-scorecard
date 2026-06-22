@@ -155,8 +155,9 @@ automates the same pipeline end-to-end).
    leave-one-out), 🌿 CDE Clustering (k-means + PCA - numpy fallback or
    sklearn), ⚖️ Weight Sensitivity (Dirichlet Monte-Carlo on the Standard
    weights), 🔭 Cross-DP Comparison (robust z across DPs), 📜 Run History
-   (snapshot, JSON / CSV upload, drift via PSI + KS + per-rule / per-CDE
-   / per-dim Δ), 🧠 Risk Model (logistic regression on per-rule fail flags
+   (snapshot + drift via PSI + KS + per-rule / per-CDE / per-dim Δ; JSON /
+   CSV upload temporarily under maintenance), 🧠 Risk Model (logistic
+   regression on per-rule fail flags
    → which rules best segregate RED rows), 💡 DQR Recommendations
    (cross-DP profile-similarity + heuristics), and 🧩 Row Explainability
    (SHAP-equivalent waterfall decomposition of `100 − row_score` into
