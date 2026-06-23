@@ -25,7 +25,7 @@ channels:
   - snowflake
 dependencies:
   - python=3.11
-  - streamlit=1.50.0
+  - streamlit=1.54.0          # >=1.54 clears the 1.50 advisories; VERIFY it exists in the Anaconda channel
   - pandas=2.*
   - numpy
   - plotly
