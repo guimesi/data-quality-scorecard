@@ -29,7 +29,13 @@ The app opens on a **mode picker** (`mode_selection`, the entry step):
 Two data-source modes via `DATA_SOURCE`:
 
 - `mock`: synthetic data from `src/mock_data.py` (default, deterministic).
-- `snowflake`: real Snowflake fetch through `src/snowflake_client.py`.
+- `snowflake`: real Snowflake fetch through `src/snowflake_client.py`, which has
+  **two interchangeable backends**: the in-platform **Snowpark session**
+  (`get_active_session()`) when running inside **Streamlit in Snowflake**, and
+  `snowflake.connector` + `externalbrowser` SSO as the **local-dev fallback**.
+  The backend is auto-selected; user-supplied filter values are bound
+  server-side either way (qmark `?` for Snowpark, pyformat `%s` for the
+  connector — translated internally).
 
 Tests always run against `mock` (an autouse fixture in `tests/conftest.py`
 pins it regardless of the shell `DATA_SOURCE`).
@@ -66,7 +72,7 @@ src/
                                #   build_one_click_config / default_rule_params
                                #   (custom-only, required CDEs, equal weights)
   reference_data.py            # registry + session-state cache for ref datasets
-  snowflake_client.py          # thin wrapper over snowflake.connector
+  snowflake_client.py          # data layer: Snowpark session (SiS) / connector (local)
   mock_data.py                 # deterministic synthetic data builders
   ml_lab.py                    # algorithms used by Step 7
   custom_dqr_engine.py         # SLIM re-export of src/custom_dqr/*
@@ -166,6 +172,22 @@ The `Makefile` exposes `install / run / test / clean`. CI
 ([.github/workflows/tests.yml](.github/workflows/tests.yml)) runs
 `ruff check`, then `pytest` with `--cov-fail-under=90` (current
 coverage is ~97%).
+
+### Deploying to Streamlit in Snowflake (SiS)
+
+Local `streamlit run` is the dev/demo path. **Production runs as Streamlit in
+Snowflake**, deployed from this GitHub repo:
+
+- Dependencies come from the Snowflake Anaconda channel via
+  [environment.yml](environment.yml) (NOT `requirements*.txt`). Keep the two in
+  rough sync, but `environment.yml` is the production source of truth.
+- The data layer auto-switches to the active Snowpark session inside SiS (no
+  `.env`/connector). See `src/snowflake_client.py`.
+- Reference deployment SQL (GitHub Git integration + a least-privilege read-only
+  role + `CREATE STREAMLIT`) lives in [deploy/](deploy/) — run it in Snowflake
+  with the privileges noted in [deploy/README.md](deploy/README.md).
+- `pyproject.toml` `target-version` and CI both track Python 3.11 to match the
+  SiS runtime.
 
 ## Patterns to follow
 
@@ -495,4 +517,7 @@ runs on `push` to `main` and on PRs. Steps:
 3. `pytest -q --cov=src --cov=utils --cov=config --cov=ui --cov-report=term`
    with `DATA_SOURCE=mock`.
 
-No deploy step; this app runs on the user's machine via `streamlit run`.
+CI does not itself deploy. **Deployment target is Streamlit in Snowflake**,
+pulled from this GitHub repo via a Snowflake Git integration (see
+[deploy/](deploy/) and the "Deploying to Streamlit in Snowflake" section above).
+Locally the app still runs via `streamlit run app.py` for development/demo.

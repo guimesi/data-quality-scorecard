@@ -235,8 +235,10 @@ onboarding engineers).
 ```
 data_quality_app/
 ├── app.py                       # Streamlit router (current_step -> renderer)
-├── requirements.txt             # Top-level deps with version caps (dev)
-├── requirements.lock            # Pinned versions for reproducible installs (CI/prod)
+├── requirements.txt             # Top-level deps with version caps (LOCAL dev / CI)
+├── requirements.lock            # Pinned versions for reproducible LOCAL/CI installs
+├── environment.yml              # SiS production deps (Snowflake Anaconda channel)
+├── deploy/                      # SiS deployment reference SQL (role + CREATE STREAMLIT)
 ├── pyproject.toml               # ruff + pyright config (no build metadata)
 ├── README.md
 ├── ARCHITECTURE.md              # Onboarding map of the layout & patterns
@@ -258,7 +260,7 @@ data_quality_app/
 │       └── _sqs_catalog.py      # SQS_RULES list (Quality domain - SQ*)
 ├── src/
 │   ├── models.py                # Dataclasses (CDE, DQRAssignment, Scorecard)
-│   ├── snowflake_client.py      # Snowflake connection (externalbrowser auth)
+│   ├── snowflake_client.py      # Snowflake data layer (Snowpark in SiS / connector locally)
 │   ├── mock_data.py             # Synthetic data generator (demo mode)
 │   ├── data_product_builder.py  # Joins → Data Product
 │   ├── profiler.py              # Column profiling
@@ -384,18 +386,49 @@ pip freeze > requirements.lock
 
 ## How to run
 
+### Locally (development / demo)
+
 ```bash
 streamlit run app.py
 ```
 
+Runs on your machine against mock data by default (or Snowflake via
+`externalbrowser` SSO when `DATA_SOURCE=snowflake`). This is the path used for
+local demos.
+
+### Production: Streamlit in Snowflake (SiS)
+
+In production the app is deployed as a **Streamlit in Snowflake** app from this
+GitHub repository (Projects → Streamlit in the Snowflake account). Differences
+from local execution:
+
+- The app obtains its Snowflake handle from the **active Snowpark session**
+  (`get_active_session()`) — there is no `.env`, no `externalbrowser`, and no
+  `snowflake.connector`. The data layer (`src/snowflake_client.py`) selects this
+  backend automatically inside Snowflake and falls back to the local connector
+  otherwise.
+- Python dependencies are resolved from the **Snowflake Anaconda channel** via
+  [`environment.yml`](environment.yml) — **not** from `requirements*.txt`
+  (which remain local-dev / CI only).
+- Authentication is the viewer's Snowflake login; data access is the app's
+  Snowflake role — run it under a dedicated **least-privilege, read-only** role.
+
+Reference deployment scripts (GitHub Git integration + least-privilege role +
+`CREATE STREAMLIT`) live in [`deploy/`](deploy/) — see
+[`deploy/README.md`](deploy/README.md).
+
 ## Operating modes
 
-The `DATA_SOURCE` variable in `.env` controls the data source:
+The `DATA_SOURCE` variable controls the data source:
 
 - `DATA_SOURCE=mock` - generates synthetic in-memory data with deliberately
   injected quality problems (ideal for demo and development).
-- `DATA_SOURCE=snowflake` - connects to Snowflake via `snowflake.connector`
-  with `externalbrowser` authentication.
+- `DATA_SOURCE=snowflake` - reads from Snowflake. **Inside Streamlit in
+  Snowflake** the app uses the active Snowpark session (`get_active_session()`);
+  **for local development** it connects via `snowflake.connector` with
+  `externalbrowser` authentication. The data layer picks the backend
+  automatically. (Locally, `DATA_SOURCE` is read from `.env`; in SiS it defaults
+  to its built-in value since there is no `.env`.)
 
 ## Multi-domain architecture
 
