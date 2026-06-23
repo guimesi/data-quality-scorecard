@@ -1,0 +1,97 @@
+# =============================================================================
+# Security scanning (REPORT-ONLY) — SAST, SCA, and secret detection.
+# =============================================================================
+# These are open-source scanners that run on GitHub-hosted runners with no
+# extra credentials. They are intentionally NON-BLOCKING (continue-on-error):
+# findings are reported in the job logs but do not fail the build. Review the
+# first results, then tighten to blocking (remove continue-on-error) once the
+# baseline is clean.
+#
+# Relationship to the ExxonMobil enterprise tools:
+#   - SAST  -> Erebor          (authoritative; runs in the org pipeline)
+#   - SCA   -> JFrog Xray / Nexus
+#   - DAST  -> Heimdall        (run against the deployed Snowflake endpoint)
+# This workflow does NOT replace those — it is an in-repo early-warning layer.
+# The repo still needs onboarding to the org's Erebor/JFrog pipeline (owned by
+# the security/platform team).
+# =============================================================================
+name: security
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # SAST — static analysis of our Python for risky patterns (bandit).
+  # ---------------------------------------------------------------------------
+  sast:
+    name: SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install bandit
+        run: pip install "bandit>=1.7,<2.0"
+      - name: Run bandit (report-only, medium+ severity)
+        continue-on-error: true
+        # Scan application code only (not tests). -ll = report medium/high
+        # severity. Expected non-issues that will surface and are justified
+        # elsewhere: f-string SQL assembly in the data layer (values are bound
+        # server-side) and the defensive try/except in config/settings.py.
+        run: bandit -r app.py src config ui utils -ll
+
+  # ---------------------------------------------------------------------------
+  # SCA — dependency vulnerability scan (pip-audit).
+  # ---------------------------------------------------------------------------
+  sca:
+    name: SCA (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install "pip-audit>=2.7,<3.0"
+      - name: Audit requirements.lock (report-only)
+        continue-on-error: true
+        # NOTE: requirements.lock is the LOCAL/CI (PyPI) dependency set and is
+        # scanned here as a PROXY — it shares the core libs (urllib3,
+        # cryptography, ...) with production. The AUTHORITATIVE production set
+        # is environment.yml (Snowflake Anaconda channel), which PyPI-based
+        # tools cannot resolve; it must be scanned via JFrog Xray in the org
+        # pipeline.
+        run: pip-audit -r requirements.lock --desc
+
+  # ---------------------------------------------------------------------------
+  # Secret detection — catch credentials/tokens committed to the repo
+  # (critical: this repo is the Streamlit-in-Snowflake deploy source).
+  # ---------------------------------------------------------------------------
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so gitleaks can scan all commits
+      - name: Install gitleaks CLI
+        run: |
+          GITLEAKS_VERSION=8.18.4
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Run gitleaks (report-only)
+        continue-on-error: true
+        # Scans committed history + working tree. The open-source CLI needs no
+        # org license (unlike the gitleaks GitHub Action). .env is gitignored,
+        # so a real corporate credential should never appear here — this is the
+        # safety net that proves it.
+        run: gitleaks detect --source . --redact --verbose --no-banner
