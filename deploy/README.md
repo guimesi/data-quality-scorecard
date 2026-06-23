@@ -38,3 +38,33 @@ from this GitHub repository, with a **least-privilege, read-only** role.
 2. **Manual smoke test** — the Snowpark data path can't be tested locally (our unit tests
    run in mock mode). After deploy, switch the app to Snowflake mode and confirm a data
    product builds + a scorecard renders.
+
+## Repository contents: runtime vs dev-only (C2)
+
+The SiS Git integration **stages the whole repository**, but only a subset is used by the
+running app. SiS serves no files from a web root (it runs `MAIN_FILE`), so the extra files
+are **not a direct exposure** — but knowing the split keeps the deployment understandable
+and the production surface minimal.
+
+**Runtime (used by the deployed app):**
+
+- `app.py` — the `MAIN_FILE` entry point
+- `src/`, `config/`, `ui/`, `utils/` — application code imported by `app.py`
+- `environment.yml` — the production dependency manifest (Anaconda channel)
+
+**Dev / CI only (present in the repo but NOT used by the running app):**
+
+- `tests/` — test suite (runs in CI / locally, never in SiS)
+- `documents/`, `README.md`, `ARCHITECTURE.md`, `odin/` — documentation / compliance
+- `notebooks/` — developer notebooks. ⚠ `notebooks/data_product_preview.ipynb` contains a
+  **Snowflake connection example**; it reads credentials from the environment and holds no
+  secret, but review it before it ships in the deploy source and keep it free of real
+  account values.
+- `requirements.txt` / `requirements.lock` — local/CI deps (PyPI); **superseded in SiS by
+  `environment.yml`**
+- `deploy/`, `.github/`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`,
+  `.env.example` — tooling / deployment / config (not imported at runtime)
+- `.env` — **gitignored and never committed** (local dev only; not present in SiS)
+
+No application code imports anything from the dev-only paths, so the running SiS app loads
+only the Runtime set above plus its declared dependencies.
