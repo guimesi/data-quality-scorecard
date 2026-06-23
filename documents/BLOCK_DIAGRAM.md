@@ -53,7 +53,7 @@ flowchart LR
 
     %% ==================== CONFIG LAYER ====================
     subgraph Config["Configuration (config/)"]
-        SET["settings.py<br/>(.env loader)"]
+        SET["settings.py<br/>(.env loader — local only;<br/>defaults inside SiS)"]
         DOM["domains.py<br/>(DomainDef registry:<br/>Cost Estimate + Quality + ...)"]
         SYS["systems.py<br/>(SystemDef / TableDef +<br/>ADR/ACCE/EPT Cost Estimate)"]
         CAT["dqr_catalog.py<br/>(10 dimensions)"]
@@ -64,7 +64,7 @@ flowchart LR
     %% ==================== DATA LAYER ====================
     subgraph Data["Data Sources"]
         MOCK["mock_data.py<br/>(synthetic generator)"]
-        SF["snowflake_client.py<br/>(external browser auth)"]
+        SF["snowflake_client.py<br/>(Snowpark session in SiS /<br/>externalbrowser connector locally)"]
         SFDB[("Snowflake DW")]
     end
 

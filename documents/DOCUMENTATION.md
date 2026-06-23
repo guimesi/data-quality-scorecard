@@ -516,7 +516,7 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 
 | File | Responsibility |
 |------|----------------|
-| [config/settings.py](../config/settings.py) | Loads `.env` into immutable `Settings` dataclass: data source, Snowflake creds, score thresholds, max rows per table |
+| [config/settings.py](../config/settings.py) | Immutable `Settings` dataclass: data source, Snowflake location, score thresholds, max rows per table. Loads `.env` for **local dev** (import is optional — there is no `.env`/`python-dotenv` inside Streamlit in Snowflake, where the built-in defaults apply and the session supplies identity/warehouse/db/schema) |
 | [config/systems.py](../config/systems.py) | `SystemDef` / `TableDef` definitions for ADR, ACCE, EPT |
 | [config/dqr_catalog.py](../config/dqr_catalog.py) | Catalog of the 10 standard dimensions + `suggest_dimensions_for()` heuristic |
 | [config/dqr_sources.py](../config/dqr_sources.py) | `SOURCE_STANDARD`, `SOURCE_CUSTOM`, `SOURCE_LABELS` |
@@ -537,7 +537,7 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | [src/one_click.py](../src/one_click.py) | ⚡ **One-click automation service** (UI-free). `run_one_click(domain, systems, …)` builds + profiles each Data Product, prefetches reference datasets, applies the default custom-only config and computes scorecards; `build_one_click_config` derives the required CDEs and equal weights; `default_rule_params` reproduces an untouched Step 4.2 params dict. Returns an `OneClickResult` (scored products + skipped reasons + warnings); raises `OneClickError` for blocking input/build failures. Reuses `build_multiple` / `profile_dataframe` / `prefetch_reference_datasets` / `compute_scorecard` / `effective_required_columns` / `distribute_equally`. |
 | [src/ml_lab.py](../src/ml_lab.py) | 🧪 **ML Lab algorithms** (Step 7, beta). Public functions: `build_rule_flag_matrix`, `compute_row_anomalies`, `compute_rule_impact`, `compute_cde_profile_clusters`, `simulate_weight_perturbation`, `compare_data_products`, `snapshot_scorecard`, `load_snapshot_from_json`, `load_snapshot_from_csv`, `compute_drift` (PSI + KS), `train_risk_classifier`, `recommend_dqrs_for_cde`, `explain_row_score`, `sklearn_status`. Pure numpy/pandas with **optional** sklearn swap-ins (IsolationForest, KMeans, PCA, LogisticRegression) detected lazily. Read-only - never mutates the main flow's state. See [ML_LAB.md](ML_LAB.md). |
 | [src/mock_data.py](../src/mock_data.py) | Deterministic synthetic data generator with injected defects (incl. `CODE_OF_RESOURCE` / `STANDARD_ACTIVITY_BREAKDOWN` for EPT, plus `WBC_LEVEL_5` / `TOTAL_HOURS` / `TOTAL_COST_USD` exercising the E3 statistical outlier detector) |
-| [src/snowflake_client.py](../src/snowflake_client.py) | `SnowflakeClient` using external browser auth |
+| [src/snowflake_client.py](../src/snowflake_client.py) | `SnowflakeClient` data layer with two auto-selected backends: the in-platform **Snowpark session** (`get_active_session()`) inside Streamlit in Snowflake, and `snowflake.connector` + `externalbrowser` SSO as the local-dev fallback. Filter values are bound server-side (qmark `?` for Snowpark, `%s` for the connector). |
 
 ### 5.3 UI Steps (`ui/`)
 

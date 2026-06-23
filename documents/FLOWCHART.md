@@ -10,10 +10,10 @@ End-to-end flow showing the user's journey. The app opens on a **mode picker** (
 
 ```mermaid
 flowchart TD
-    START([User launches app]) --> INIT["init_state()<br/>load Settings from .env<br/>session_state.app_mode = None<br/>session_state.domain = None"]
+    START([User launches app]) --> INIT["init_state()<br/>load Settings (.env locally; defaults in SiS)<br/>session_state.app_mode = None<br/>session_state.domain = None"]
     INIT --> MODE{"DATA_SOURCE<br/>= ?"}
     MODE -->|mock| MOCK["src/mock_data.py<br/>seed = 42"]
-    MODE -->|snowflake| SF["src/snowflake_client.py<br/>external browser auth"]
+    MODE -->|snowflake| SF["src/snowflake_client.py<br/>Snowpark session (SiS) /<br/>externalbrowser connector (local)"]
     MOCK --> READY[Fetcher ready]
     SF --> READY
 
