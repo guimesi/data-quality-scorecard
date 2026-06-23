@@ -108,7 +108,7 @@ def _load_vws_gp_standard_share() -> Optional[pd.DataFrame]:
     database, schema = _resolve_reference_location()
     qualified = f"{database}.{schema}.VWS_GP_STANDARD_SHARE"
     sql = (
-        "SELECT DISTINCT PROJECT_ID, COUNTRY, E05_DEPARTMENT, BUSINESS "
+        "SELECT DISTINCT PROJECT_ID, COUNTRY, E05_DEPARTMENT, BUSINESS "  # nosec B608 - static column list; only the internal db/schema is interpolated, no user input
         f"FROM {qualified}"
     )
     return get_shared_client().fetch_query(sql)
@@ -132,7 +132,7 @@ def _load_acce_coa_master() -> Optional[pd.DataFrame]:
         return _mock_acce_coa_master()
     from src.snowflake_client import get_shared_client
     qualified = "INGESTION_DB.GP_ADF_CSE.ACCE_COA_MASTER"
-    sql = f"SELECT ICARUS_COA, ISO_COR, SAB FROM {qualified}"
+    sql = f"SELECT ICARUS_COA, ISO_COR, SAB FROM {qualified}"  # nosec B608 - static column list + hardcoded internal table name, no user input
     return get_shared_client().fetch_query(sql)
 
 

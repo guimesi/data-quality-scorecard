@@ -183,7 +183,7 @@ class SnowflakeClient:
         self.connect()
         database, schema = _resolve_location()
         qualified = f"{database}.{schema}.{table_name}"
-        query = f"SELECT * FROM {qualified}"
+        query = f"SELECT * FROM {qualified}"  # nosec B608 - database/schema/table are internal config (not user input); user-supplied filter values are bound server-side via params, never interpolated
         if where:
             query += f" WHERE {where}"
         if limit is not None:

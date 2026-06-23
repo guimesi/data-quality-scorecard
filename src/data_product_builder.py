@@ -101,7 +101,7 @@ def _default_fetcher(
         return client.fetch_table(
             name,
             where=(
-                f"{join_key} IN ("
+                f"{join_key} IN ("  # nosec B608 - join_key/filter_column/primary_qualified are internal config; user values are bound via params, never interpolated
                 f"SELECT {join_key} FROM {primary_qualified} "
                 f"WHERE {filter_column} IN ({placeholders})"
                 f")"
