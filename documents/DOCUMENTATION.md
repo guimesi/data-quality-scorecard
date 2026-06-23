@@ -583,8 +583,8 @@ SNOWFLAKE_SCHEMA=...
 SNOWFLAKE_ROLE=...
 
 # Score thresholds (0–100)
-SCORE_GREEN_MIN=80
-SCORE_YELLOW_MIN=60
+THRESHOLD_GREEN=80
+THRESHOLD_YELLOW=60
 
 # Sampling
 MAX_ROWS_PER_TABLE=50000
@@ -667,7 +667,7 @@ Step 6 exposes two downloads:
 | Add a new standard DQ dimension | [config/dqr_catalog.py](../config/dqr_catalog.py) (catalog entry) + [src/dqr_engine.py](../src/dqr_engine.py) (`_rule_<name>` function) + UI editor in [ui/step_04_dqr_assignment.py](../ui/step_04_dqr_assignment.py) |
 | Add a new custom DQR rule for a data product | Implement a `check(df) -> pd.Series[bool]` in the relevant `src/custom_dqr/_<system>_rules.py` (e.g. `_ept_rules.py` for an EPT rule) - reuse `validate_completeness_rule` or `validate_referential_integrity_rule` from `_validators.py` for the common cases. Add the rule's constants (`<SYS>_<ID>_REQUIRED_COLUMNS`, optional `_REFERENCE`, threshold params, and a `TypedDict` for any parametric options) to the same file. Re-export the new symbols from [src/custom_dqr_engine.py](../src/custom_dqr_engine.py) (per-family import block + `__all__`). Append a `CustomRuleDef(...)` to the relevant list in `config/custom_dqr/_<system>_catalog.py`. For referential-integrity rules also set the `reference` field and register the dataset loader in [src/reference_data.py](../src/reference_data.py); rules whose dependency is missing must `raise CustomRuleNotEvaluated` rather than silently passing. The rule appears automatically in Step 4.2, Step 5, and Step 6's Custom Rules tab. See [ARCHITECTURE.md](../ARCHITECTURE.md) for the full checklist. |
 | Add a new data fetcher (e.g., BigQuery) | Implement a fetcher with the same shape used by [src/data_product_builder.py](../src/data_product_builder.py); wire it via [config/settings.py](../config/settings.py) |
-| Adjust score thresholds | `.env` (`SCORE_GREEN_MIN`, `SCORE_YELLOW_MIN`) |
+| Adjust score thresholds | `.env` (`THRESHOLD_GREEN`, `THRESHOLD_YELLOW`) |
 | Tweak suggestion heuristics | `suggest_dimensions_for()` in [config/dqr_catalog.py](../config/dqr_catalog.py) |
 | Add a new ML Lab algorithm | Append a function to [src/ml_lab.py](../src/ml_lab.py) (keep numpy fallback + optional sklearn swap-in gated by `use_sklearn`), then add a `_render_tab_<name>` + a `tab_<name>` to [ui/step_07_ml_lab.py](../ui/step_07_ml_lab.py)'s `st.tabs([...])`. See [ML_LAB.md §9](ML_LAB.md#9-extending-the-lab) for the pattern. |
 | Persist `ml_lab_runs` between sessions | Today the history is session-local. Hook into `init_state` / `restart_app` and the 📜 Run History tab's snapshot / clear handlers to read/write `~/.dq_scorecard/history/*.json`. |
