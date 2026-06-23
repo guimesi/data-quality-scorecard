@@ -15,7 +15,7 @@ It supports two operating modes:
 | Mode | Description | When to use |
 |------|-------------|-------------|
 | `mock` (default) | Synthetic ADR / ACCE / EPT data with intentional defects | Demo, dev, testing |
-| `snowflake` | Live Snowflake via external browser auth | Production assessments |
+| `snowflake` | Live Snowflake — Snowpark session inside Streamlit in Snowflake (production); `externalbrowser` connector for local dev | Production assessments |
 
 ---
 
