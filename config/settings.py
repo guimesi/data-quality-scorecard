@@ -7,11 +7,20 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+# ``python-dotenv`` is a *local-development* convenience only. It is NOT a
+# runtime dependency of Streamlit in Snowflake (it is absent from
+# ``environment.yml``), and there is no ``.env`` inside SiS. Import it
+# defensively so the module loads in SiS, and rely on the env-var defaults
+# below (the Snowpark session supplies identity/warehouse/database/schema).
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - SiS / no python-dotenv installed
+    load_dotenv = None
 
-# Load .env from project root
+# Load .env from project root when available (local dev only).
 _ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(_ROOT / ".env")
+if load_dotenv is not None:
+    load_dotenv(_ROOT / ".env")
 
 
 @dataclass(frozen=True)

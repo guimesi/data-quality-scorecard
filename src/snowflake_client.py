@@ -63,17 +63,68 @@ def _resolve_location() -> tuple:
     return database, schema
 
 
+def _active_snowpark_session():
+    """Return the in-platform Snowpark session, or ``None``.
+
+    Inside **Streamlit in Snowflake (SiS, warehouse runtime)** the app runs
+    against an already-authenticated Snowpark session obtained via
+    ``snowflake.snowpark.context.get_active_session()`` - there is no browser,
+    ``.env`` or ``snowflake.connector`` involved. Everywhere else (local dev,
+    unit tests) snowpark is either not installed or has no active session, so
+    this returns ``None`` and the caller falls back to ``snowflake.connector``
+    with ``externalbrowser`` SSO.
+
+    Both the import and the lookup are guarded: missing package OR no active
+    session both mean "not running inside Snowflake".
+    """
+    try:
+        from snowflake.snowpark.context import get_active_session  # type: ignore
+    except Exception:
+        return None
+    try:
+        return get_active_session()
+    except Exception:
+        return None
+
+
 class SnowflakeClient:
-    """Thin wrapper over snowflake.connector. Instantiated lazily."""
+    """Thin data-access wrapper with two interchangeable backends:
+
+    * **Snowpark session** - used automatically inside Streamlit in Snowflake
+      (``get_active_session()``); queries run via ``session.sql(...).to_pandas()``
+      with **qmark (``?``) bind parameters**.
+    * **snowflake.connector** - the local-development fallback
+      (``externalbrowser`` SSO); queries run via ``cursor.execute(...)`` with
+      **pyformat (``%s``) bind parameters**, ``fetch_pandas_all`` / ``fetchall``.
+
+    Callers build WHERE fragments with ``%s`` placeholders and pass values via
+    ``params`` (the historical contract); for the Snowpark backend the ``%s``
+    placeholders are translated to ``?`` internally. Either way user input is
+    **bound server-side**, never concatenated into SQL.
+    """
 
     def __init__(self) -> None:
-        self._conn = None
+        self._conn = None       # snowflake.connector connection (local dev)
+        self._session = None    # snowflake.snowpark Session (SiS)
 
     def connect(self):
+        """Return the active backend handle (Snowpark session or connector).
+
+        Prefers the in-platform Snowpark session (SiS); falls back to
+        ``snowflake.connector`` with ``externalbrowser`` SSO for local dev.
+        """
+        if self._session is not None:
+            return self._session
         if self._conn is not None:
             return self._conn
 
-        # Imported lazily so that mock mode does not require the package
+        session = _active_snowpark_session()
+        if session is not None:
+            self._session = session
+            return self._session
+
+        # Local-dev fallback: snowflake.connector + externalbrowser SSO.
+        # Imported lazily so that mock mode / SiS do not require the package.
         import snowflake.connector  # type: ignore
 
         params = {
@@ -92,6 +143,8 @@ class SnowflakeClient:
         return self._conn
 
     def close(self) -> None:
+        # Never close the SiS-owned active session - just drop our reference.
+        self._session = None
         if self._conn is not None:
             try:
                 self._conn.close()
@@ -127,7 +180,7 @@ class SnowflakeClient:
             params: positional parameter values that match ``%s`` slots
                 in ``where``. Ignored when ``where`` is falsy.
         """
-        conn = self.connect()
+        self.connect()
         database, schema = _resolve_location()
         qualified = f"{database}.{schema}.{table_name}"
         query = f"SELECT * FROM {qualified}"
@@ -135,15 +188,12 @@ class SnowflakeClient:
             query += f" WHERE {where}"
         if limit is not None:
             query += f" LIMIT {int(limit)}"
-        cur = conn.cursor()
-        try:
-            if where and params:
-                cur.execute(query, list(params))
-            else:
-                cur.execute(query)
-            df = cur.fetch_pandas_all()
-        finally:
-            cur.close()
+
+        bind = list(params) if (where and params) else None
+        if self._session is not None:
+            df = self._snowpark_to_pandas(query, bind)
+        else:
+            df = self._connector_fetch_pandas(query, bind)
         # Normalize column names to uppercase (Snowflake default)
         df.columns = [c.upper() for c in df.columns]
         return df
@@ -162,7 +212,12 @@ class SnowflakeClient:
         PROJECT_ID FROM ...``); use :meth:`fetch_table` for the wide
         system-table reads where the Arrow path is faster and safe.
         """
-        conn = self.connect()
+        self.connect()
+        if self._session is not None:
+            df = self._snowpark_to_pandas(sql, None)
+            df.columns = [c.upper() for c in df.columns]
+            return df
+        conn = self._conn
         cur = conn.cursor()
         try:
             cur.execute(sql)
@@ -171,6 +226,36 @@ class SnowflakeClient:
         finally:
             cur.close()
         return pd.DataFrame(rows, columns=cols)
+
+    # ------------------------------------------------------------------
+    # Backend-specific execution helpers
+    # ------------------------------------------------------------------
+    def _connector_fetch_pandas(self, query, bind):
+        """Execute via snowflake.connector (Arrow path). ``%s`` placeholders."""
+        cur = self._conn.cursor()
+        try:
+            if bind is not None:
+                cur.execute(query, bind)
+            else:
+                cur.execute(query)
+            return cur.fetch_pandas_all()
+        finally:
+            cur.close()
+
+    def _snowpark_to_pandas(self, query, bind):
+        """Execute via the Snowpark session (SiS).
+
+        Snowpark ``Session.sql`` uses **qmark (``?``)** bind variables, while the
+        caller builds WHERE fragments with the connector's ``%s`` placeholders.
+        Both are positional, so a literal ``%s`` -> ``?`` substitution preserves
+        order and keeps values bound server-side (no string interpolation of
+        user input). The WHERE fragments are app-built and only ever contain
+        ``%s`` placeholders, so the substitution is safe.
+        """
+        if bind is not None:
+            qmark = query.replace("%s", "?")
+            return self._session.sql(qmark, params=list(bind)).to_pandas()
+        return self._session.sql(query).to_pandas()
 
     def __enter__(self) -> "SnowflakeClient":
         self.connect()

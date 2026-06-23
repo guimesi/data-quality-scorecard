@@ -14,7 +14,8 @@ venv = ".venv"
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+# Matches the Streamlit in Snowflake (and CI) Python runtime (3.11).
+target-version = "py311"
 src = ["."]
 extend-exclude = [
     ".venv",

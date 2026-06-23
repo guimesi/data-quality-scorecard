@@ -361,3 +361,106 @@ def test_data_product_builder_uses_shared_client_in_snowflake_mode(
     get_shared_client()
 
     assert fake_snowflake["connector"].connect.call_count == 1
+
+
+# =============================================================================
+# Snowpark (Streamlit in Snowflake) backend path
+# =============================================================================
+
+class _FakeSnowparkResult:
+    def __init__(self, df):
+        self._df = df
+
+    def to_pandas(self):
+        return self._df
+
+
+class _FakeSnowparkSession:
+    """Minimal stand-in for a Snowpark Session: records the last sql()/params."""
+
+    def __init__(self):
+        self.calls = []
+        self.closed = False
+        self._df = pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
+
+    def sql(self, query, params=None):
+        self.calls.append((query, params))
+        return _FakeSnowparkResult(self._df)
+
+    def close(self):  # must never be called by the client
+        self.closed = True
+
+
+@pytest.fixture
+def fake_session(monkeypatch):
+    """Force the client to use a fake in-platform Snowpark session."""
+    session = _FakeSnowparkSession()
+    monkeypatch.setattr(
+        "src.snowflake_client._active_snowpark_session", lambda: session
+    )
+    from config import settings as settings_mod
+    monkeypatch.setattr(
+        "src.snowflake_client.SETTINGS",
+        settings_mod.Settings(sf_database="DB", sf_schema="SC"),
+    )
+    return session
+
+
+def test_connect_prefers_active_snowpark_session(fake_session):
+    """In SiS, connect() returns the active Snowpark session, not a connector."""
+    client = SnowflakeClient()
+    handle = client.connect()
+    assert handle is fake_session
+    assert client._session is fake_session
+    assert client._conn is None
+
+
+def test_snowpark_fetch_table_translates_qmark_and_binds(fake_session):
+    """fetch_table on the Snowpark backend must translate %s -> ? and bind
+    params via session.sql(params=...), never concatenating user input."""
+    client = SnowflakeClient()
+    df = client.fetch_table(
+        "MY_TABLE",
+        where="PLANVIEW_ID IN (%s, %s)",
+        params=["1101168", "1106771"],
+    )
+    assert list(df.columns) == ["COL_A", "COL_B"]  # uppercased
+    query, params = fake_session.calls[-1]
+    assert "PLANVIEW_ID IN (?, ?)" in query   # qmark, not %s
+    assert "%s" not in query
+    assert params == ["1101168", "1106771"]
+
+
+def test_snowpark_fetch_table_no_params_no_binding(fake_session):
+    client = SnowflakeClient()
+    client.fetch_table("MY_TABLE", limit=50)
+    query, params = fake_session.calls[-1]
+    assert "DB.SC.MY_TABLE" in query and "LIMIT 50" in query
+    assert params is None
+
+
+def test_snowpark_fetch_query_uses_session(fake_session):
+    client = SnowflakeClient()
+    df = client.fetch_query("SELECT DISTINCT PROJECT_ID FROM REF")
+    assert list(df.columns) == ["COL_A", "COL_B"]
+    query, params = fake_session.calls[-1]
+    assert query == "SELECT DISTINCT PROJECT_ID FROM REF"
+    assert params is None
+
+
+def test_close_does_not_close_active_session(fake_session):
+    """The SiS session is platform-owned: close() drops the reference but
+    must NOT call session.close()."""
+    client = SnowflakeClient()
+    client.connect()
+    client.close()
+    assert client._session is None
+    assert fake_session.closed is False
+
+
+def test_active_snowpark_session_returns_none_without_snowpark(monkeypatch):
+    """Outside SiS (no snowpark / no active session) the helper returns None
+    so the connector fallback is used."""
+    from src import snowflake_client as sc
+    # snowpark is not installed in the test env -> import guard returns None.
+    assert sc._active_snowpark_session() is None

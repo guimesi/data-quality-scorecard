@@ -1,0 +1,33 @@
+# =============================================================================
+# Streamlit in Snowflake (SiS) — PRODUCTION dependency manifest
+# =============================================================================
+# This file declares the packages the app loads at runtime when deployed to
+# Streamlit in Snowflake (warehouse runtime). SiS resolves these ONLY from the
+# Snowflake Anaconda channel — NOT from PyPI.
+#
+# Source of truth split:
+#   - environment.yml      -> SiS production runtime (this file)
+#   - requirements.txt     -> local development + GitHub CI
+#   - requirements.lock    -> pinned local/CI install
+#
+# Deliberately NOT listed (local-dev only / not used in SiS):
+#   - snowflake-connector-python  (SiS uses the active Snowpark session)
+#   - python-dotenv               (no .env in SiS; imported defensively)
+#   - pytest / pytest-cov         (test-only)
+#
+# NOTE: exact available versions of plotly / scikit-learn in the Snowflake
+# Anaconda channel must be confirmed in Snowsight -> Packages for the target
+# account. They are left unpinned here so the Packages picker resolves a
+# compatible version; pin them once confirmed.
+# =============================================================================
+name: data-quality-scorecard
+channels:
+  - snowflake
+dependencies:
+  - python=3.11
+  - streamlit=1.50.0
+  - pandas=2.*
+  - numpy
+  - plotly
+  - scikit-learn          # optional: enables the ML Lab sklearn toggle
+  - snowflake-snowpark-python
