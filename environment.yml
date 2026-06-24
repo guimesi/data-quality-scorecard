@@ -33,8 +33,12 @@ dependencies:
   # The app uses no streamlit API above ~1.27, so 1.52.2 is functionally sufficient.
   # dev/CI use PyPI streamlit 1.58 (requirements.lock). Re-pin when the channel updates.
   - streamlit=1.52.2
+  # Major-version caps mirror requirements.txt so the SiS runtime can't silently
+  # resolve a breaking major the app was never tested against (the Anaconda channel
+  # already offers pandas 3.x). Channel maxima as of this pin: pandas 3.0.3 (capped
+  # to 2.x), numpy 2.4.6, plotly 6.7.0, scikit-learn 1.8.0, snowpark 1.52.0.
   - pandas=2.*
-  - numpy
-  - plotly
-  - scikit-learn          # optional: enables the ML Lab sklearn toggle
-  - snowflake-snowpark-python
+  - numpy=2.*
+  - plotly=6.*
+  - scikit-learn=1.*      # optional: enables the ML Lab sklearn toggle
+  - snowflake-snowpark-python=1.*
