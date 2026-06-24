@@ -247,7 +247,7 @@ def clear_reference_cache() -> None:
         import streamlit as st
         if _SESSION_STATE_KEY in st.session_state:
             del st.session_state[_SESSION_STATE_KEY]
-    except Exception:
+    except Exception:  # nosec B110 - best-effort cache invalidation; outside a Streamlit run (no import / no key) there is simply nothing to clear, which is non-fatal
         pass
 
 

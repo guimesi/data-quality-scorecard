@@ -25,7 +25,14 @@ channels:
   - snowflake
 dependencies:
   - python=3.11
-  - streamlit=1.54.0          # >=1.54 clears the 1.50 advisories; VERIFY it exists in the Anaconda channel
+  # streamlit 1.52.2 is the latest the Snowflake Anaconda channel offers for the
+  # warehouse runtime (PyPI's 1.58 is not available here). Being <1.54, JFrog Xray
+  # will flag two advisories on this manifest — both ACCEPTED RISKS for this app:
+  #   - GHSA-7p48-42j8-8846 (SSRF / NTLM leak): Windows-only; SiS runs on Linux -> N/A
+  #   - PYSEC-2026-212 (cache weak-hash): requires local access -> negligible
+  # The app uses no streamlit API above ~1.27, so 1.52.2 is functionally sufficient.
+  # dev/CI use PyPI streamlit 1.58 (requirements.lock). Re-pin when the channel updates.
+  - streamlit=1.52.2
   - pandas=2.*
   - numpy
   - plotly

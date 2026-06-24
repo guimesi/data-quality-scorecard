@@ -65,7 +65,7 @@ def classify_column(series: pd.Series, col_name: str) -> str:
                 parsed = pd.to_datetime(sample, errors="raise", format="mixed")
                 if len(parsed) > 0 and parsed.notna().all():
                     return COLUMN_TYPE_DATETIME
-            except Exception:
+            except Exception:  # nosec B110 - best-effort datetime sniff; a parse failure just means "not a datetime column", so we deliberately fall through to the categorical/string heuristics below
                 pass
         ratio = non_null.nunique(dropna=True) / max(1, len(non_null))
         if ratio < 0.1 and non_null.nunique(dropna=True) <= 50:

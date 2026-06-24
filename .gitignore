@@ -35,7 +35,3 @@ Thumbs.db
 *.parquet
 data/
 output/
-
-# Odin threat-model working files (kept locally to fill the Odin portal form;
-# the generated odin.md lives in the portal, not in this repo)
-odin/

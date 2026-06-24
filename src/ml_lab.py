@@ -906,7 +906,7 @@ def load_snapshot_from_csv(
     for c in rule_cols:
         try:
             mean_pct = float(pd.to_numeric(df[c], errors="coerce").dropna().mean())
-        except Exception:
+        except Exception:  # nosec B112 - per-column aggregation; columns that don't coerce to numeric are deliberately skipped (non-fatal best-effort stat)
             continue
         # Recover a stable rule-id from the header.
         parts = c.split(" · ")
