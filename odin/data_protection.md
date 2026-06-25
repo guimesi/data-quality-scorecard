@@ -139,6 +139,10 @@ rights).
 **Status:** Applicable
 **Comment:** This matches the app's actual design and is largely a **control in place**: data is fetched on demand from Snowflake, held only in `session_state`, and never written to disk by the app (no file-write calls in source); caches are cleared on restart/domain switch. **SiS production note:** the SiS target strengthens this — data never leaves the Snowflake boundary at all (no local download to a user device), satisfying "retrieve from remote, keep in memory only" by construction. Residual point is that in-memory copies are unencrypted in the *local* path (covered above; platform-encrypted under SiS).
 
+**Question:** Disable keyboard cache for sensitive data inputs.
+**Status:** Not Applicable
+**Comment:** "Keyboard cache" is a mobile-OS control (the device keyboard/autocorrect caching typed text); this is a desktop/browser Streamlit app (SiS) with no control over OS-level keyboard caching. It also collects no passwords or PII via inputs — only project-ID text and catalog-constrained selections — so there is no sensitive keystroke data to cache. The rough web analog (browser autocomplete/autofill) is not app-relevant for these non-sensitive fields.
+
 **Question:** Prevent exposure of sensitive data via IPC, application logs, or backups.
 **Status:** Applicable
 **Comment:** No IPC mechanisms and no backups exist in the app. **Logging** is the relevant surface: the app uses `logging` with `logger.warning(..., exc_info=True)` in `src/snowflake_client.py` and `src/reference_data.py`, and ARCHITECTURE mandates no silent excepts. These log failure reasons/stack traces, not row-level data. Control: logs avoid dumping dataset contents. Follow-up/uncertainty: confirm that connector exception traces captured via `exc_info` cannot include bound filter values or schema details at a verbose log level; keep log level at WARNING+ in any shared environment.
