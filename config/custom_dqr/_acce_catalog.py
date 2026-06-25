@@ -6,7 +6,6 @@ from config.custom_dqr._shared import (
     CustomRuleOption,
     _iqr_threshold_option,
     _percentile_threshold_option,
-    _uniform_mapping_option,
 )
 from src.custom_dqr_engine import (
     ACCE_AC1_REFERENCE,

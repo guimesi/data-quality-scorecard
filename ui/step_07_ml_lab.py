@@ -42,7 +42,6 @@ from ui.step_07._shared import (
     _inject_css,
     _render_banner,
     _render_empty,
-    _render_explainer,
 )
 from ui.step_07._weight_sensitivity import _render_tab_weight_sensitivity
 from utils.helpers import section_header

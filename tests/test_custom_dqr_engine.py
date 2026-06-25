@@ -8503,7 +8503,6 @@ def test_ept_e7_fails_for_all_rows_when_planview_id_column_missing():
 def test_ept_e7_raises_not_evaluated_when_reference_unavailable(monkeypatch):
     """If the project_master loader returns None, E7 must raise
     CustomRuleNotEvaluated rather than silently passing."""
-    import src.custom_dqr_engine as cde
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import CustomRuleNotEvaluated, check_ept_e7
 
@@ -9116,9 +9115,6 @@ def test_sqs_sq4_dispatches_through_quality_domain(monkeypatch):
     from config.domains import DOMAIN_QUALITY
     from src.custom_dqr_engine import evaluate_custom_rules
     from src.models import CustomDQRAssignment
-
-    class _FakeSt:
-        session_state: dict = {"domain": DOMAIN_QUALITY}
 
     monkeypatch.setattr(
         "config.domains.get_active_domain_code",

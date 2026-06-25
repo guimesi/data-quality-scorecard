@@ -16,6 +16,17 @@ from config.settings import SETTINGS
 from src.models import ScorecardResult
 from src.scorecard import compute_scorecard
 
+# Package-internal surface: ui.step_07 tab modules and the orchestrator
+# (ui.step_07_ml_lab) import these.
+__all__ = [
+    "_SYSTEM_ICONS",
+    "_inject_css",
+    "_render_banner",
+    "_render_explainer",
+    "_render_empty",
+    "_ensure_scorecards",
+]
+
 _SYSTEM_ICONS = {"ADR": "📊", "ACCE": "📈", "EPT": "🗂️"}
 
 

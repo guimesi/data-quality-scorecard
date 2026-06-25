@@ -51,10 +51,6 @@ from src.custom_dqr._shared import (
     _is_filled,
     _resolve_planview_segment_map,
 )
-from src.custom_dqr._validators import (
-    validate_completeness_rule,
-    validate_referential_integrity_rule,
-)
 
 # =============================================================================
 # ACCE custom rules
@@ -365,18 +361,6 @@ _AC4_LENGTH_UOMS = frozenset({"FEET", "FT", "M", "METERS", "LF"})
 _AC4_VOLUME_UOMS = frozenset({"CY", "M3", "YD3", "YDS", "M³"})
 _AC4_WEIGHT_UOMS = frozenset({"TONS", "TONNE", "TON", "T"})
 _AC4_COUNT_UOMS = frozenset({"EACH", "EA", "ITEM(S)", "ITEM", "ITEMS"})
-
-# Ordered list of the seven core quantity types, same order as the
-# ADR A4 list, kept identical so diagnostics line up across systems.
-_AC4_CORE_QUANTITY_TYPES: Tuple[str, ...] = (
-    "PIPING_LF",
-    "CONCRETE_CY",
-    "STEEL_TONS",
-    "CABLE_LENGTH",
-    "TRANSMITTER_COUNT",
-    "EQUIPMENT_COUNT",
-    "MODULE_COUNT",
-)
 
 # Drives both the vectorized check and the scalar classifiers. Each
 # entry pairs a core type with its DESCRIPTION allow-list (``None`` for

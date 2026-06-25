@@ -33,12 +33,12 @@ select = [
     "W293",  # whitespace on blank line
 ]
 ignore = [
-    "F401",  # unused-import: catalog re-exports rely on top-level imports
-             #   that look unused to ruff (the catalog files import every
-             #   constant from src.custom_dqr_engine so each rule's
-             #   ``CustomRuleDef(...)`` can reference them).
     "F811",  # re-defined name: re-exports in __all__-only modules trip this.
 ]
+# F401 (unused-import) is intentionally NOT ignored: it is enforced so dead
+# imports cannot accumulate (the enterprise JFrog scan flags them regardless
+# of local config). The few catalog modules that legitimately re-export
+# top-level imports carry an explicit ``# noqa: F401`` at the import instead.
 
 # Pytest defaults. ``--cov-fail-under`` is NOT set here on purpose so
 # local subset runs (``pytest tests/test_one_thing.py``) don't trip the

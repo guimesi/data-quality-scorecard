@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import pytest
 
-from config import domains as domains_mod
 from config.custom_dqr_catalog import get_available_custom_dqr_rules
 from config.domains import (
     DEFAULT_PROJECT_FILTER,

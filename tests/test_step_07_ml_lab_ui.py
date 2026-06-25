@@ -81,7 +81,7 @@ def _build_scored_state(system: str = "EPT"):
     and a real scorecard."""
     from config.settings import SETTINGS
     from src.data_product_builder import build_data_product
-    from src.models import CustomDQRAssignment, DataProductConfig, DQRAssignment
+    from src.models import DataProductConfig, DQRAssignment
     from src.profiler import profile_dataframe
     from src.scorecard import compute_scorecard
 

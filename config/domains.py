@@ -27,7 +27,7 @@ everything through ``get_active_domain()``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List
 
 if TYPE_CHECKING:
     from config.custom_dqr_catalog import CustomRuleDef

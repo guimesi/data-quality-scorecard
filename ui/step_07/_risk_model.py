@@ -7,42 +7,18 @@ in its own file and stays small enough to navigate. The orchestrating
 """
 from __future__ import annotations
 
-import html
-import json
-from typing import Any, Dict, List
-
-import numpy as np
-import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from config.settings import SETTINGS
 from src.ml_lab import (
-    compare_data_products,
-    compute_cde_profile_clusters,
-    compute_drift,
-    compute_row_anomalies,
-    compute_rule_impact,
-    explain_row_score,
-    load_snapshot_from_csv,
-    load_snapshot_from_json,
-    recommend_dqrs_for_cde,
-    simulate_weight_perturbation,
-    sklearn_status,
-    snapshot_scorecard,
     train_risk_classifier,
 )
-from src.scorecard import compute_scorecard
 from ui.step_07._shared import (
-    _SYSTEM_ICONS,
-    _ensure_scorecards,
-    _render_banner,
     _render_empty,
     _render_explainer,
 )
 from utils.colors import STATUS_GREEN, STATUS_RED
-from utils.helpers import section_header
-from utils.session_state import goto, prev_step, restart_app
 
 
 def _render_tab_risk_model(code: str, dp, config, result, flags=None, rule_meta=None) -> None:

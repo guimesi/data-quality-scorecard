@@ -714,7 +714,6 @@ def test_dp_status_ok_emits_neither_error_nor_warning():
 
 def test_per_rule_score_columns_skips_rules_not_in_evaluation_matrix():
     """Covers the ``if a.rule_id not in std_flags.columns: continue`` branch."""
-    import pandas as _pd
 
     from src.data_product_builder import build_data_product
     from src.models import DataProductConfig, DQRAssignment
@@ -960,7 +959,6 @@ def test_explain_row_score_with_unattributed_custom_rule():
     so the deficit falls back to the ``(unattributed)`` bucket."""
     from unittest.mock import patch
 
-    import numpy as np
     import pandas as _pd
 
     from src import ml_lab

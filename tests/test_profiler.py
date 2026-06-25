@@ -6,7 +6,6 @@ from config.dqr_catalog import (
     COLUMN_TYPE_DATETIME,
     COLUMN_TYPE_FLOAT,
     COLUMN_TYPE_ID,
-    COLUMN_TYPE_STRING,
 )
 from src.profiler import classify_column, profile_column, profile_dataframe
 

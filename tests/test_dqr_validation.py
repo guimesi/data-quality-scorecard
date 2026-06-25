@@ -9,8 +9,6 @@ Each test pins one acceptance-criterion scenario from the feature spec.
 """
 from __future__ import annotations
 
-import pandas as pd
-
 from src.dqr_validation import (
     DIMENSION_SUPPORTED_GROUPS,
     DQRValidationIssue,

@@ -80,7 +80,7 @@ def _config_with_ept_assignments(
     Defaults to the standard-only path so existing tests written before the
     DQR-source feature continue to exercise their original flow.
     """
-    from src.models import CustomDQRAssignment, DataProductConfig, DQRAssignment
+    from src.models import DataProductConfig, DQRAssignment
     cfg = DataProductConfig(
         system_code="EPT",
         cdes=["PLANVIEW_ID"],
@@ -1237,16 +1237,8 @@ def test_step6_restart_does_not_reload_reference_dataset():
     """Once Step 6 has rendered (cache populated), the dashboard re-render
     triggered by clicking Restart must NOT call the loader again, the
     cache short-circuits the call."""
-    from pathlib import Path
-
     from streamlit.testing.v1 import AppTest
 
-    app_path = str(Path(__file__).resolve().parent.parent / "app.py")
-
-    # Build a state where Step 6 will render with a custom rule selected,
-    # then assert the loader is invoked once during the Step 2 pass and
-    # never on subsequent reads - proving Restart's rerun won't reconnect.
-    at = AppTest.from_file(app_path, default_timeout=30)
     # Track loader calls before mounting any state
     code = (
         "import streamlit as st\n"
