@@ -7,40 +7,29 @@ in its own file and stays small enough to navigate. The orchestrating
 """
 from __future__ import annotations
 
-import html
 import json
 from typing import Any, Dict, List
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from config.settings import SETTINGS
 from src.ml_lab import (
-    compare_data_products,
-    compute_cde_profile_clusters,
     compute_drift,
-    compute_row_anomalies,
-    compute_rule_impact,
-    explain_row_score,
-    recommend_dqrs_for_cde,
-    simulate_weight_perturbation,
-    sklearn_status,
     snapshot_scorecard,
-    train_risk_classifier,
 )
 from src.models import ScorecardResult
-from src.scorecard import compute_scorecard
 from ui.step_07._shared import (
-    _SYSTEM_ICONS,
-    _ensure_scorecards,
-    _render_banner,
     _render_empty,
     _render_explainer,
 )
-from utils.helpers import section_header
-from utils.session_state import goto, prev_step, restart_app
+
+# Snapshot upload (JSON / CSV) is temporarily disabled while the feature is
+# reworked to persist snapshots automatically (so the user won't need to
+# upload anything). Flip to False - and wire the real uploader into bar_m -
+# when that lands; the loaders (load_snapshot_from_json / load_snapshot_from_csv)
+# are retained in src/ml_lab.py for it.
+_UPLOAD_UNDER_MAINTENANCE = True
 
 
 def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
@@ -71,19 +60,15 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
             st.success(f"Captured {len(new)} snapshot(s).")
             st.rerun()
     with bar_m:
-        # 📂 Snapshot upload (JSON / CSV) is temporarily disabled while the
-        # feature is reworked to persist snapshots automatically, so the user
-        # won't need to upload anything. The loader functions
-        # (load_snapshot_from_json / load_snapshot_from_csv) are retained in
-        # src/ml_lab.py for that upcoming work.
-        st.button(
-            "📂 Upload (under maintenance)",
-            use_container_width=True,
-            key="ml_lab_uploader_disabled",
-            disabled=True,
-            help="Snapshot upload is temporarily under maintenance. Snapshots "
-                 "will soon be captured automatically - no manual upload needed.",
-        )
+        if _UPLOAD_UNDER_MAINTENANCE:
+            st.button(
+                "📂 Upload (under maintenance)",
+                use_container_width=True,
+                key="ml_lab_uploader_disabled",
+                disabled=True,
+                help="Snapshot upload is temporarily under maintenance. Snapshots "
+                     "will soon be captured automatically - no manual upload needed.",
+            )
     with bar_r:
         if runs:
             buf = json.dumps(runs, indent=2, default=str).encode("utf-8")
@@ -102,11 +87,13 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
             st.rerun()
 
     if not runs:
-        _render_empty(
+        empty_msg = (
             "No snapshots yet. Use 📸 to capture the current run, then come "
-            "back to compute drift. (Snapshot upload is temporarily under "
-            "maintenance.)"
+            "back to compute drift."
         )
+        if _UPLOAD_UNDER_MAINTENANCE:
+            empty_msg += " (Snapshot upload is temporarily under maintenance.)"
+        _render_empty(empty_msg)
         return
 
     # ---- Snapshot table ----
