@@ -151,6 +151,8 @@ def _canonicalize_id(value: object) -> Optional[str]:
         if pd.isna(value):  # NaN / NaT / pd.NA
             return None
     except (TypeError, ValueError):
+        # Value is not NA-testable (e.g. an unhashable/array-like): fall
+        # through to canonicalize it as a string below. Not an error.
         pass
     text = str(value).strip()
     if not text:

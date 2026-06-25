@@ -298,6 +298,8 @@ def suggest_assignments_for_cde(profile: ColumnProfile) -> List[DQRAssignment]:
                 params["min_value"] = float(profile.min_value)
                 params["max_value"] = float(profile.max_value)
             except (TypeError, ValueError):
+                # Best-effort pre-fill: non-numeric bounds are left unset for
+                # the user to complete. Not an error condition.
                 pass
         if d == "Conformity" and profile.distinct_count <= 30:
             # Not auto-filling allowed_values to force the user to confirm the domain.

@@ -493,7 +493,6 @@ def test_compute_standard_row_scores_empty_assignments_returns_zero_series():
         CustomDQRAssignment,
         DataProduct,
         DataProductConfig,
-        DQRAssignment,
     )
     from src.scorecard import _compute_standard_row_scores, compute_scorecard
 
@@ -619,11 +618,12 @@ def test_next_step_from_hidden_step_jumps_to_next_visible():
         ),
     }
     # ``goto`` calls st.rerun() which raises RerunException in test context;
-    # catch any exception to verify the function still updates the step.
+    # tolerate only that signal so a real failure in next_step() still surfaces.
     try:
         next_step()
-    except Exception:
-        pass
+    except Exception as e:
+        if type(e).__name__ != "RerunException":
+            raise
     assert st.session_state["current_step"] in {
         "dqr_custom_rules",
         "weight_assignment",
@@ -647,10 +647,13 @@ def test_prev_step_from_hidden_step_jumps_to_prev_visible():
             source_weights={"standard": 100.0},
         ),
     }
+    # Only the expected st.rerun() signal is tolerated; a real prev_step()
+    # failure must still surface.
     try:
         prev_step()
-    except Exception:
-        pass
+    except Exception as e:
+        if type(e).__name__ != "RerunException":
+            raise
     assert st.session_state["current_step"] in {
         "dqr_assignment",
         "dqr_source_selection",
@@ -666,10 +669,12 @@ def test_next_step_at_last_visible_is_a_noop():
     st.session_state.clear()
     st.session_state["current_step"] = "dashboard"
     st.session_state["configs"] = {}
+    # Tolerate only the expected st.rerun() signal, not arbitrary failures.
     try:
         next_step()
-    except Exception:
-        pass
+    except Exception as e:
+        if type(e).__name__ != "RerunException":
+            raise
     assert st.session_state["current_step"] == "dashboard"
 
 
@@ -684,8 +689,10 @@ def test_prev_step_at_first_visible_is_a_noop():
     st.session_state.clear()
     st.session_state["current_step"] = "mode_selection"
     st.session_state["configs"] = {}
+    # Tolerate only the expected st.rerun() signal, not arbitrary failures.
     try:
         prev_step()
-    except Exception:
-        pass
+    except Exception as e:
+        if type(e).__name__ != "RerunException":
+            raise
     assert st.session_state["current_step"] == "mode_selection"
