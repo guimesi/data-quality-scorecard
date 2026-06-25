@@ -5,6 +5,11 @@ on:
     branches: [main, dev]
   pull_request:
 
+# Least privilege: this workflow only reads the repo and uploads an artifact
+# (which uses the Actions runtime token, not GITHUB_TOKEN), so read is enough.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
