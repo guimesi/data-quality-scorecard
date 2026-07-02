@@ -1,0 +1,18 @@
+# ============================================================================
+# SNOWFLAKE CONNECTION CONFIGURATION FOR SNOW CLI
+# ============================================================================
+# Copied verbatim from the platform template (deploy/deploy_files/config.toml).
+# Used only by the CI/CD pipeline: CICD.yml copies it to ~/.snowflake/config.toml
+# on the runner. No effect on local development.
+#
+# AUTHENTICATION METHOD: JWT (key-pair). The private key and passphrase are
+# retrieved from Azure Key Vault at runtime — never hardcode credentials here.
+# Account/user/role/warehouse/database/schema are supplied per environment via
+# SNOWFLAKE_CONNECTIONS_CICD_* environment variables in the workflow.
+# ============================================================================
+
+default_connection_name = "cicd"
+
+[connections]
+[connections.cicd]
+authenticator = "SNOWFLAKE_JWT"

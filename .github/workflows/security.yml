@@ -19,7 +19,7 @@ name: security
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, development, acceptance]
   pull_request:
 
 permissions:

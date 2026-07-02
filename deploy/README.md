@@ -1,5 +1,14 @@
 # Streamlit in Snowflake (SiS) — deployment scripts
 
+> **⚠ SUPERSEDED (July 2026):** the deployment now follows the **EM platform CI/CD
+> template** (GitHub Actions + Snow CLI + key-pair auth + Azure Key Vault) — see
+> **[`em_pipeline/`](em_pipeline/)** for the adapted pipeline, admin SQL and migration
+> checklist, and `deploy_files/` for the pristine template copies. The SQL below
+> describes the earlier Snowflake-native Git-integration model: `02_sis_deploy.sql`
+> is fully superseded (no PAT/SECRET/API INTEGRATION/GIT REPOSITORY in the new model);
+> `01_least_privilege_role.sql`'s data grants are carried into
+> `em_pipeline/ADMIN_SETUP.sql`. Kept for reference.
+
 Reference SQL to deploy `data-quality-scorecard` as a **Streamlit in Snowflake** app
 from this GitHub repository, with a **least-privilege, read-only** role.
 
