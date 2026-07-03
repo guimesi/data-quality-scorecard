@@ -15,7 +15,7 @@ versions for this app.
 
 | File (here) | Destination in the org repo |
 |---|---|
-| `CICD.yml` | `.github/workflows/CICD.yml` (replace the template's copy) |
+| `/.github/workflows/CICD.yml` | already in place at `.github/workflows/CICD.yml` (moved here from this folder) |
 | `/snowflake.yml` (repo root) | repo root — already in place when the code is copied |
 | `/config.toml` (repo root) | repo root — already in place when the code is copied |
 | `ADMIN_SETUP.sql` | not committed to the pipeline — run manually by the Snowflake admin, once per environment |
