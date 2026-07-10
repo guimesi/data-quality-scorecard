@@ -64,24 +64,28 @@ jobs:
           pip install "snowflake-cli>=3.0,<4"
           snow --version
 
-      - name: "Run Erebor scan"
-        id: erebor
-        uses: EMOrg-Prd/actions-erebor@v5   # TODO: confirm latest version with the platform team
-        with:
-          client_id: ${{ secrets.AZURE_CLIENT_ID }}
-          language: Python
-          path: ./
-      - name: "Upload result"
-        uses: actions/upload-artifact@v4
-        if: ${{ success() || failure() }}
-        with:
-          name: erebor
-          path: ${{ steps.erebor.outputs.result_file }}
+      # - name: "Run Erebor scan"
+      #   id: erebor
+      #   uses: EMOrg-Prd/actions-erebor@v5   # TODO: confirm latest version with the platform team
+      #   with:
+      #     client_id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     language: Python
+      #     path: ./
+      # - name: "Upload result"
+      #   uses: actions/upload-artifact@v4
+      #   if: ${{ success() || failure() }}
+      #   with:
+      #     name: erebor
+      #     path: ${{ steps.erebor.outputs.result_file }}
 
       - name: Login to Azure Service Principal
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: d1ee1acd-bc7a-4bc4-a787-938c49a83906
+          allow-no-subscriptions: true
+        # with:
+        #   creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       # ---------------------------------------------------------------------
       # Retrieve the key-pair private key from Azure Key Vault (per branch).
