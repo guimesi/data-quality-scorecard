@@ -35,3 +35,9 @@ Thumbs.db
 *.parquet
 data/
 output/
+
+# Local reference / scratch (not part of the app or deploy)
+# deploy/deploy_files/ = pristine copies of the EM platform template (reference only)
+# dqs-COMMITS_JUNHO_2026.md = local commit log
+deploy/deploy_files/
+dqs-COMMITS_JUNHO_2026.md
