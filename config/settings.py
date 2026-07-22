@@ -52,6 +52,9 @@ class Settings:
     # Empty = "<project root>/.dqs_store" (resolved in src/persistence.py).
     store_dir: str = os.getenv("DQS_STORE_DIR", "")
     sf_state_schema: str = os.getenv("DQS_STATE_SCHEMA", "DQS_APP_STATE")
+    # Step 6 shows a drop alert when a DP's score fell by at least this many
+    # percentage points versus the previous persisted run.
+    drop_alert_pp: float = float(os.getenv("DQS_DROP_ALERT_PP", "5"))
 
     # Scorecard thresholds
     threshold_green: float = float(os.getenv("THRESHOLD_GREEN", "80"))

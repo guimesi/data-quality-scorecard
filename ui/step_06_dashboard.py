@@ -45,6 +45,11 @@ from ui.step_06._export import (
     _per_rule_score_columns,
     _reference_columns_for_export,
 )
+from ui.step_06._history import (
+    _record_runs,
+    _render_drop_alert,
+    _render_history_tab,
+)
 from ui.step_06._shared import (
     _DEFAULT_ACCENT,
     _SYSTEM_ACCENTS,
@@ -136,6 +141,10 @@ def render() -> None:
             scorecards[code] = result
     st.session_state.scorecards = scorecards
 
+    # Persist one run snapshot per DP (deduplicated inside) so the History
+    # tab, the drop alert and the ML Lab Run History survive Restart.
+    _record_runs(scorecards)
+
     if failed:
         lines = "\n".join(f"- **{c}**: {e}" for c, e in failed.items())
         st.error(
@@ -217,6 +226,9 @@ __all__ = [
     "_render_rule_drilldown",
     "_render_custom_rule_drilldown",
     "_render_failing_rows",
+    "_record_runs",
+    "_render_drop_alert",
+    "_render_history_tab",
     "_gauge",
     "_threshold_bar",
     "_SYSTEM_ICONS",

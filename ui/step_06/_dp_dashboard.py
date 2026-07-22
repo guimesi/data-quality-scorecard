@@ -26,6 +26,7 @@ from ui.step_06._export import (
     _per_rule_score_columns,
     _reference_columns_for_export,
 )
+from ui.step_06._history import _render_drop_alert, _render_history_tab
 from ui.step_06._shared import (
     _DEFAULT_ACCENT,
     _SYSTEM_ACCENTS,
@@ -70,6 +71,8 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     key=f"dl_json_{code}",
                 )
 
+        _render_drop_alert(code)
+
         c1, c2 = st.columns([1, 2])
         with c1:
             st.plotly_chart(
@@ -92,8 +95,9 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
             st.plotly_chart(_threshold_bar(result), use_container_width=True)
 
         # Breakdowns
-        tab_cde, tab_dim, tab_rules, tab_custom, tab_worst = st.tabs([
-            "By CDE", "By Dimension", "Rules (pass rate)", "Custom Rules", "Worst rows",
+        tab_cde, tab_dim, tab_rules, tab_custom, tab_worst, tab_hist = st.tabs([
+            "By CDE", "By Dimension", "Rules (pass rate)", "Custom Rules",
+            "Worst rows", "History",
         ])
 
         with tab_cde:
@@ -214,6 +218,9 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
 
         with tab_custom:
             _render_custom_rules_table(code, result)
+
+        with tab_hist:
+            _render_history_tab(code)
 
         with tab_worst:
             scores = result.row_scores

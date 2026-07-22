@@ -24,7 +24,7 @@ flowchart LR
             S4_1["Step 4.1<br/>Standard DQR Assignment<br/>(per-CDE dimensions +<br/>compatibility validation<br/>+ Apply-all-suggested shortcut)"]
             S4_2["Step 4.2<br/>Custom DQR Cards<br/>(rule cards + per-rule toggles<br/>+ threshold selectboxes (P-pct / IQR k)<br/>+ CDE-coverage validation<br/>+ Select-all-rules shortcut)"]
             S5["Step 5<br/>Weight Assignment<br/>(blank inputs + Distribute equally,<br/>per active source)"]
-            S6["Step 6<br/>Dashboard<br/>(orchestrator + ui/step_06/_*:<br/>_shared · _export · _charts ·<br/>_breakdown · _drilldown ·<br/>_dp_dashboard)"]
+            S6["Step 6<br/>Dashboard<br/>(orchestrator + ui/step_06/_*:<br/>_shared · _export · _charts ·<br/>_breakdown · _drilldown ·<br/>_history · _dp_dashboard)"]
             S7["🧪 Step 7 - ML Lab (beta)<br/>orchestrator + ui/step_07/_*:<br/>_shared · _row_anomalies · _rule_impact ·<br/>_cde_clusters · _weight_sensitivity ·<br/>_cross_dp · _run_history · _risk_model ·<br/>_recommendations · _row_explain"]
         end
         subgraph UTILS["utils/"]

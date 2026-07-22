@@ -421,7 +421,7 @@ Mirrors the dashboard's quick-glance metrics: `overall_score`, `total_rows`, `�
 | 3 | 🌿 **CDE Clustering** | 2-D PCA scatter + cluster summary table |
 | 4 | ⚖️ **Weight Sensitivity** | Histogram of perturbed sub-scores + baseline / P05 / P95 markers |
 | 5 | 🔭 **Cross-DP Comparison** | Bar chart per DP + comparison table + Anomalous flag(s) |
-| 6 | 📜 **Run History** | Snapshot/export/clear bar (📂 upload temporarily under maintenance) + snapshots table + per-DP trend lines + drift analyzer (PSI / KS / per-rule / per-CDE / per-dim Δ) |
+| 6 | 📜 **Run History** | Auto-persisted Step 6 runs (`source=auto`, survive Restart) merged with manual session snapshots; snapshot/export/clear bar (📂 upload temporarily under maintenance) + snapshots table + per-DP trend lines + drift analyzer (PSI / KS / per-rule / per-CDE / per-dim Δ) |
 | 7 | 🧠 **Risk Model** | Backend ("sklearn LR" / "numpy LR") + accuracy / base rate / TP / FP + coefficient table + top-15 coefficient bar chart + per-row risk-probability histogram |
 | 8 | 💡 **DQR Recommendations** | Recommendations table (cde, recommendation, source, reason, similar_to, similarity) + summary metrics |
 | 9 | 🧩 **Row Explainability** | Row picker (number input + 🔴/🟡 shortcuts) + status pill + waterfall + per-CDE table + per-rule table |
@@ -594,12 +594,14 @@ Runs in ~3 seconds. All 27 pass on the default suite.
 ## 10. Limitations & Caveats
 
 > ⚠ **Snapshot upload (JSON / CSV) is temporarily under maintenance.** The 📂
-> upload control in Run History is disabled while the feature is reworked to
-> persist snapshots automatically, so users won't need to export and re-import
-> files. The `load_snapshot_from_json` / `load_snapshot_from_csv` loaders remain
-> in `src/ml_lab.py` and are still unit-tested for that upcoming work.
+> upload control in Run History is disabled. The automatic persistence it was
+> waiting for has landed - Step 6 now auto-records every computed scorecard
+> (see `src/run_history.py`), so manual export/re-import is largely
+> unnecessary; the `load_snapshot_from_json` / `load_snapshot_from_csv`
+> loaders remain in `src/ml_lab.py` (still unit-tested) until the upload
+> control is retired or repurposed.
 
-1. **Session-local history.** `ml_lab_runs` lives in `st.session_state` and is wiped by Restart or by closing the browser tab. Use the 💾 *Export history (JSON)* button to persist.
+1. **History is now auto-persisted.** Step 6 records every computed scorecard (deduplicated) through `src/persistence.py`; those runs appear in Run History with `source=auto` and survive Restart. Manual 📸 snapshots still live in `st.session_state.ml_lab_runs` only (wiped by Restart) - 🗑 Clear drops only those; the 💾 *Export history (JSON)* button covers both.
 2. **JSON uploads lack row-score histograms.** Step 6's JSON export only carries the summary (overall, bucket counts, per-CDE / per-dim scores). PSI / KS therefore need either a session snapshot or a CSV upload. Per-rule / per-CDE / per-dim drift still works either way.
 3. **Risk model is technically circular.** Target derives from the same features (since `row_score` is a weighted linear combination of pass flags). The model is *informative* - coefficient ordering exposes which rules best segregate RED, but it is not a forecasting tool. The UI explicitly frames it that way.
 4. **Weight Sensitivity is Standard-only.** The Monte-Carlo perturbs the rule weights within the Standard source. Combined-source sensitivity (perturbing the source-level split) is left as a future evolution.

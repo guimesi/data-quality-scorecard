@@ -74,6 +74,7 @@ data-quality-app/
 │   ├── ml_lab.py             # 🧪 ML Lab algorithms (Step 7, beta), see ML_LAB.md
 │   ├── mock_data.py
 │   ├── persistence.py        # Run history / telemetry / saved projects (F0 foundation)
+│   ├── run_history.py        # Auto-snapshot service (fingerprints, dedup, drop detection)
 │   ├── snowflake_client.py
 │   ├── custom_dqr_engine.py  # SLIM re-export of src/custom_dqr/*
 │   └── custom_dqr/           # Custom-DQR engine partitioned by family (C1)
@@ -104,6 +105,7 @@ data-quality-app/
 │   │   ├── _charts.py                        # Plotly gauge + threshold-bar
 │   │   ├── _breakdown.py                     # DP-card header, source-breakdown, Custom Rules table
 │   │   ├── _drilldown.py                     # Click a bar / select a rule -> failing rows table
+│   │   ├── _history.py                       # Auto-record runs + drop alert + History tab
 │   │   └── _dp_dashboard.py                  # Per-DP card (gauge + tab row) + cross-DP overview
 │   ├── step_07_ml_lab.py                  # SLIM orchestrator + tab dispatcher
 │   └── step_07/                           # ML Lab tabs partitioned (B5)
@@ -541,6 +543,7 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | [src/ml_lab.py](../src/ml_lab.py) | 🧪 **ML Lab algorithms** (Step 7, beta). Public functions: `build_rule_flag_matrix`, `compute_row_anomalies`, `compute_rule_impact`, `compute_cde_profile_clusters`, `simulate_weight_perturbation`, `compare_data_products`, `snapshot_scorecard`, `load_snapshot_from_json`, `load_snapshot_from_csv`, `compute_drift` (PSI + KS), `train_risk_classifier`, `recommend_dqrs_for_cde`, `explain_row_score`, `sklearn_status`. Pure numpy/pandas with **optional** sklearn swap-ins (IsolationForest, KMeans, PCA, LogisticRegression) detected lazily. Read-only - never mutates the main flow's state. See [ML_LAB.md](ML_LAB.md). |
 | [src/mock_data.py](../src/mock_data.py) | Deterministic synthetic data generator with injected defects (incl. `CODE_OF_RESOURCE` / `STANDARD_ACTIVITY_BREAKDOWN` for EPT, plus `WBC_LEVEL_5` / `TOTAL_HOURS` / `TOTAL_COST_USD` exercising the E3 statistical outlier detector) |
 | [src/snowflake_client.py](../src/snowflake_client.py) | `SnowflakeClient` data layer with two auto-selected backends: the in-platform **Snowpark session** (`get_active_session()`) inside Streamlit in Snowflake, and `snowflake.connector` + `externalbrowser` SSO as the local-dev fallback. Filter values are bound server-side (qmark `?` for Snowpark, `%s` for the connector). `execute()` is the persistence layer's write path (INSERT into the DQS_* app-state tables); data reads stay on the fetch methods. |
+| [src/run_history.py](../src/run_history.py) | **Run-history service** (phase 1). `config_fingerprint` (stable hash of CDEs/rules/params/weights/sources; assignment order-insensitive) and `result_fingerprint` (hash of the scoring outcome) drive dedup; `record_run_if_new` persists an ML-Lab-compatible snapshot (`snapshot_scorecard`) via `save_run` unless both fingerprints match the last persisted run; `load_history` returns runs (with who/when/config_hash); `score_drop` compares the two most recent runs and flags whether the config changed alongside the score. |
 | [src/persistence.py](../src/persistence.py) | **Persistence layer** (F0 foundation for run history, adoption/audit telemetry and saved projects). `current_username()` (CURRENT_USER() in SiS / OS login locally, cached); three backends selected by `DQS_PERSISTENCE` - `LocalStore` (JSON-lines under `.dqs_store/`, default), `SnowflakeStore` (append-only `DQS_RUNS`/`DQS_EVENTS`/`DQS_PROJECTS` tables, [deploy/03_persistence_tables.sql](../deploy/03_persistence_tables.sql)), `NullStore` (`off`). Domain API: `save_run`/`list_runs`, `log_event`/`list_events`, `save_project_version`/`list_project_versions` (append-only versions = audit changelog). Every write stamps `ts` + `username`; every function is fire-and-forget (storage failures log + degrade, never raise). |
 
 ### 5.3 UI Steps (`ui/`)
@@ -557,7 +560,7 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | 4.1 | [ui/step_04_dqr_assignment.py](../ui/step_04_dqr_assignment.py) | Assign standard dimensions + edit parameters per CDE (only DPs with `standard`); per-rule compatibility validation drives ✅/⚠/❌ badges and gates **Next** until every error is resolved |
 | 4.2 | [ui/step_04_2_custom_dqr.py](../ui/step_04_2_custom_dqr.py) | Pick custom rules from the per-DP catalog (only DPs with `custom`) |
 | 5 | [ui/step_05_weight_assignment.py](../ui/step_05_weight_assignment.py) | Distribute 100 points across rules in each active source |
-| 6 | [ui/step_06_dashboard.py](../ui/step_06_dashboard.py) | Scorecard dashboard (standard + custom subscores, custom rules tab) + CSV / JSON export. Clicking a By-CDE / By-Dimension bar or selecting a Rules / Custom Rules table row drills down to the failing data rows ([ui/step_06/_drilldown.py](../ui/step_06/_drilldown.py)). Nav row exposes a **🧪 ML Lab (beta)** button that opens Step 7. |
+| 6 | [ui/step_06_dashboard.py](../ui/step_06_dashboard.py) | Scorecard dashboard (standard + custom subscores, custom rules tab) + CSV / JSON export. Clicking a By-CDE / By-Dimension bar or selecting a Rules / Custom Rules table row drills down to the failing data rows ([ui/step_06/_drilldown.py](../ui/step_06/_drilldown.py)). Every computed scorecard is auto-persisted (deduplicated) and surfaced on a per-DP **History** tab - score trend (◆ = config change), run log (who/when/config), "what changed" drift vs the previous run - plus a drop-alert banner when the score fell ≥ `DQS_DROP_ALERT_PP` (default 5 pp) ([ui/step_06/_history.py](../ui/step_06/_history.py)). Nav row exposes a **🧪 ML Lab (beta)** button that opens Step 7. |
 | 7 | [ui/step_07_ml_lab.py](../ui/step_07_ml_lab.py) | 🧪 **ML Lab (beta)** orchestrator + tab dispatcher: wires the 9 read-only analytics tabs into `st.tabs(...)`. Each tab is its own module in [ui/step_07/](../ui/step_07/): 🔎 `_row_anomalies.py` · 🎯 `_rule_impact.py` · 🌿 `_cde_clusters.py` · ⚖️ `_weight_sensitivity.py` · 🔭 `_cross_dp.py` · 📜 `_run_history.py` · 🧠 `_risk_model.py` · 💡 `_recommendations.py` · 🧩 `_row_explain.py` (shared CSS + helpers in `_shared.py`). Violet/lavender BETA theme + 🔬 *Use scikit-learn* toggle. See [ML_LAB.md](ML_LAB.md). |
 
 ### 5.4 Utilities (`utils/`)
@@ -648,6 +651,7 @@ runs `ruff check` first, then `pytest -q` with coverage.
 | [tests/test_session_state.py](../tests/test_session_state.py) | Navigation & sample toggle |
 | [tests/test_snowflake_client.py](../tests/test_snowflake_client.py) | Snowflake client (mocked) |
 | [tests/test_persistence.py](../tests/test_persistence.py) | Persistence layer: identity resolution (SiS `CURRENT_USER()` / OS fallback / cache), Local/Snowflake/Null backends, backend selection via `DQS_PERSISTENCE`, fire-and-forget degradation, project-version increments, `SnowflakeClient.execute` bind paths |
+| [tests/test_run_history.py](../tests/test_run_history.py) | Run-history service + Step 6 history UI: fingerprint stability/sensitivity, record dedup (rerun vs data change vs config change), `score_drop` deltas + config-change flag, session-cached recording, drop-alert thresholds, History-tab trend/log/drift rendering, ML Lab persisted-snapshot merge |
 | [tests/test_misc_gaps.py](../tests/test_misc_gaps.py) | Coverage gap closers |
 | [tests/test_ui_flow.py](../tests/test_ui_flow.py) | End-to-end via `streamlit.testing.v1.AppTest` |
 | [tests/test_ui_units.py](../tests/test_ui_units.py) | Per-dimension param editors, weight buttons, Step 3 hover legend + grid helpers, Restart-button branches |
@@ -723,7 +727,7 @@ The ML Lab is the experimental Machine-Learning / statistical-analytics sandbox 
 | 🌿 **CDE Clustering** | Group CDEs that "behave the same". | Robust-standardized profile features → k-means + PCA-2D. Numpy fallback or `sklearn.cluster.KMeans` + `sklearn.decomposition.PCA`. |
 | ⚖️ **Weight Sensitivity** | Stress-test the Standard sub-score against weight perturbations. | Dirichlet Monte-Carlo around the current weights; concentration parametrised by a `jitter` slider. |
 | 🔭 **Cross-DP Comparison** | Flag DPs whose overall score sits far from peers. | Robust z (MAD); `|z| > 1.5` → `Anomalous`. |
-| 📜 **Run History** | Capture / export scorecard snapshots and inspect drift. *(JSON / CSV upload temporarily under maintenance — snapshots will be persisted automatically.)* | Snapshot history in `st.session_state.ml_lab_runs` + PSI + KS + per-rule / per-CDE / per-dim Δ tables. Upload loaders (`load_snapshot_from_json` / `load_snapshot_from_csv`) retained for the upcoming auto-persist work. |
+| 📜 **Run History** | Capture / export scorecard snapshots and inspect drift. Step 6 runs are now **auto-persisted** (`src/run_history.py`) and appear here with `source=auto`, surviving Restart. *(JSON / CSV upload still under maintenance.)* | Auto-persisted runs merged with session snapshots (`st.session_state.ml_lab_runs`) + PSI + KS + per-rule / per-CDE / per-dim Δ tables. Upload loaders (`load_snapshot_from_json` / `load_snapshot_from_csv`) retained. |
 | 🧠 **Risk Model** | Discover which rules best segregate RED rows. | L2-logistic regression on per-rule fail flags, target = `row_score < threshold_yellow`. sklearn LR or numpy gradient-descent LR. |
 | 💡 **DQR Recommendations** | Suggest DQRs to add per CDE. | Cosine similarity on robust-standardized profile vectors (cross-DP neighbours) + profile heuristics. |
 | 🧩 **Row Explainability** | Decompose `100 − row_score` into per-CDE deficits. | Exact decomposition (score is linear); rendered as a Plotly waterfall. |

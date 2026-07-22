@@ -23,7 +23,7 @@ def sample_df() -> pd.DataFrame:
 
 
 @pytest.fixture(autouse=True)
-def _force_mock_data_source(monkeypatch):
+def _force_mock_data_source(monkeypatch, tmp_path):
     """Pin SETTINGS.data_source to "mock" for every test, regardless of the
     developer's .env / shell DATA_SOURCE value. Without this, runs with
     ``DATA_SOURCE=snowflake`` exported re-route loaders (e.g. the E7 reference
@@ -31,10 +31,17 @@ def _force_mock_data_source(monkeypatch):
     cause spurious failures. Tests that need to exercise the snowflake
     branch (e.g. ``test_default_fetcher_snowflake_branch``) override SETTINGS
     on the specific module under test, which takes precedence inside the
-    test's scope."""
+    test's scope.
+
+    Also points the persistence store at a per-test temp dir and resets the
+    store singleton, so tests (notably the AppTest flows that render Step 6,
+    which now auto-records run snapshots) never write into the repo's real
+    ``.dqs_store/`` and never see another test's records."""
     from config import settings as settings_mod
 
-    mock_settings = settings_mod.Settings(data_source="mock")
+    mock_settings = settings_mod.Settings(
+        data_source="mock", store_dir=str(tmp_path / "dqs_store"),
+    )
     monkeypatch.setattr(settings_mod, "SETTINGS", mock_settings)
     for mod_path in (
         "src.data_product_builder",
@@ -46,6 +53,15 @@ def _force_mock_data_source(monkeypatch):
         mod = sys.modules.get(mod_path)
         if mod is not None and hasattr(mod, "SETTINGS"):
             monkeypatch.setattr(mod, "SETTINGS", mock_settings)
+
+    def _reset_persistence() -> None:
+        pers = sys.modules.get("src.persistence")
+        if pers is not None:
+            pers.reset_store()
+
+    _reset_persistence()
+    yield
+    _reset_persistence()
 
 
 @pytest.fixture(autouse=True)

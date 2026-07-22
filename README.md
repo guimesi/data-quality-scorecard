@@ -147,6 +147,15 @@ automates the same pipeline end-to-end).
    the full list). The drill-down follows the same Standard + Custom
    blending as the charts themselves, so a bar built from Custom rules
    (e.g. a One-click run) resolves to the rows those Custom rules fail.
+   Each card also has a **History** tab: every computed scorecard is
+   **auto-persisted** (deduplicated - a rerun of an unchanged dashboard
+   records nothing) with who/when and a config fingerprint, feeding a
+   score-trend chart (◆ marks config changes), a run log, and a
+   **"what changed" diff** vs the previous run (per-rule / per-CDE /
+   per-dimension deltas via the ML Lab drift engine). A **drop alert**
+   banner appears on the card when the score fell ≥ `DQS_DROP_ALERT_PP`
+   (default 5 pp) vs the previous run - flagging when the configuration
+   also changed, so a config edit isn't mistaken for a data regression.
    The "Worst rows" tab and the CSV
    export carry one column per Standard *and* Custom rule with the row's
    per-rule score (100 / 0) and the rule weight in the column header, so
@@ -277,6 +286,7 @@ data_quality_app/
 │   ├── dqr_validation.py        # Per-dimension compatibility checks (Step 4.1 / Step 6)
 │   ├── reference_data.py        # Reference dataset registry (e.g. project_master)
 │   ├── persistence.py           # Run history / telemetry / saved projects (local ⇄ Snowflake)
+│   ├── run_history.py           # Auto-snapshot service: fingerprints, dedup, drop detection
 │   ├── scorecard.py             # Score computation (standard + custom combined)
 │   ├── one_click.py             # ⚡ One-click automation service (custom-only, equal weights)
 │   ├── ml_lab.py                # 🧪 ML Lab algorithms (Step 7, beta) - read-only
@@ -307,6 +317,7 @@ data_quality_app/
 │   │   ├── _charts.py          # Plotly gauge + threshold-bar
 │   │   ├── _breakdown.py       # DP-card header, source-breakdown, Custom Rules table
 │   │   ├── _drilldown.py       # Click a bar / select a rule -> failing rows table
+│   │   ├── _history.py         # Auto-record runs + drop alert + History tab
 │   │   └── _dp_dashboard.py    # Per-DP card (gauge + tab row) + cross-DP overview
 │   ├── step_07_ml_lab.py                  # SLIM orchestrator + tab dispatcher
 │   └── step_07/                           # B5 split (one module per ML Lab tab)
@@ -358,6 +369,7 @@ data_quality_app/
     ├── test_one_click.py                  # One-click service (src/one_click.py)
     ├── test_app_mode_flow.py              # Mode on-ramps + flow separation + regression
     ├── test_persistence.py                # Persistence layer (identity + 3 backends)
+    ├── test_run_history.py                # Run-history service + Step 6 history UI
     ├── test_step_06_dashboard_export.py
     ├── test_step_06_drilldown.py          # Click-to-drill-down helpers (Step 6 tabs)
     ├── test_step_07_ml_lab_ui.py

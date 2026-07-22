@@ -114,7 +114,7 @@ flowchart TD
     NORM --> SCORE["Per-source row score = Σ(pass·w)·100<br/>Combined = w_std·std + w_cus·cus"]
     SCORE --> AGGS["Aggregate:<br/>per-rule, per-CDE,<br/>per-dimension,<br/>standard / custom subscores,<br/>overall"]
     AGGS --> BUCKET["Bucket rows<br/>green ≥ 80<br/>yellow ≥ 60<br/>red < 60"]
-    BUCKET --> RENDER["Render dashboard:<br/>gauge, source breakdown,<br/>By CDE / Dimension (Standard +<br/>Custom blended, click a bar to<br/>drill down to the failing rows),<br/>custom rules tab (select a row to<br/>drill down), worst rows (with<br/>per-rule score columns + weight in<br/>header + reference-dataset columns)"]
+    BUCKET --> RENDER["Render dashboard:<br/>gauge, source breakdown,<br/>By CDE / Dimension (Standard +<br/>Custom blended, click a bar to<br/>drill down to the failing rows),<br/>custom rules tab (select a row to<br/>drill down), worst rows (with<br/>per-rule score columns + weight in<br/>header + reference-dataset columns),<br/>History tab (auto-persisted trend +<br/>what-changed drift + drop alert)"]
     RENDER --> EXPORT{User exports<br/>or opens lab?}
     EXPORT -->|CSV| CSVOUT["rows + row score + status +<br/>one column per Standard / Custom<br/>rule with the row's score<br/>(weight in column header) +<br/>reference-dataset columns<br/>(suffixed with origin dataset)"]
     EXPORT -->|JSON| JSONOUT["config + scorecard summary"]

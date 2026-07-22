@@ -73,6 +73,8 @@ src/
                                #   (custom-only, required CDEs, equal weights)
   persistence.py               # app-state layer: run history / telemetry / saved
                                #   projects; local JSONL now, DQS_* tables in prod
+  run_history.py               # auto-snapshot service on top of persistence:
+                               #   config/result fingerprints, dedup, drop detection
   reference_data.py            # registry + session-state cache for ref datasets
   snowflake_client.py          # data layer: Snowpark session (SiS) / connector (local)
   mock_data.py                 # deterministic synthetic data builders
@@ -108,6 +110,7 @@ ui/
     _charts.py                 # Plotly gauge + threshold-bar
     _breakdown.py              # DP-card header, source-breakdown, Custom Rules table
     _drilldown.py              # Click a bar / select a rule -> failing rows table
+    _history.py                # Auto-record runs + drop alert + History tab
     _dp_dashboard.py           # Per-DP card (gauge + tab row) + cross-DP overview
   step_07_ml_lab.py            # SLIM orchestrator + tab dispatcher
   step_07/                     # B5 split (one module per ML Lab tab)
@@ -239,7 +242,7 @@ break:
 - `utils/session_state.py` -> re-exports from `utils/session/*`
 - `ui/step_06_dashboard.py` -> orchestrator on top of `ui/step_06/_*`
   (`_shared`, `_export`, `_charts`, `_breakdown`, `_drilldown`,
-  `_dp_dashboard`); the
+  `_history`, `_dp_dashboard`); the
   test-facing helpers (`_build_rowscores_csv`, `_per_rule_score_columns`,
   `_reference_columns_for_export`, `_status_class`,
   `_render_source_breakdown`) are re-exported on the legacy module.
@@ -311,6 +314,14 @@ history, adoption/audit telemetry, saved-project versions). Three rules:
 Feature code (dashboard history, telemetry, projects) talks only to the
 domain API (`save_run` / `log_event` / `save_project_version` / the
 `list_*` readers) - never to a store class directly.
+
+Run history (phase 1) sits on top: `src/run_history.py` records one
+snapshot per computed scorecard, deduplicated by a (config fingerprint,
+result fingerprint) pair - so Streamlit reruns record nothing, while a
+config edit or a data change records a new run and the two are
+distinguishable afterwards. `ui/step_06/_history.py` renders the trend /
+run log / drift tab and the drop-alert banner; the ML Lab's Run History
+tab merges these auto-persisted snapshots with its session snapshots.
 
 ### One-click reuses the Step-by-step builders, it doesn't fork them
 `src/one_click.py` is deliberately thin: `run_one_click` calls the same

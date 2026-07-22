@@ -19,10 +19,28 @@ from src.ml_lab import (
     snapshot_scorecard,
 )
 from src.models import ScorecardResult
+from src.run_history import load_history
 from ui.step_07._shared import (
     _render_empty,
     _render_explainer,
 )
+
+
+def _persisted_snapshots() -> List[Dict[str, Any]]:
+    """ML-Lab-compatible snapshots auto-persisted by Step 6 (all DPs).
+
+    Each Step 6 run record carries the snapshot as its payload; the
+    recording user is grafted on so the table can show provenance.
+    """
+    out: List[Dict[str, Any]] = []
+    for record in load_history(dp_code=None):
+        payload = dict(record.get("payload") or {})
+        if not payload:
+            continue
+        payload.setdefault("source", "auto")
+        payload["recorded_by"] = record.get("username", "")
+        out.append(payload)
+    return out
 
 # Snapshot upload (JSON / CSV) is temporarily disabled while the feature is
 # reworked to persist snapshots automatically (so the user won't need to
@@ -36,17 +54,27 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
     _render_explainer(
         "<b>What this does.</b> Captures <b>snapshots</b> of your scorecards "
         "over time so you can compare runs.<br>"
-        "&nbsp;&nbsp;• <b>📸 Snapshot</b> stores all current scorecards in "
-        "session state (lives until you Restart).<br>"
-        "&nbsp;&nbsp;• <b>📂 Upload JSON / CSV</b> <i>(temporarily under "
-        "maintenance)</i> - snapshot import is being reworked so runs are "
-        "saved automatically; manual upload won't be needed.<br>"
+        "&nbsp;&nbsp;• <b>Auto-persisted runs</b> - Step 6 records every "
+        "computed scorecard automatically (deduplicated); they survive "
+        "Restart and appear here with <code>source=auto</code>.<br>"
+        "&nbsp;&nbsp;• <b>📸 Snapshot</b> additionally stores all current "
+        "scorecards in session state (lives until you Restart).<br>"
         "&nbsp;&nbsp;• <b>Drift</b> compares two snapshots: <code>PSI</code> "
         "and <code>KS</code> on the row-score distribution, plus per-rule, "
         "per-CDE and per-dimension deltas (flagged when |Δ| ≥ 5 pp)."
     )
 
-    runs: List[Dict[str, Any]] = list(st.session_state.get("ml_lab_runs", []) or [])
+    # Auto-persisted Step 6 runs first, then any manual session snapshots
+    # that aren't already persisted (dedup by snapshot id), oldest-first.
+    session_runs: List[Dict[str, Any]] = list(
+        st.session_state.get("ml_lab_runs", []) or []
+    )
+    persisted = _persisted_snapshots()
+    seen_ids = {s.get("id") for s in persisted}
+    runs: List[Dict[str, Any]] = persisted + [
+        s for s in session_runs if s.get("id") not in seen_ids
+    ]
+    runs.sort(key=lambda s: str(s.get("timestamp", "")))
 
     bar_l, bar_m, bar_r, bar_x = st.columns([1.4, 1.4, 1.4, 1])
     with bar_l:
