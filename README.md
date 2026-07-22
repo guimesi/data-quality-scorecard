@@ -257,6 +257,19 @@ configuration, and lands on the dashboard in Step-by-step mode - every
 step stays editable, and saving again creates the next version. Storage
 goes through the persistence layer (`DQS_PERSISTENCE`).
 
+### 📑 Executive report (HTML, print-to-PDF)
+
+The dashboard's **📑 Executive report (HTML)** button downloads a fully
+self-contained HTML file - no external scripts, fonts or images - with
+every dashboard view: the cross-DP overview, each DP's score / threshold
+distribution / source weights, the By-CDE and By-Dimension breakdowns
+(HTML/CSS bars), the Standard and Custom rule tables, the worst rows, and
+the persisted score trend with the delta vs the previous run. A
+`@media print` stylesheet keeps it A4-friendly (one DP per page, colors
+preserved), so **Ctrl+P → Save as PDF** produces the shareable executive
+PDF without any PDF library - the pragmatic path inside Streamlit in
+Snowflake, where PDF-generation packages are unavailable.
+
 ### 📊 Adoption & audit (admin page)
 
 The app records adoption/audit telemetry through the same fire-and-forget
@@ -350,6 +363,7 @@ data_quality_app/
 │   │   ├── _drilldown.py       # Click a bar / select a rule -> failing rows table
 │   │   ├── _history.py         # Auto-record runs + drop alert + History tab
 │   │   ├── _projects.py        # Save-as-project panel + version changelog
+│   │   ├── _exec_report.py     # 📑 Self-contained executive HTML report (print-to-PDF)
 │   │   └── _dp_dashboard.py    # Per-DP card (gauge + tab row) + cross-DP overview
 │   ├── step_adoption.py                   # 📊 Adoption & audit admin page (usage + audit trail)
 │   ├── step_07_ml_lab.py                  # SLIM orchestrator + tab dispatcher
@@ -405,6 +419,7 @@ data_quality_app/
     ├── test_run_history.py                # Run-history service + Step 6 history UI
     ├── test_projects.py                   # Saved projects: service + save panel + loader
     ├── test_telemetry.py                  # Adoption metrics + logging helpers + admin page
+    ├── test_exec_report.py                # Executive HTML report builder + download wiring
     ├── test_step_06_dashboard_export.py
     ├── test_step_06_drilldown.py          # Click-to-drill-down helpers (Step 6 tabs)
     ├── test_step_07_ml_lab_ui.py

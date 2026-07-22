@@ -39,6 +39,10 @@ from ui.step_06._drilldown import (
     _render_failing_rows,
     _render_rule_drilldown,
 )
+from ui.step_06._exec_report import (
+    _build_executive_report_html,
+    _render_executive_report_download,
+)
 from ui.step_06._export import (
     _build_config_json,
     _build_rowscores_csv,
@@ -173,6 +177,9 @@ def render() -> None:
             st.caption("At-a-glance final scores across every Data Product.")
         _render_overview_cards(scorecards)
 
+    exp_col, save_col = st.columns([1, 3])
+    with exp_col:
+        _render_executive_report_download(scorecards)
     _render_project_save_panel()
 
     st.markdown("---")
@@ -233,6 +240,8 @@ __all__ = [
     "_render_drop_alert",
     "_render_history_tab",
     "_render_project_save_panel",
+    "_build_executive_report_html",
+    "_render_executive_report_download",
     "_gauge",
     "_threshold_bar",
     "_SYSTEM_ICONS",

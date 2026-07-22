@@ -116,6 +116,7 @@ ui/
     _drilldown.py              # Click a bar / select a rule -> failing rows table
     _history.py                # Auto-record runs + drop alert + History tab
     _projects.py               # Save-as-project panel + version changelog
+    _exec_report.py            # Self-contained executive HTML report (print-to-PDF)
     _dp_dashboard.py           # Per-DP card (gauge + tab row) + cross-DP overview
   step_adoption.py             # 📊 Adoption & audit admin page (standalone)
   step_07_ml_lab.py            # SLIM orchestrator + tab dispatcher
@@ -248,7 +249,7 @@ break:
 - `utils/session_state.py` -> re-exports from `utils/session/*`
 - `ui/step_06_dashboard.py` -> orchestrator on top of `ui/step_06/_*`
   (`_shared`, `_export`, `_charts`, `_breakdown`, `_drilldown`,
-  `_history`, `_projects`, `_dp_dashboard`); the
+  `_history`, `_projects`, `_exec_report`, `_dp_dashboard`); the
   test-facing helpers (`_build_rowscores_csv`, `_per_rule_score_columns`,
   `_reference_columns_for_export`, `_status_class`,
   `_render_source_breakdown`) are re-exported on the legacy module.
