@@ -105,6 +105,7 @@ ui/
     _export.py                 # CSV / JSON download builders
     _charts.py                 # Plotly gauge + threshold-bar
     _breakdown.py              # DP-card header, source-breakdown, Custom Rules table
+    _drilldown.py              # Click a bar / select a rule -> failing rows table
     _dp_dashboard.py           # Per-DP card (gauge + tab row) + cross-DP overview
   step_07_ml_lab.py            # SLIM orchestrator + tab dispatcher
   step_07/                     # B5 split (one module per ML Lab tab)
@@ -235,7 +236,8 @@ break:
   `config/custom_dqr/_*_catalog.py`
 - `utils/session_state.py` -> re-exports from `utils/session/*`
 - `ui/step_06_dashboard.py` -> orchestrator on top of `ui/step_06/_*`
-  (`_shared`, `_export`, `_charts`, `_breakdown`, `_dp_dashboard`); the
+  (`_shared`, `_export`, `_charts`, `_breakdown`, `_drilldown`,
+  `_dp_dashboard`); the
   test-facing helpers (`_build_rowscores_csv`, `_per_rule_score_columns`,
   `_reference_columns_for_export`, `_status_class`,
   `_render_source_breakdown`) are re-exported on the legacy module.

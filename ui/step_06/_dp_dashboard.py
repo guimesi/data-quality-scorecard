@@ -15,6 +15,11 @@ from ui.step_06._breakdown import (
     _render_source_breakdown,
 )
 from ui.step_06._charts import _gauge, _threshold_bar
+from ui.step_06._drilldown import (
+    _render_cde_drilldown,
+    _render_dimension_drilldown,
+    _render_rule_drilldown,
+)
 from ui.step_06._export import (
     _build_config_json,
     _build_rowscores_csv,
@@ -110,7 +115,13 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     xaxis=dict(range=[0, 105], title="Score"),
                     margin=dict(t=20, b=20, l=20, r=20),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                cde_event = st.plotly_chart(
+                    fig, use_container_width=True,
+                    on_select="rerun", key=f"cde_chart_{code}",
+                )
+                _render_cde_drilldown(
+                    code, dp, result, st.session_state.configs[code], cde_event,
+                )
 
         with tab_dim:
             if result.dimension_scores:
@@ -132,7 +143,13 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     xaxis=dict(range=[0, 105], title="Score"),
                     margin=dict(t=20, b=20, l=20, r=20),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                dim_event = st.plotly_chart(
+                    fig, use_container_width=True,
+                    on_select="rerun", key=f"dim_chart_{code}",
+                )
+                _render_dimension_drilldown(
+                    code, dp, result, st.session_state.configs[code], dim_event,
+                )
 
         with tab_rules:
             rows = []
@@ -156,7 +173,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                 df_rules = pd.DataFrame(rows).sort_values(
                     "Pass rate (%)", na_position="first",
                 )
-                st.dataframe(
+                rules_event = st.dataframe(
                     df_rules,
                     use_container_width=True,
                     hide_index=True,
@@ -166,6 +183,12 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                         ),
                         "Weight (%)": st.column_config.NumberColumn(format="%.2f%%"),
                     },
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key=f"rules_table_{code}",
+                )
+                _render_rule_drilldown(
+                    code, dp, result, cfg, df_rules, rules_event,
                 )
                 if result.not_computed_standard_rules:
                     for rule_id, reason in result.not_computed_standard_rules.items():

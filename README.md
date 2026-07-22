@@ -138,7 +138,16 @@ automates the same pipeline end-to-end).
    (including "Not evaluated" warnings when a Custom rule's reference data
    is missing and "Not computed" warnings when a Standard rule's
    configuration was incompatible with the CDE), and the threshold
-   distribution (green/yellow/red). The "Worst rows" tab and the CSV
+   distribution (green/yellow/red). Every breakdown is **click-to-drill-down**:
+   clicking a bar on the "By CDE" / "By Dimension" charts, or selecting a
+   row on the "Rules (pass rate)" / "Custom Rules" tables, surfaces the
+   actual data rows that fail the clicked element - worst score first,
+   with the same per-rule (100/0) and reference-dataset columns as the
+   Worst-rows tab, capped at the 200 worst rows (the CSV export carries
+   the full list). The drill-down follows the same Standard + Custom
+   blending as the charts themselves, so a bar built from Custom rules
+   (e.g. a One-click run) resolves to the rows those Custom rules fail.
+   The "Worst rows" tab and the CSV
    export carry one column per Standard *and* Custom rule with the row's
    per-rule score (100 / 0) and the rule weight in the column header, so
    the user can scan a single row and see which rule failures hurt it.
@@ -296,6 +305,7 @@ data_quality_app/
 │   │   ├── _export.py          # CSV / JSON download builders
 │   │   ├── _charts.py          # Plotly gauge + threshold-bar
 │   │   ├── _breakdown.py       # DP-card header, source-breakdown, Custom Rules table
+│   │   ├── _drilldown.py       # Click a bar / select a rule -> failing rows table
 │   │   └── _dp_dashboard.py    # Per-DP card (gauge + tab row) + cross-DP overview
 │   ├── step_07_ml_lab.py                  # SLIM orchestrator + tab dispatcher
 │   └── step_07/                           # B5 split (one module per ML Lab tab)
@@ -347,6 +357,7 @@ data_quality_app/
     ├── test_one_click.py                  # One-click service (src/one_click.py)
     ├── test_app_mode_flow.py              # Mode on-ramps + flow separation + regression
     ├── test_step_06_dashboard_export.py
+    ├── test_step_06_drilldown.py          # Click-to-drill-down helpers (Step 6 tabs)
     ├── test_step_07_ml_lab_ui.py
     └── test_ml_lab.py
 ```

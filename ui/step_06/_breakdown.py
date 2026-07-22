@@ -12,6 +12,7 @@ import streamlit as st
 
 from config.custom_dqr_catalog import get_available_custom_dqr_rules
 from config.dqr_sources import SOURCE_LABELS
+from ui.step_06._drilldown import _render_custom_rule_drilldown
 from ui.step_06._shared import (
     _DEFAULT_ACCENT,
     _SYSTEM_ACCENTS,
@@ -81,7 +82,7 @@ def _render_custom_rules_table(code: str, result) -> None:
         st.caption("No custom rules selected for this Data Product.")
         return
     df = pd.DataFrame(rows).sort_values("Pass rate (%)")
-    st.dataframe(
+    custom_event = st.dataframe(
         df,
         use_container_width=True,
         hide_index=True,
@@ -91,7 +92,13 @@ def _render_custom_rules_table(code: str, result) -> None:
             ),
             "Weight (%)": st.column_config.NumberColumn(format="%.2f%%"),
         },
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"custom_rules_table_{code}",
     )
+    dp = st.session_state.data_products.get(code)
+    if dp is not None:
+        _render_custom_rule_drilldown(code, dp, result, cfg, df, custom_event)
     if result.not_evaluated_custom_rules:
         for rule_id, reason in result.not_evaluated_custom_rules.items():
             st.warning(f"⚠ **{rule_id}** not evaluated - {reason}")

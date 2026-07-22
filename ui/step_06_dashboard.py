@@ -32,6 +32,13 @@ from ui.step_06._breakdown import (
 )
 from ui.step_06._charts import _gauge, _threshold_bar
 from ui.step_06._dp_dashboard import _render_dashboard_for_dp, _render_overview_cards
+from ui.step_06._drilldown import (
+    _render_cde_drilldown,
+    _render_custom_rule_drilldown,
+    _render_dimension_drilldown,
+    _render_failing_rows,
+    _render_rule_drilldown,
+)
 from ui.step_06._export import (
     _build_config_json,
     _build_rowscores_csv,
@@ -205,6 +212,11 @@ __all__ = [
     "_render_dp_card_header",
     "_render_dashboard_for_dp",
     "_render_overview_cards",
+    "_render_cde_drilldown",
+    "_render_dimension_drilldown",
+    "_render_rule_drilldown",
+    "_render_custom_rule_drilldown",
+    "_render_failing_rows",
     "_gauge",
     "_threshold_bar",
     "_SYSTEM_ICONS",
