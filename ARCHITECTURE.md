@@ -75,6 +75,8 @@ src/
                                #   projects; local JSONL now, DQS_* tables in prod
   run_history.py               # auto-snapshot service on top of persistence:
                                #   config/result fingerprints, dedup, drop detection
+  projects.py                  # saved projects: versioned config capture,
+                               #   change summaries -> audit changelog
   reference_data.py            # registry + session-state cache for ref datasets
   snowflake_client.py          # data layer: Snowpark session (SiS) / connector (local)
   mock_data.py                 # deterministic synthetic data builders
@@ -111,6 +113,7 @@ ui/
     _breakdown.py              # DP-card header, source-breakdown, Custom Rules table
     _drilldown.py              # Click a bar / select a rule -> failing rows table
     _history.py                # Auto-record runs + drop alert + History tab
+    _projects.py               # Save-as-project panel + version changelog
     _dp_dashboard.py           # Per-DP card (gauge + tab row) + cross-DP overview
   step_07_ml_lab.py            # SLIM orchestrator + tab dispatcher
   step_07/                     # B5 split (one module per ML Lab tab)
@@ -242,7 +245,7 @@ break:
 - `utils/session_state.py` -> re-exports from `utils/session/*`
 - `ui/step_06_dashboard.py` -> orchestrator on top of `ui/step_06/_*`
   (`_shared`, `_export`, `_charts`, `_breakdown`, `_drilldown`,
-  `_history`, `_dp_dashboard`); the
+  `_history`, `_projects`, `_dp_dashboard`); the
   test-facing helpers (`_build_rowscores_csv`, `_per_rule_score_columns`,
   `_reference_columns_for_export`, `_status_class`,
   `_render_source_breakdown`) are re-exported on the legacy module.
@@ -322,6 +325,16 @@ config edit or a data change records a new run and the two are
 distinguishable afterwards. `ui/step_06/_history.py` renders the trend /
 run log / drift tab and the drop-alert banner; the ML Lab's Run History
 tab merges these auto-persisted snapshots with its session snapshots.
+
+Saved projects (phase 3) follow the same shape: `src/projects.py`
+serializes the whole configuration (never the data) into an append-only
+version per save, each stamped who/when with a `change_summary` diffed
+against the previous version - the version list is the audit changelog.
+The Step 6 save panel (`ui/step_06/_projects.py`) writes versions; the
+mode-selection browser opens one by rebuilding the data products fresh
+and applying the stored configs in Step-by-step mode, so a loaded project
+remains fully editable. Saves/loads also emit `project_saved` /
+`project_loaded` telemetry events (consumed by the phase-2 admin view).
 
 ### One-click reuses the Step-by-step builders, it doesn't fork them
 `src/one_click.py` is deliberately thin: `run_one_click` calls the same

@@ -50,6 +50,7 @@ from ui.step_06._history import (
     _render_drop_alert,
     _render_history_tab,
 )
+from ui.step_06._projects import _render_project_save_panel
 from ui.step_06._shared import (
     _DEFAULT_ACCENT,
     _SYSTEM_ACCENTS,
@@ -172,6 +173,8 @@ def render() -> None:
             st.caption("At-a-glance final scores across every Data Product.")
         _render_overview_cards(scorecards)
 
+    _render_project_save_panel()
+
     st.markdown("---")
 
     for code, result in scorecards.items():
@@ -229,6 +232,7 @@ __all__ = [
     "_record_runs",
     "_render_drop_alert",
     "_render_history_tab",
+    "_render_project_save_panel",
     "_gauge",
     "_threshold_bar",
     "_SYSTEM_ICONS",

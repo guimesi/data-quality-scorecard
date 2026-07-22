@@ -242,6 +242,21 @@ ML Lab), with all sources, options, toggles, CDE selections, weight
 configuration, scorecard generation and CSV/JSON exports available exactly
 as before. Nothing in the Step-by-step flow changed.
 
+### 📂 Saved projects (versioned, with audit changelog)
+
+From the dashboard, **💾 Save as project** captures the whole
+configuration - domain, systems, CDEs, Standard/Custom rules with params,
+and every weight (never the data) - under a project name. Saves are
+**append-only versions** stamped with who/when plus a human-readable
+summary of what changed vs the previous version (rules added/removed,
+weights/params changed, ...), so the version list *is* the audit
+changelog. Once at least one project exists, the start screen gains an
+**Open a saved project** section: pick a project (and optionally an older
+version), and the app rebuilds the data products fresh, applies the saved
+configuration, and lands on the dashboard in Step-by-step mode - every
+step stays editable, and saving again creates the next version. Storage
+goes through the persistence layer (`DQS_PERSISTENCE`).
+
 ## Project structure
 
 Several modules that grew past a few hundred lines were partitioned into
@@ -287,6 +302,7 @@ data_quality_app/
 │   ├── reference_data.py        # Reference dataset registry (e.g. project_master)
 │   ├── persistence.py           # Run history / telemetry / saved projects (local ⇄ Snowflake)
 │   ├── run_history.py           # Auto-snapshot service: fingerprints, dedup, drop detection
+│   ├── projects.py              # Saved projects: versioned config capture + audit changelog
 │   ├── scorecard.py             # Score computation (standard + custom combined)
 │   ├── one_click.py             # ⚡ One-click automation service (custom-only, equal weights)
 │   ├── ml_lab.py                # 🧪 ML Lab algorithms (Step 7, beta) - read-only
@@ -318,6 +334,7 @@ data_quality_app/
 │   │   ├── _breakdown.py       # DP-card header, source-breakdown, Custom Rules table
 │   │   ├── _drilldown.py       # Click a bar / select a rule -> failing rows table
 │   │   ├── _history.py         # Auto-record runs + drop alert + History tab
+│   │   ├── _projects.py        # Save-as-project panel + version changelog
 │   │   └── _dp_dashboard.py    # Per-DP card (gauge + tab row) + cross-DP overview
 │   ├── step_07_ml_lab.py                  # SLIM orchestrator + tab dispatcher
 │   └── step_07/                           # B5 split (one module per ML Lab tab)
@@ -370,6 +387,7 @@ data_quality_app/
     ├── test_app_mode_flow.py              # Mode on-ramps + flow separation + regression
     ├── test_persistence.py                # Persistence layer (identity + 3 backends)
     ├── test_run_history.py                # Run-history service + Step 6 history UI
+    ├── test_projects.py                   # Saved projects: service + save panel + loader
     ├── test_step_06_dashboard_export.py
     ├── test_step_06_drilldown.py          # Click-to-drill-down helpers (Step 6 tabs)
     ├── test_step_07_ml_lab_ui.py

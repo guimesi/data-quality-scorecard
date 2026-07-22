@@ -149,7 +149,7 @@ flowchart TD
 
 | # | Step | User action | System action | Persisted |
 |---|------|-------------|---------------|-----------|
-| — | **Mode Selection** (entry) | Pick **⚡ One-click** or **🛠️ Step-by-step** | Set `app_mode`; route to the One-click step (One-click) or Step 0 (Step-by-step). Mode-aware visibility hides the other flow's steps | `app_mode` |
+| — | **Mode Selection** (entry) | Pick **⚡ One-click** or **🛠️ Step-by-step**, or **📂 open a saved project** (rebuilds data products, applies the saved config, lands on the dashboard in Step-by-step mode) | Set `app_mode`; route to the One-click step (One-click) or Step 0 (Step-by-step). Mode-aware visibility hides the other flow's steps | `app_mode` (+ on project open: `domain`, `selected_systems`, `data_products`, `configs`, `loaded_project_name`) |
 | — | **⚡ One-click** | Pick a domain + systems, click **Generate** | `run_one_click()`: build + profile each DP, prefetch refs, select custom rules only with default options, derive required CDEs, distribute weights equally, compute scorecards, validate CSV; land on the dashboard with a summary banner. Blocking only on no domain / no system / no system with custom rules / nothing scored | `selected_systems`, `data_products`, `configs`, `scorecards`, `one_click_summary` |
 | 0 | Domain Selection (Step-by-step) | Pick a domain card (Cost Estimate / Quality / ...) | Set the active domain on session-state; switching wipes downstream selections so Step 1 starts clean | `domain` |
 | 1 | System Selection | Check 1+ of the active domain's systems (e.g. ADR / ACCE / EPT for Cost Estimate, SQS for Quality) | Validate selection, advance | `selected_systems` |

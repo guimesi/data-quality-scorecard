@@ -75,6 +75,7 @@ data-quality-app/
 │   ├── mock_data.py
 │   ├── persistence.py        # Run history / telemetry / saved projects (F0 foundation)
 │   ├── run_history.py        # Auto-snapshot service (fingerprints, dedup, drop detection)
+│   ├── projects.py           # Saved projects (versioned config capture + audit changelog)
 │   ├── snowflake_client.py
 │   ├── custom_dqr_engine.py  # SLIM re-export of src/custom_dqr/*
 │   └── custom_dqr/           # Custom-DQR engine partitioned by family (C1)
@@ -106,6 +107,7 @@ data-quality-app/
 │   │   ├── _breakdown.py                     # DP-card header, source-breakdown, Custom Rules table
 │   │   ├── _drilldown.py                     # Click a bar / select a rule -> failing rows table
 │   │   ├── _history.py                       # Auto-record runs + drop alert + History tab
+│   │   ├── _projects.py                      # Save-as-project panel + version changelog
 │   │   └── _dp_dashboard.py                  # Per-DP card (gauge + tab row) + cross-DP overview
 │   ├── step_07_ml_lab.py                  # SLIM orchestrator + tab dispatcher
 │   └── step_07/                           # ML Lab tabs partitioned (B5)
@@ -544,13 +546,14 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | [src/mock_data.py](../src/mock_data.py) | Deterministic synthetic data generator with injected defects (incl. `CODE_OF_RESOURCE` / `STANDARD_ACTIVITY_BREAKDOWN` for EPT, plus `WBC_LEVEL_5` / `TOTAL_HOURS` / `TOTAL_COST_USD` exercising the E3 statistical outlier detector) |
 | [src/snowflake_client.py](../src/snowflake_client.py) | `SnowflakeClient` data layer with two auto-selected backends: the in-platform **Snowpark session** (`get_active_session()`) inside Streamlit in Snowflake, and `snowflake.connector` + `externalbrowser` SSO as the local-dev fallback. Filter values are bound server-side (qmark `?` for Snowpark, `%s` for the connector). `execute()` is the persistence layer's write path (INSERT into the DQS_* app-state tables); data reads stay on the fetch methods. |
 | [src/run_history.py](../src/run_history.py) | **Run-history service** (phase 1). `config_fingerprint` (stable hash of CDEs/rules/params/weights/sources; assignment order-insensitive) and `result_fingerprint` (hash of the scoring outcome) drive dedup; `record_run_if_new` persists an ML-Lab-compatible snapshot (`snapshot_scorecard`) via `save_run` unless both fingerprints match the last persisted run; `load_history` returns runs (with who/when/config_hash); `score_drop` compares the two most recent runs and flags whether the config changed alongside the score. |
+| [src/projects.py](../src/projects.py) | **Saved projects** (phase 3). `serialize_project` / `deserialize_project` round-trip the full configuration (domain, systems, CDEs, rules, params, weights - never the data); `change_summary` produces the human-readable "what changed" line (systems/CDEs/rules added-removed, weight/param changes, source changes; name lists > 3 collapse to counts); `save_project` appends an immutable version (v1 = "Project created.") and logs a `project_saved` event; `list_projects` / `get_project` back the browser. Version list = audit changelog. |
 | [src/persistence.py](../src/persistence.py) | **Persistence layer** (F0 foundation for run history, adoption/audit telemetry and saved projects). `current_username()` (CURRENT_USER() in SiS / OS login locally, cached); three backends selected by `DQS_PERSISTENCE` - `LocalStore` (JSON-lines under `.dqs_store/`, default), `SnowflakeStore` (append-only `DQS_RUNS`/`DQS_EVENTS`/`DQS_PROJECTS` tables, [deploy/03_persistence_tables.sql](../deploy/03_persistence_tables.sql)), `NullStore` (`off`). Domain API: `save_run`/`list_runs`, `log_event`/`list_events`, `save_project_version`/`list_project_versions` (append-only versions = audit changelog). Every write stamps `ts` + `username`; every function is fire-and-forget (storage failures log + degrade, never raise). |
 
 ### 5.3 UI Steps (`ui/`)
 
 | Step | File | Purpose |
 |------|------|---------|
-| Entry | [ui/step_mode_selection.py](../ui/step_mode_selection.py) | **Mode picker** - choose ⚡ One-click or 🛠️ Step-by-step; sets `app_mode` and routes onward |
+| Entry | [ui/step_mode_selection.py](../ui/step_mode_selection.py) | **Mode picker** - choose ⚡ One-click or 🛠️ Step-by-step; sets `app_mode` and routes onward. Once at least one project exists, an **📂 Open a saved project** section lists projects (with per-version audit changelog); opening one rebuilds the data products fresh, applies the saved configuration, logs a `project_loaded` event and lands on the dashboard in Step-by-step mode |
 | One-click | [ui/step_one_click.py](../ui/step_one_click.py) | ⚡ **One-click** - pick a domain + systems, then **Generate** runs [src/one_click.py](../src/one_click.py) and lands on the dashboard. Validates: no domain / no system / no applicable custom rules / nothing scored / CSV failure |
 | 0 | [ui/step_00_domain_selection.py](../ui/step_00_domain_selection.py) | Pick the data domain (Step-by-step) |
 | 1 | [ui/step_01_system_selection.py](../ui/step_01_system_selection.py) | Pick which systems to analyze |
@@ -560,7 +563,7 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | 4.1 | [ui/step_04_dqr_assignment.py](../ui/step_04_dqr_assignment.py) | Assign standard dimensions + edit parameters per CDE (only DPs with `standard`); per-rule compatibility validation drives ✅/⚠/❌ badges and gates **Next** until every error is resolved |
 | 4.2 | [ui/step_04_2_custom_dqr.py](../ui/step_04_2_custom_dqr.py) | Pick custom rules from the per-DP catalog (only DPs with `custom`) |
 | 5 | [ui/step_05_weight_assignment.py](../ui/step_05_weight_assignment.py) | Distribute 100 points across rules in each active source |
-| 6 | [ui/step_06_dashboard.py](../ui/step_06_dashboard.py) | Scorecard dashboard (standard + custom subscores, custom rules tab) + CSV / JSON export. Clicking a By-CDE / By-Dimension bar or selecting a Rules / Custom Rules table row drills down to the failing data rows ([ui/step_06/_drilldown.py](../ui/step_06/_drilldown.py)). Every computed scorecard is auto-persisted (deduplicated) and surfaced on a per-DP **History** tab - score trend (◆ = config change), run log (who/when/config), "what changed" drift vs the previous run - plus a drop-alert banner when the score fell ≥ `DQS_DROP_ALERT_PP` (default 5 pp) ([ui/step_06/_history.py](../ui/step_06/_history.py)). Nav row exposes a **🧪 ML Lab (beta)** button that opens Step 7. |
+| 6 | [ui/step_06_dashboard.py](../ui/step_06_dashboard.py) | Scorecard dashboard (standard + custom subscores, custom rules tab) + CSV / JSON export. Clicking a By-CDE / By-Dimension bar or selecting a Rules / Custom Rules table row drills down to the failing data rows ([ui/step_06/_drilldown.py](../ui/step_06/_drilldown.py)). Every computed scorecard is auto-persisted (deduplicated) and surfaced on a per-DP **History** tab - score trend (◆ = config change), run log (who/when/config), "what changed" drift vs the previous run - plus a drop-alert banner when the score fell ≥ `DQS_DROP_ALERT_PP` (default 5 pp) ([ui/step_06/_history.py](../ui/step_06/_history.py)). A **💾 Save as project** panel captures the whole configuration as a new immutable version with an audit changelog ([ui/step_06/_projects.py](../ui/step_06/_projects.py)). Nav row exposes a **🧪 ML Lab (beta)** button that opens Step 7. |
 | 7 | [ui/step_07_ml_lab.py](../ui/step_07_ml_lab.py) | 🧪 **ML Lab (beta)** orchestrator + tab dispatcher: wires the 9 read-only analytics tabs into `st.tabs(...)`. Each tab is its own module in [ui/step_07/](../ui/step_07/): 🔎 `_row_anomalies.py` · 🎯 `_rule_impact.py` · 🌿 `_cde_clusters.py` · ⚖️ `_weight_sensitivity.py` · 🔭 `_cross_dp.py` · 📜 `_run_history.py` · 🧠 `_risk_model.py` · 💡 `_recommendations.py` · 🧩 `_row_explain.py` (shared CSS + helpers in `_shared.py`). Violet/lavender BETA theme + 🔬 *Use scikit-learn* toggle. See [ML_LAB.md](ML_LAB.md). |
 
 ### 5.4 Utilities (`utils/`)
@@ -652,6 +655,7 @@ runs `ruff check` first, then `pytest -q` with coverage.
 | [tests/test_snowflake_client.py](../tests/test_snowflake_client.py) | Snowflake client (mocked) |
 | [tests/test_persistence.py](../tests/test_persistence.py) | Persistence layer: identity resolution (SiS `CURRENT_USER()` / OS fallback / cache), Local/Snowflake/Null backends, backend selection via `DQS_PERSISTENCE`, fire-and-forget degradation, project-version increments, `SnowflakeClient.execute` bind paths |
 | [tests/test_run_history.py](../tests/test_run_history.py) | Run-history service + Step 6 history UI: fingerprint stability/sensitivity, record dedup (rerun vs data change vs config change), `score_drop` deltas + config-change flag, session-cached recording, drop-alert thresholds, History-tab trend/log/drift rendering, ML Lab persisted-snapshot merge |
+| [tests/test_projects.py](../tests/test_projects.py) | Saved projects: serialization round-trip, change-summary cases (rules/CDEs/systems added-removed, weights/params, sources, domain, name-list capping), versioned saves + changelog + telemetry events, browser listing/opening, loader (rebuild, prefetch, corrupt record, unknown domain, build failure) |
 | [tests/test_misc_gaps.py](../tests/test_misc_gaps.py) | Coverage gap closers |
 | [tests/test_ui_flow.py](../tests/test_ui_flow.py) | End-to-end via `streamlit.testing.v1.AppTest` |
 | [tests/test_ui_units.py](../tests/test_ui_units.py) | Per-dimension param editors, weight buttons, Step 3 hover legend + grid helpers, Restart-button branches |
