@@ -73,6 +73,7 @@ data-quality-app/
 │   ├── one_click.py          # One-click service (UI-free): run_one_click / build_one_click_config
 │   ├── ml_lab.py             # 🧪 ML Lab algorithms (Step 7, beta), see ML_LAB.md
 │   ├── mock_data.py
+│   ├── persistence.py        # Run history / telemetry / saved projects (F0 foundation)
 │   ├── snowflake_client.py
 │   ├── custom_dqr_engine.py  # SLIM re-export of src/custom_dqr/*
 │   └── custom_dqr/           # Custom-DQR engine partitioned by family (C1)
@@ -539,7 +540,8 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | [src/one_click.py](../src/one_click.py) | ⚡ **One-click automation service** (UI-free). `run_one_click(domain, systems, …)` builds + profiles each Data Product, prefetches reference datasets, applies the default custom-only config and computes scorecards; `build_one_click_config` derives the required CDEs and equal weights; `default_rule_params` reproduces an untouched Step 4.2 params dict. Returns an `OneClickResult` (scored products + skipped reasons + warnings); raises `OneClickError` for blocking input/build failures. Reuses `build_multiple` / `profile_dataframe` / `prefetch_reference_datasets` / `compute_scorecard` / `effective_required_columns` / `distribute_equally`. |
 | [src/ml_lab.py](../src/ml_lab.py) | 🧪 **ML Lab algorithms** (Step 7, beta). Public functions: `build_rule_flag_matrix`, `compute_row_anomalies`, `compute_rule_impact`, `compute_cde_profile_clusters`, `simulate_weight_perturbation`, `compare_data_products`, `snapshot_scorecard`, `load_snapshot_from_json`, `load_snapshot_from_csv`, `compute_drift` (PSI + KS), `train_risk_classifier`, `recommend_dqrs_for_cde`, `explain_row_score`, `sklearn_status`. Pure numpy/pandas with **optional** sklearn swap-ins (IsolationForest, KMeans, PCA, LogisticRegression) detected lazily. Read-only - never mutates the main flow's state. See [ML_LAB.md](ML_LAB.md). |
 | [src/mock_data.py](../src/mock_data.py) | Deterministic synthetic data generator with injected defects (incl. `CODE_OF_RESOURCE` / `STANDARD_ACTIVITY_BREAKDOWN` for EPT, plus `WBC_LEVEL_5` / `TOTAL_HOURS` / `TOTAL_COST_USD` exercising the E3 statistical outlier detector) |
-| [src/snowflake_client.py](../src/snowflake_client.py) | `SnowflakeClient` data layer with two auto-selected backends: the in-platform **Snowpark session** (`get_active_session()`) inside Streamlit in Snowflake, and `snowflake.connector` + `externalbrowser` SSO as the local-dev fallback. Filter values are bound server-side (qmark `?` for Snowpark, `%s` for the connector). |
+| [src/snowflake_client.py](../src/snowflake_client.py) | `SnowflakeClient` data layer with two auto-selected backends: the in-platform **Snowpark session** (`get_active_session()`) inside Streamlit in Snowflake, and `snowflake.connector` + `externalbrowser` SSO as the local-dev fallback. Filter values are bound server-side (qmark `?` for Snowpark, `%s` for the connector). `execute()` is the persistence layer's write path (INSERT into the DQS_* app-state tables); data reads stay on the fetch methods. |
+| [src/persistence.py](../src/persistence.py) | **Persistence layer** (F0 foundation for run history, adoption/audit telemetry and saved projects). `current_username()` (CURRENT_USER() in SiS / OS login locally, cached); three backends selected by `DQS_PERSISTENCE` - `LocalStore` (JSON-lines under `.dqs_store/`, default), `SnowflakeStore` (append-only `DQS_RUNS`/`DQS_EVENTS`/`DQS_PROJECTS` tables, [deploy/03_persistence_tables.sql](../deploy/03_persistence_tables.sql)), `NullStore` (`off`). Domain API: `save_run`/`list_runs`, `log_event`/`list_events`, `save_project_version`/`list_project_versions` (append-only versions = audit changelog). Every write stamps `ts` + `username`; every function is fire-and-forget (storage failures log + degrade, never raise). |
 
 ### 5.3 UI Steps (`ui/`)
 
@@ -645,6 +647,7 @@ runs `ruff check` first, then `pytest -q` with coverage.
 | [tests/test_helpers.py](../tests/test_helpers.py) | Color / label / weight utilities |
 | [tests/test_session_state.py](../tests/test_session_state.py) | Navigation & sample toggle |
 | [tests/test_snowflake_client.py](../tests/test_snowflake_client.py) | Snowflake client (mocked) |
+| [tests/test_persistence.py](../tests/test_persistence.py) | Persistence layer: identity resolution (SiS `CURRENT_USER()` / OS fallback / cache), Local/Snowflake/Null backends, backend selection via `DQS_PERSISTENCE`, fire-and-forget degradation, project-version increments, `SnowflakeClient.execute` bind paths |
 | [tests/test_misc_gaps.py](../tests/test_misc_gaps.py) | Coverage gap closers |
 | [tests/test_ui_flow.py](../tests/test_ui_flow.py) | End-to-end via `streamlit.testing.v1.AppTest` |
 | [tests/test_ui_units.py](../tests/test_ui_units.py) | Per-dimension param editors, weight buttons, Step 3 hover legend + grid helpers, Restart-button branches |

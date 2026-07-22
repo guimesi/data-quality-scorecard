@@ -227,6 +227,33 @@ class SnowflakeClient:
             cur.close()
         return pd.DataFrame(rows, columns=cols)
 
+    def execute(self, sql: str, params: Optional[Sequence[object]] = None) -> None:
+        """Execute a non-SELECT statement (INSERT into the DQS_* app-state
+        tables). Same dual backend as the fetch paths: Snowpark ``session.sql``
+        with qmark binds inside SiS, ``cursor.execute`` with pyformat binds on
+        the local connector. Values are always bound server-side; callers
+        never interpolate user input into ``sql``.
+
+        This is the persistence layer's write path (:mod:`src.persistence`).
+        Data reads stay on :meth:`fetch_table` / :meth:`fetch_query`.
+        """
+        self.connect()
+        bind = list(params) if params else None
+        if self._session is not None:
+            if bind is not None:
+                self._session.sql(sql.replace("%s", "?"), params=bind).collect()
+            else:
+                self._session.sql(sql).collect()
+            return
+        cur = self._conn.cursor()
+        try:
+            if bind is not None:
+                cur.execute(sql, bind)
+            else:
+                cur.execute(sql)
+        finally:
+            cur.close()
+
     # ------------------------------------------------------------------
     # Backend-specific execution helpers
     # ------------------------------------------------------------------

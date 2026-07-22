@@ -41,6 +41,18 @@ class Settings:
     sf_schema: str = os.getenv("SNOWFLAKE_SCHEMA", "")
     sf_role: str = os.getenv("SNOWFLAKE_ROLE", "")
 
+    # Persistence (run history / telemetry / saved projects).
+    # Deliberately decoupled from ``data_source``: a local run can read real
+    # data from Snowflake (DATA_SOURCE=snowflake) while still persisting app
+    # state to local files until the DQS_* tables exist in production.
+    #   local     -> JSON-lines files under ``store_dir`` (default)
+    #   snowflake -> DQS_* tables in ``sf_database``.``sf_state_schema``
+    #   off       -> no-op (nothing is persisted)
+    persistence_backend: str = os.getenv("DQS_PERSISTENCE", "local").lower()
+    # Empty = "<project root>/.dqs_store" (resolved in src/persistence.py).
+    store_dir: str = os.getenv("DQS_STORE_DIR", "")
+    sf_state_schema: str = os.getenv("DQS_STATE_SCHEMA", "DQS_APP_STATE")
+
     # Scorecard thresholds
     threshold_green: float = float(os.getenv("THRESHOLD_GREEN", "80"))
     threshold_yellow: float = float(os.getenv("THRESHOLD_YELLOW", "60"))

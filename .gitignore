@@ -36,6 +36,10 @@ Thumbs.db
 data/
 output/
 
+# Local persistence store (run history / telemetry / saved projects;
+# src/persistence.py LocalStore - production uses Snowflake tables instead)
+.dqs_store/
+
 # Local reference / scratch (not part of the app or deploy)
 # deploy/deploy_files/ = pristine copies of the EM platform template (reference only)
 # dqs-COMMITS_JUNHO_2026.md = local commit log

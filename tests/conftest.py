@@ -38,6 +38,7 @@ def _force_mock_data_source(monkeypatch):
     monkeypatch.setattr(settings_mod, "SETTINGS", mock_settings)
     for mod_path in (
         "src.data_product_builder",
+        "src.persistence",
         "src.reference_data",
         "src.snowflake_client",
         "src.scorecard",

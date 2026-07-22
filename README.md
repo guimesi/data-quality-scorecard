@@ -276,6 +276,7 @@ data_quality_app/
 │   ├── dqr_engine.py            # Standard DQR (10 dimensions) + dispatcher
 │   ├── dqr_validation.py        # Per-dimension compatibility checks (Step 4.1 / Step 6)
 │   ├── reference_data.py        # Reference dataset registry (e.g. project_master)
+│   ├── persistence.py           # Run history / telemetry / saved projects (local ⇄ Snowflake)
 │   ├── scorecard.py             # Score computation (standard + custom combined)
 │   ├── one_click.py             # ⚡ One-click automation service (custom-only, equal weights)
 │   ├── ml_lab.py                # 🧪 ML Lab algorithms (Step 7, beta) - read-only
@@ -356,6 +357,7 @@ data_quality_app/
     ├── test_step_one_click_ui.py          # ⚡ One-click step + validations
     ├── test_one_click.py                  # One-click service (src/one_click.py)
     ├── test_app_mode_flow.py              # Mode on-ramps + flow separation + regression
+    ├── test_persistence.py                # Persistence layer (identity + 3 backends)
     ├── test_step_06_dashboard_export.py
     ├── test_step_06_drilldown.py          # Click-to-drill-down helpers (Step 6 tabs)
     ├── test_step_07_ml_lab_ui.py
@@ -440,6 +442,17 @@ The `DATA_SOURCE` variable controls the data source:
   `externalbrowser` authentication. The data layer picks the backend
   automatically. (Locally, `DATA_SOURCE` is read from `.env`; in SiS it defaults
   to its built-in value since there is no `.env`.)
+
+Separately, `DQS_PERSISTENCE` controls where the app **persists its own
+state** (run history, adoption/audit telemetry, saved projects - see
+`src/persistence.py`): `local` (default - JSON-lines files under
+`.dqs_store/`, git-ignored), `snowflake` (append-only `DQS_*` tables,
+created via [`deploy/03_persistence_tables.sql`](deploy/03_persistence_tables.sql)),
+or `off`. It is deliberately independent of `DATA_SOURCE`, so a local run
+can read real Snowflake data while still persisting state to local files.
+Every write stamps the acting user (`CURRENT_USER()` inside SiS, the OS
+login locally) and is **fire-and-forget**: a storage failure is logged and
+swallowed, never breaking the dashboard.
 
 ## Multi-domain architecture
 

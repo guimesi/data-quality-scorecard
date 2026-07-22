@@ -26,6 +26,13 @@ from this GitHub repository, with a **least-privilege, read-only** role.
    and the Streamlit object; grants app access to viewers.
    Mixed privileges: the API integration step needs `ACCOUNTADMIN`; the rest can run as
    the app role / `SYSADMIN`.
+3. **`03_persistence_tables.sql`** *(optional; still current — not superseded by the
+   EM pipeline)* — creates the `DQS_APP_STATE` schema + append-only `DQS_RUNS` /
+   `DQS_EVENTS` / `DQS_PROJECTS` tables for run history, telemetry and saved
+   projects (`src/persistence.py`), and grants the app role **INSERT+SELECT on
+   those tables only** — a deliberate, scoped exception to the read-only posture
+   of `01`. Only needed once the app runs with `DQS_PERSISTENCE=snowflake`;
+   until then the app persists to local files and never touches these tables.
 
 ## Placeholders you must fill in
 

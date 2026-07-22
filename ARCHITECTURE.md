@@ -71,6 +71,8 @@ src/
   one_click.py                 # One-click service: run_one_click /
                                #   build_one_click_config / default_rule_params
                                #   (custom-only, required CDEs, equal weights)
+  persistence.py               # app-state layer: run history / telemetry / saved
+                               #   projects; local JSONL now, DQS_* tables in prod
   reference_data.py            # registry + session-state cache for ref datasets
   snowflake_client.py          # data layer: Snowpark session (SiS) / connector (local)
   mock_data.py                 # deterministic synthetic data builders
@@ -288,6 +290,27 @@ A custom rule whose dependency is missing (e.g. a reference dataset
 failed to load) must raise `CustomRuleNotEvaluated`. The dispatcher
 records the reason; Step 6 surfaces a "Not evaluated" warning instead
 of treating absent inputs as success.
+
+### Persistence is fire-and-forget, append-only, and backend-switched
+
+`src/persistence.py` owns everything the app writes about itself (run
+history, adoption/audit telemetry, saved-project versions). Three rules:
+
+- **Fire-and-forget**: every public function catches storage errors, logs
+  them and returns `False` / `[]`. A dead store must never break a render.
+- **Append-only**: nothing is ever updated or deleted - a project "save"
+  is a new version row, which makes the version list the audit changelog.
+  The Snowflake grants enforce this (INSERT+SELECT only, see
+  `deploy/03_persistence_tables.sql` - a scoped exception to the app's
+  read-only posture documented in `01_least_privilege_role.sql`).
+- **Backend via `DQS_PERSISTENCE`** (`local` / `snowflake` / `off`),
+  deliberately decoupled from `DATA_SOURCE` so local runs against real
+  data keep writing to `.dqs_store/` until the prod tables exist. Writes
+  stamp `ts` + `username` (`CURRENT_USER()` in SiS, OS login locally).
+
+Feature code (dashboard history, telemetry, projects) talks only to the
+domain API (`save_run` / `log_event` / `save_project_version` / the
+`list_*` readers) - never to a store class directly.
 
 ### One-click reuses the Step-by-step builders, it doesn't fork them
 `src/one_click.py` is deliberately thin: `run_one_click` calls the same
