@@ -77,6 +77,8 @@ src/
                                #   config/result fingerprints, dedup, drop detection
   projects.py                  # saved projects: versioned config capture,
                                #   change summaries -> audit changelog
+  telemetry.py                 # adoption/audit metrics (pure aggregation over
+                               #   persisted events/runs/versions; never writes)
   reference_data.py            # registry + session-state cache for ref datasets
   snowflake_client.py          # data layer: Snowpark session (SiS) / connector (local)
   mock_data.py                 # deterministic synthetic data builders
@@ -115,6 +117,7 @@ ui/
     _history.py                # Auto-record runs + drop alert + History tab
     _projects.py               # Save-as-project panel + version changelog
     _dp_dashboard.py           # Per-DP card (gauge + tab row) + cross-DP overview
+  step_adoption.py             # 📊 Adoption & audit admin page (standalone)
   step_07_ml_lab.py            # SLIM orchestrator + tab dispatcher
   step_07/                     # B5 split (one module per ML Lab tab)
     _shared.py                 # purple-theme CSS override, banner/empty helpers,
@@ -335,6 +338,16 @@ mode-selection browser opens one by rebuilding the data products fresh
 and applying the stored configs in Step-by-step mode, so a loaded project
 remains fully editable. Saves/loads also emit `project_saved` /
 `project_loaded` telemetry events (consumed by the phase-2 admin view).
+
+Adoption/audit telemetry (phase 2) closes the loop: `utils/telemetry.py`
+emits `app_open` (once per session) and `step_view` (once per step
+transition) from `app.py`; the Step 6 export buttons emit `export`. The
+📊 Adoption page (`ui/step_adoption.py`, a standalone step visible in the
+stepper only while inside it) renders the metrics computed by
+`src/telemetry.py` - pure aggregation over persisted events / runs /
+project versions, no writes. In-app authorization is deliberately out of
+scope: who may open the app is governed by Snowflake roles (deploy/);
+the app measures what authorized users did.
 
 ### One-click reuses the Step-by-step builders, it doesn't fork them
 `src/one_click.py` is deliberately thin: `run_one_click` calls the same

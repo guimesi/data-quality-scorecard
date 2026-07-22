@@ -48,6 +48,9 @@ STEPS: List[str] = [
     "weight_assignment",
     "dashboard",
     "ml_lab",
+    # Standalone admin page (adoption / audit metrics). Reached from the
+    # entry screen; only visible in the stepper while inside it.
+    "adoption",
 ]
 
 STEP_LABELS: Dict[str, str] = {
@@ -63,6 +66,7 @@ STEP_LABELS: Dict[str, str] = {
     "weight_assignment": "Weights",
     "dashboard": "Dashboard",
     "ml_lab": "🧪 ML Lab (beta)",
+    "adoption": "📊 Adoption",
 }
 
 

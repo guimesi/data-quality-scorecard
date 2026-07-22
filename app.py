@@ -18,6 +18,7 @@ from ui import (
     step_05_weight_assignment,
     step_06_dashboard,
     step_07_ml_lab,
+    step_adoption,
     step_mode_selection,
     step_one_click,
 )
@@ -32,6 +33,7 @@ from utils.session_state import (
     render_sidebar_brand,
     render_sidebar_footer,
 )
+from utils.telemetry import log_app_open_once, log_step_view
 
 st.set_page_config(
     page_title="DQ Scorecard",
@@ -44,8 +46,9 @@ st.set_page_config(
 # Steps that render *before* a domain is known. Everything else assumes
 # ``session_state.domain`` is populated (the domain gate below enforces it).
 # ``mode_selection`` picks the mode, ``one_click`` picks the domain itself,
-# and ``domain_selection`` is the Step-by-step domain picker.
-_DOMAINLESS_STEPS = {"mode_selection", "one_click", "domain_selection"}
+# ``domain_selection`` is the Step-by-step domain picker, and ``adoption``
+# is the standalone admin page (usage metrics span every domain).
+_DOMAINLESS_STEPS = {"mode_selection", "one_click", "domain_selection", "adoption"}
 
 
 STEP_RENDERERS = {
@@ -61,6 +64,7 @@ STEP_RENDERERS = {
     "weight_assignment": step_05_weight_assignment.render,
     "dashboard": step_06_dashboard.render,
     "ml_lab": step_07_ml_lab.render,
+    "adoption": step_adoption.render,
 }
 
 
@@ -69,8 +73,14 @@ def main() -> None:
 
     # Mode gate: ``mode_selection`` is the entry point. A brand-new session
     # (no mode and no domain) is routed there so the user picks One-click or
-    # Step-by-step before anything else renders.
-    if not st.session_state.get("app_mode") and not st.session_state.get("domain"):
+    # Step-by-step before anything else renders. The ``adoption`` admin page
+    # is exempt - it is reached from the entry screen before any mode is
+    # picked and needs neither mode nor domain.
+    if (
+        not st.session_state.get("app_mode")
+        and not st.session_state.get("domain")
+        and st.session_state.get("current_step") != "adoption"
+    ):
         st.session_state.current_step = "mode_selection"
     # Domain gate: every step outside ``_DOMAINLESS_STEPS`` assumes
     # ``session_state.domain`` is populated. A session that lost the domain
@@ -110,6 +120,13 @@ def main() -> None:
     if renderer is None:
         st.error(f"Unknown step: {current}")
         return
+
+    # Adoption/audit telemetry (fire-and-forget; session-state guards make
+    # these no-ops on reruns): one app_open per session, one step_view per
+    # step transition.
+    log_app_open_once()
+    log_step_view(current)
+
     renderer()
 
 

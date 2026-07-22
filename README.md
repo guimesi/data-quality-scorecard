@@ -257,6 +257,20 @@ configuration, and lands on the dashboard in Step-by-step mode - every
 step stays editable, and saving again creates the next version. Storage
 goes through the persistence layer (`DQS_PERSISTENCE`).
 
+### 📊 Adoption & audit (admin page)
+
+The app records adoption/audit telemetry through the same fire-and-forget
+persistence layer: one `app_open` per session, one `step_view` per step
+transition (with mode + domain), every CSV/JSON `export`, and
+`project_saved` / `project_loaded` - each stamped with the acting user
+(`CURRENT_USER()` in SiS, OS login locally). The **📊 Usage & audit**
+button on the start screen opens a standalone admin page with headline
+counters (unique users, app opens, scorecard runs, exports, project
+saves/loads), a runs-per-week trend, adoption by domain/system, per-user
+activity, and the unified audit trail. **Authorization stays with
+Snowflake roles/grants** (see `deploy/`) - the app measures what
+authorized users did; it does not gate who may enter.
+
 ## Project structure
 
 Several modules that grew past a few hundred lines were partitioned into
@@ -303,6 +317,7 @@ data_quality_app/
 │   ├── persistence.py           # Run history / telemetry / saved projects (local ⇄ Snowflake)
 │   ├── run_history.py           # Auto-snapshot service: fingerprints, dedup, drop detection
 │   ├── projects.py              # Saved projects: versioned config capture + audit changelog
+│   ├── telemetry.py             # Adoption/audit metrics for the 📊 Adoption admin page
 │   ├── scorecard.py             # Score computation (standard + custom combined)
 │   ├── one_click.py             # ⚡ One-click automation service (custom-only, equal weights)
 │   ├── ml_lab.py                # 🧪 ML Lab algorithms (Step 7, beta) - read-only
@@ -336,6 +351,7 @@ data_quality_app/
 │   │   ├── _history.py         # Auto-record runs + drop alert + History tab
 │   │   ├── _projects.py        # Save-as-project panel + version changelog
 │   │   └── _dp_dashboard.py    # Per-DP card (gauge + tab row) + cross-DP overview
+│   ├── step_adoption.py                   # 📊 Adoption & audit admin page (usage + audit trail)
 │   ├── step_07_ml_lab.py                  # SLIM orchestrator + tab dispatcher
 │   └── step_07/                           # B5 split (one module per ML Lab tab)
 │       ├── _shared.py           # CSS, banner/empty helpers, _ensure_scorecards
@@ -388,6 +404,7 @@ data_quality_app/
     ├── test_persistence.py                # Persistence layer (identity + 3 backends)
     ├── test_run_history.py                # Run-history service + Step 6 history UI
     ├── test_projects.py                   # Saved projects: service + save panel + loader
+    ├── test_telemetry.py                  # Adoption metrics + logging helpers + admin page
     ├── test_step_06_dashboard_export.py
     ├── test_step_06_drilldown.py          # Click-to-drill-down helpers (Step 6 tabs)
     ├── test_step_07_ml_lab_ui.py

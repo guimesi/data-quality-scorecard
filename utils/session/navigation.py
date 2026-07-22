@@ -62,6 +62,9 @@ STEP_VISIBILITY_PREDICATES: Dict[str, Callable[[], bool]] = {
     # Both modes land on the dashboard; it surfaces once a mode is chosen.
     "dashboard": lambda: bool(st.session_state.get("app_mode")),
     "ml_lab": _ml_lab_visible,
+    # Standalone admin page: visible in the stepper only while inside it,
+    # so the "Step X of N" counter stays honest for the scoring flow.
+    "adoption": lambda: st.session_state.get("current_step") == "adoption",
 }
 
 

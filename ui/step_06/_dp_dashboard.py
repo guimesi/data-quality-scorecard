@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.persistence import log_event
 from ui.step_06._breakdown import (
     _render_custom_rules_table,
     _render_dp_card_header,
@@ -51,25 +52,30 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
             # for any downstream parser / test that relies on the text.
             st.markdown("**⬇ Export**")
             cfg = st.session_state.configs[code]
+            domain_code = str(st.session_state.get("domain", "") or "")
             d1, d2 = st.columns(2)
             with d1:
-                st.download_button(
+                if st.download_button(
                     "CSV (row scores)",
                     data=_build_rowscores_csv(dp, result, cfg),
                     file_name=f"{code}_row_scores.csv",
                     mime="text/csv",
                     use_container_width=True,
                     key=f"dl_csv_{code}",
-                )
+                ):
+                    log_event("export", {"format": "csv", "dp": code},
+                              domain_code)
             with d2:
-                st.download_button(
+                if st.download_button(
                     "JSON (config+summary)",
                     data=_build_config_json(dp, result, cfg),
                     file_name=f"{code}_scorecard.json",
                     mime="application/json",
                     use_container_width=True,
                     key=f"dl_json_{code}",
-                )
+                ):
+                    log_event("export", {"format": "json", "dp": code},
+                              domain_code)
 
         _render_drop_alert(code)
 

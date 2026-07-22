@@ -261,3 +261,11 @@ def render() -> None:
                 _mode_card(card, is_active=(card["mode"] == active_mode))
 
     _render_saved_projects()
+
+    # Standalone admin page: usage/adoption metrics + audit trail. Kept as
+    # a discreet link - it's an admin concern, not part of the scoring flow.
+    st.markdown("---")
+    if st.button("📊 Usage & audit", key="open_adoption",
+                 help="Adoption metrics and the audit trail recorded by the "
+                      "app (who accessed, what was generated and exported)."):
+        goto("adoption")
