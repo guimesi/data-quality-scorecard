@@ -115,6 +115,12 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     xaxis=dict(range=[0, 105], title="Score"),
                     margin=dict(t=20, b=20, l=20, r=20),
                 )
+                st.caption(
+                    "Each bar is the simple (unweighted) mean of the pass "
+                    "rates of every rule tied to that CDE - Standard and "
+                    "Custom blended. Step 5 weights do not affect this view; "
+                    "for weight-aware score impact see ML Lab → 🎯 Rule Impact."
+                )
                 cde_event = st.plotly_chart(
                     fig, use_container_width=True,
                     on_select="rerun", key=f"cde_chart_{code}",
@@ -142,6 +148,13 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     height=max(200, 40 * len(df_dim) + 80),
                     xaxis=dict(range=[0, 105], title="Score"),
                     margin=dict(t=20, b=20, l=20, r=20),
+                )
+                st.caption(
+                    "Each bar is the simple (unweighted) mean of the pass "
+                    "rates of every rule of that dimension (Custom rules "
+                    "count via their type). Step 5 weights do not affect this "
+                    "view; for weight-aware score impact see ML Lab → "
+                    "🎯 Rule Impact."
                 )
                 dim_event = st.plotly_chart(
                     fig, use_container_width=True,
