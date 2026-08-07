@@ -130,7 +130,7 @@ def _upsert_records(records: List[Dict[str, object]]) -> List[str]:
             f"Unexpected Airtable upsert response: {data}") from exc
 
 
-def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> None:
+def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> dict:
     if len(html_bytes) > MAX_ATTACHMENT_BYTES:
         raise AirtablePushError(
             f"Report is {len(html_bytes) / 1024 / 1024:.1f} MB - Airtable "
@@ -152,14 +152,47 @@ def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> None:
     }
     for attempt in range(1, _UPLOAD_ATTEMPTS + 1):
         try:
-            _request("POST", url, payload, step="report upload")
-            return
+            return _request("POST", url, payload, step="report upload")
         except AirtablePushError as exc:
             # Only a 403 right after the upsert smells like propagation
             # lag; anything else (401, 404, 413, transport) is final.
             if "403" not in str(exc) or attempt == _UPLOAD_ATTEMPTS:
                 raise
             time.sleep(_UPLOAD_RETRY_WAIT_S)
+    return {}  # unreachable; keeps the signature honest
+
+
+def _prune_old_reports(record_id: str, upload_data: dict,
+                       filename: str) -> None:
+    """Keep only the report just uploaded in the attachment field.
+
+    The upload endpoint APPENDS, so without this every push stacks one
+    more file while the score fields get replaced - inconsistent. The
+    upload response carries the record's full attachment list; keep the
+    entry matching ``filename`` (ours, newest-last) and PATCH the field
+    down to it."""
+    fields = (upload_data or {}).get("fields") or {}
+    attachments = fields.get(SETTINGS.airtable_attachment_field)
+    if not isinstance(attachments, list):
+        # Field configured by id (fld...): the response keys by name, so
+        # find the single attachment-shaped list instead.
+        candidates = [
+            v for v in fields.values()
+            if isinstance(v, list) and v
+            and isinstance(v[0], dict) and "filename" in v[0]
+        ]
+        attachments = candidates[0] if len(candidates) == 1 else None
+    if not attachments or len(attachments) <= 1:
+        return  # nothing stacked
+    ours = [a for a in attachments if a.get("filename") == filename]
+    keep_id = (ours[-1] if ours else attachments[-1]).get("id")
+    if not keep_id:
+        return
+    url = (f"{API_ROOT}/{SETTINGS.airtable_base_id}/"
+           f"{quote(SETTINGS.airtable_table)}/{record_id}")
+    _request("PATCH", url, {
+        "fields": {SETTINGS.airtable_attachment_field: [{"id": keep_id}]},
+    }, step="old report cleanup")
 
 
 def push_executive_report(domain_code: str, scorecards: Dict[str, Any],
@@ -185,9 +218,15 @@ def push_executive_report(domain_code: str, scorecards: Dict[str, Any],
     )
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     for code, record_id in zip(codes, record_ids):
-        _upload_report(
-            record_id,
-            f"dq_scorecard_{domain_code or 'report'}_{code}_{stamp}.html",
-            html_bytes,
+        filename = (
+            f"dq_scorecard_{domain_code or 'report'}_{code}_{stamp}.html"
         )
+        upload_data = _upload_report(record_id, filename, html_bytes)
+        if not SETTINGS.airtable_keep_old_reports:
+            try:
+                _prune_old_reports(record_id, upload_data, filename)
+            except AirtablePushError:
+                # Stacked old reports are cosmetic; never fail a push
+                # whose report was already delivered over the cleanup.
+                pass
     return record_ids

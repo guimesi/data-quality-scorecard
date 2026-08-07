@@ -70,6 +70,12 @@ class Settings:
     airtable_system_field: str = os.getenv("AIRTABLE_SYSTEM_FIELD", "System")
     airtable_attachment_field: str = os.getenv(
         "AIRTABLE_ATTACHMENT_FIELD", "Executive Report")
+    # Airtable's upload endpoint APPENDS attachments; by default the push
+    # prunes the field back to just the newest report so the record stays
+    # consistent with its (replaced) score fields. Set true to keep every
+    # report as attachment history instead.
+    airtable_keep_old_reports: bool = os.getenv(
+        "AIRTABLE_KEEP_OLD_REPORTS", "").lower() in ("1", "true", "yes")
 
     # Scorecard thresholds
     threshold_green: float = float(os.getenv("THRESHOLD_GREEN", "80"))

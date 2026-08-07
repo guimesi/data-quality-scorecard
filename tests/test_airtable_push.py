@@ -28,6 +28,7 @@ def _settings(**overrides):
         airtable_table="DQ Results", airtable_key_field="Name",
         airtable_system_field="System",
         airtable_attachment_field="Executive Report",
+        airtable_keep_old_reports=False,
         threshold_green=80.0, threshold_yellow=60.0,
     )
     base.update(overrides)
@@ -122,6 +123,87 @@ def test_push_upserts_per_system_then_uploads_to_each(monkeypatch):
         assert payload["filename"].startswith(
             f"dq_scorecard_cost_estimate_{code}_")
         assert base64.b64decode(payload["file"]) == b"<html>report</html>"
+
+
+def test_stacked_old_reports_are_pruned_to_newest(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    calls = []
+
+    def fake_request(method, url, json=None, headers=None, timeout=None):
+        calls.append((method, url, json))
+        if method == "PATCH" and url.endswith("DQ%20Results"):
+            return _Resp({"records": [{"id": "recEPT"}]})
+        if "uploadAttachment" in url:
+            # Upload response: the field now stacks old + new.
+            return _Resp({"id": "recEPT", "fields": {"Executive Report": [
+                {"id": "attOLD", "filename": "dq_scorecard_d_EPT_old.html"},
+                {"id": "attNEW", "filename": json["filename"]},
+            ]}})
+        return _Resp({})
+
+    monkeypatch.setattr(ap.requests, "request", fake_request)
+    ap.push_executive_report("d", {"EPT": _result(61.0)}, b"<html>")
+
+    method, url, payload = calls[-1]
+    assert method == "PATCH"
+    assert url.endswith("/DQ%20Results/recEPT")
+    assert payload == {"fields": {"Executive Report": [{"id": "attNEW"}]}}
+
+
+def test_keep_old_reports_flag_skips_pruning(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS",
+                        _settings(airtable_keep_old_reports=True))
+    calls = []
+
+    def fake_request(method, url, json=None, headers=None, timeout=None):
+        calls.append((method, url))
+        if method == "PATCH":
+            return _Resp({"records": [{"id": "recEPT"}]})
+        return _Resp({"id": "recEPT", "fields": {"Executive Report": [
+            {"id": "attOLD", "filename": "old.html"},
+            {"id": "attNEW", "filename": json["filename"]},
+        ]}})
+
+    monkeypatch.setattr(ap.requests, "request", fake_request)
+    ap.push_executive_report("d", {"EPT": _result(61.0)}, b"<html>")
+    assert len(calls) == 2  # upsert + upload, no cleanup PATCH
+
+
+def test_prune_failure_never_fails_the_push(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+
+    def fake_request(method, url, json=None, headers=None, timeout=None):
+        if method == "PATCH" and url.endswith("DQ%20Results"):
+            return _Resp({"records": [{"id": "recEPT"}]})
+        if "uploadAttachment" in url:
+            return _Resp({"id": "recEPT", "fields": {"Executive Report": [
+                {"id": "attOLD", "filename": "old.html"},
+                {"id": "attNEW", "filename": json["filename"]},
+            ]}})
+        return _Resp({}, status_code=500, text="boom")  # cleanup PATCH
+
+    monkeypatch.setattr(ap.requests, "request", fake_request)
+    assert ap.push_executive_report(
+        "d", {"EPT": _result(61.0)}, b"<html>") == ["recEPT"]
+
+
+def test_prune_handles_field_configured_by_id(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS",
+                        _settings(airtable_attachment_field="fldABC123"))
+    calls = []
+
+    def fake_request(method, url, json=None, headers=None, timeout=None):
+        calls.append((method, url, json))
+        return _Resp({})
+
+    monkeypatch.setattr(ap.requests, "request", fake_request)
+    # Response keys by NAME even when the field is configured by id.
+    ap._prune_old_reports("recEPT", {"fields": {"Executive Report": [
+        {"id": "attOLD", "filename": "old.html"},
+        {"id": "attNEW", "filename": "new.html"},
+    ]}}, "new.html")
+    assert calls and calls[-1][2] == {
+        "fields": {"fldABC123": [{"id": "attNEW"}]}}
 
 
 def test_upsert_response_mismatch_raises(monkeypatch):
