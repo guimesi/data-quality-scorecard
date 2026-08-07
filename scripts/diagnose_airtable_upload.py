@@ -79,6 +79,12 @@ def main() -> int:
     parser.add_argument("--app-path", action="store_true",
                         help="reproduce the exact Step 6 push flow "
                              "(upsert then immediate upload)")
+    parser.add_argument("--content-type", default="text/plain",
+                        help="attachment MIME type (default text/plain; "
+                             "the app uses text/html)")
+    parser.add_argument("--filename", default="diagnose_test.txt",
+                        help="attachment filename (default "
+                             "diagnose_test.txt; the app uses .html)")
     args = parser.parse_args()
 
     if not (SETTINGS.airtable_token and SETTINGS.airtable_base_id):
@@ -93,7 +99,8 @@ def main() -> int:
     print(f"attachment field: {SETTINGS.airtable_attachment_field!r}")
     print(f"token: {SETTINGS.airtable_token[:8]}*** "
           f"({len(SETTINGS.airtable_token)} chars)")
-    print(f"payload size: {args.size} bytes")
+    print(f"payload size: {args.size} bytes | contentType: "
+          f"{args.content_type} | filename: {args.filename}")
     print()
 
     headers = {"Authorization": f"Bearer {SETTINGS.airtable_token}"}
@@ -130,8 +137,8 @@ def main() -> int:
         r2 = requests.post(
             url,
             headers={**headers, "Content-Type": "application/json"},
-            json={"contentType": "text/plain",
-                  "filename": "diagnose_test.txt",
+            json={"contentType": args.content_type,
+                  "filename": args.filename,
                   "file": base64.b64encode(payload).decode("ascii")},
             timeout=60,
         )
