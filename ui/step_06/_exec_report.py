@@ -326,12 +326,14 @@ def _render_airtable_push(domain_code: str, scorecards: Dict[str, object],
              "HTML report, giving data owners the full picture in Airtable.",
     ):
         try:
-            record_id = push_executive_report(domain_code, scorecards,
-                                              html_bytes)
+            record_ids = push_executive_report(domain_code, scorecards,
+                                               html_bytes)
         except AirtablePushError as exc:
             st.error(f"Airtable push failed: {exc}")
         else:
             log_event("export", {"format": "airtable_push",
-                                 "record_id": record_id}, domain_code)
-            st.success("Results sent to Airtable - record updated and "
-                       "executive report attached.")
+                                 "record_ids": record_ids}, domain_code)
+            st.success(
+                f"Results sent to Airtable - {len(record_ids)} system "
+                "record(s) updated, executive report attached to each."
+            )

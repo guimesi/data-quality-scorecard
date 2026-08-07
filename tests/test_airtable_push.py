@@ -26,6 +26,7 @@ def _settings(**overrides):
     base = dict(
         airtable_token="pat-test", airtable_base_id="appBASE",
         airtable_table="DQ Results", airtable_key_field="Name",
+        airtable_system_field="System",
         airtable_attachment_field="Executive Report",
         threshold_green=80.0, threshold_yellow=60.0,
     )
@@ -44,28 +45,28 @@ class _Resp:
         return self._payload
 
 
+def _result(score, green=80.0, yellow=60.0):
+    return SimpleNamespace(overall_score=score, threshold_green=green,
+                           threshold_yellow=yellow)
+
+
 def _scorecards():
-    return {"EPT": SimpleNamespace(overall_score=61.0),
-            "ADR": SimpleNamespace(overall_score=90.0)}
+    return {"EPT": _result(61.0), "ADR": _result(90.0)}
 
 
-# ==================================================================== summary
+# ==================================================================== fields
 
-def test_summary_fields_average_status_and_per_dp(monkeypatch):
+def test_record_fields_carry_system_and_result_thresholds(monkeypatch):
     monkeypatch.setattr(ap, "SETTINGS", _settings())
-    fields = ap.build_summary_fields("cost_estimate", _scorecards())
+    fields = ap.build_record_fields("cost_estimate", "EPT",
+                                    _result(61.0, green=90.0, yellow=70.0))
     assert fields["Name"] == "cost_estimate"
-    assert fields["Overall Score"] == pytest.approx(75.5)
-    assert fields["Status"] == ap.score_label(75.5, 80.0, 60.0)  # yellow band
-    assert fields["Data Products"] == "EPT: 61.0 · ADR: 90.0"
+    assert fields["System"] == "EPT"
+    assert fields["Overall Score"] == pytest.approx(61.0)
+    # Status honours the thresholds the scorecard ran with (61 < 70 = red).
+    assert fields["Status"] == ap.score_label(61.0, 90.0, 70.0)
     assert fields["Run By"]
-    assert "T" in fields["Last Run"]  # ISO timestamp
-
-
-def test_summary_fields_empty_scorecards(monkeypatch):
-    monkeypatch.setattr(ap, "SETTINGS", _settings())
-    fields = ap.build_summary_fields("d", {})
-    assert fields["Overall Score"] == 0.0
+    assert "T" in str(fields["Last Run"])  # ISO timestamp
 
 
 # ==================================================================== push
@@ -76,38 +77,59 @@ def test_push_not_configured_raises(monkeypatch):
         ap.push_executive_report("d", _scorecards(), b"<html>")
 
 
-def test_push_upserts_then_uploads(monkeypatch):
+def test_push_empty_scorecards_raises(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    with pytest.raises(ap.AirtablePushError, match="No scorecard"):
+        ap.push_executive_report("d", {}, b"<html>")
+
+
+def test_push_upserts_per_system_then_uploads_to_each(monkeypatch):
     monkeypatch.setattr(ap, "SETTINGS", _settings())
     calls = []
 
     def fake_request(method, url, json=None, headers=None, timeout=None):
         calls.append((method, url, json, headers))
         if url.startswith(ap.API_ROOT):
-            return _Resp({"records": [{"id": "recXYZ"}]})
+            return _Resp({"records": [{"id": "recEPT"}, {"id": "recADR"}]})
         return _Resp({})
 
     monkeypatch.setattr(ap.requests, "request", fake_request)
-    record_id = ap.push_executive_report(
+    record_ids = ap.push_executive_report(
         "cost_estimate", _scorecards(), b"<html>report</html>")
 
-    assert record_id == "recXYZ"
-    assert len(calls) == 2
+    assert record_ids == ["recEPT", "recADR"]
+    assert len(calls) == 3  # 1 batched upsert + 1 upload per system
 
     method, url, payload, headers = calls[0]
     assert method == "PATCH"
     assert url == f"{ap.API_ROOT}/appBASE/DQ%20Results"
-    assert payload["performUpsert"] == {"fieldsToMergeOn": ["Name"]}
+    assert payload["performUpsert"] == {
+        "fieldsToMergeOn": ["Name", "System"]}
     assert payload["typecast"] is True
-    assert payload["records"][0]["fields"]["Name"] == "cost_estimate"
+    assert [r["fields"]["System"] for r in payload["records"]] == \
+        ["EPT", "ADR"]
+    assert all(r["fields"]["Name"] == "cost_estimate"
+               for r in payload["records"])
     assert headers["Authorization"] == "Bearer pat-test"
 
-    method, url, payload, _ = calls[1]
-    assert method == "POST"
-    assert url == (f"{ap.CONTENT_ROOT}/appBASE/recXYZ/"
-                   "Executive%20Report/uploadAttachment")
-    assert payload["contentType"] == "text/html"
-    assert payload["filename"].startswith("dq_scorecard_cost_estimate_")
-    assert base64.b64decode(payload["file"]) == b"<html>report</html>"
+    for (method, url, payload, _), rec, code in zip(
+            calls[1:], ["recEPT", "recADR"], ["EPT", "ADR"]):
+        assert method == "POST"
+        assert url == (f"{ap.CONTENT_ROOT}/appBASE/{rec}/"
+                       "Executive%20Report/uploadAttachment")
+        assert payload["contentType"] == "text/html"
+        assert payload["filename"].startswith(
+            f"dq_scorecard_cost_estimate_{code}_")
+        assert base64.b64decode(payload["file"]) == b"<html>report</html>"
+
+
+def test_upsert_response_mismatch_raises(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    monkeypatch.setattr(
+        ap.requests, "request",
+        lambda *a, **k: _Resp({"records": [{"id": "recOnlyOne"}]}))
+    with pytest.raises(ap.AirtablePushError, match="Unexpected"):
+        ap.push_executive_report("d", _scorecards(), b"<html>")
 
 
 def test_oversize_report_rejected_before_any_upload(monkeypatch):
@@ -157,7 +179,7 @@ def test_button_push_success_logs_event(monkeypatch):
 
     monkeypatch.setattr(ap, "SETTINGS", _settings())
     monkeypatch.setattr(ap, "push_executive_report",
-                        lambda *a, **k: "recXYZ")
+                        lambda *a, **k: ["recEPT", "recADR"])
     events = []
     monkeypatch.setattr(er, "log_event",
                         lambda *a, **k: events.append((a, k)))
@@ -168,6 +190,7 @@ def test_button_push_success_logs_event(monkeypatch):
     fake_st.success.assert_called_once()
     fake_st.error.assert_not_called()
     assert events and events[0][0][1]["format"] == "airtable_push"
+    assert events[0][0][1]["record_ids"] == ["recEPT", "recADR"]
 
 
 def test_button_push_failure_shows_error(monkeypatch):

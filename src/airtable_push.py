@@ -4,12 +4,13 @@ Data owners manage rules and CDEs in an Airtable base; this module closes
 the loop by pushing each run's outcome back there so they get the full
 project view without opening Streamlit:
 
-1. **Upsert** one record per domain in the results table
+1. **Upsert** one record per (domain, system) in the results table
    (``PATCH /v0/{base}/{table}`` with ``performUpsert`` merging on the
-   configured key field), carrying the summary fields: overall score,
-   status, per-DP breakdown, timestamp and the user who ran it.
-2. **Attach** the self-contained executive HTML report to that record via
-   Airtable's direct upload endpoint
+   key field + system field, so an EPT run never overwrites the ADR row),
+   carrying that system's overall score, status, timestamp and the user
+   who ran it.
+2. **Attach** the self-contained executive HTML report to each upserted
+   record via Airtable's direct upload endpoint
    (``POST content.airtable.com/v0/{base}/{record}/{field}/uploadAttachment``,
    base64 payload, hard 5 MB API limit).
 
@@ -27,7 +28,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime
-from typing import Dict
+from typing import Any, Dict, List
 from urllib.parse import quote
 
 import requests
@@ -72,38 +73,42 @@ def _request(method: str, url: str, payload: dict) -> dict:
     return resp.json()
 
 
-def build_summary_fields(domain_code: str,
-                         scorecards: Dict[str, object]) -> Dict[str, object]:
-    """The upsert payload minus the attachment (pure, unit-testable)."""
-    scores = [r.overall_score for r in scorecards.values()]
-    overall = sum(scores) / len(scores) if scores else 0.0
-    per_dp = " · ".join(
-        f"{code}: {r.overall_score:.1f}" for code, r in scorecards.items()
-    )
+def build_record_fields(domain_code: str, dp_code: str,
+                        result: Any) -> Dict[str, object]:
+    """One system's upsert payload minus the attachment (pure,
+    unit-testable). Status uses the thresholds the scorecard was actually
+    computed with, matching the dashboard pill."""
     return {
         SETTINGS.airtable_key_field: domain_code,
-        "Overall Score": round(overall, 1),
-        "Status": score_label(
-            overall, SETTINGS.threshold_green, SETTINGS.threshold_yellow),
-        "Data Products": per_dp,
+        SETTINGS.airtable_system_field: dp_code,
+        "Overall Score": round(result.overall_score, 1),
+        "Status": score_label(result.overall_score, result.threshold_green,
+                              result.threshold_yellow),
         "Last Run": datetime.now().isoformat(timespec="seconds"),
         "Run By": current_username(),
     }
 
 
-def _upsert_record(fields: Dict[str, object]) -> str:
-    """Create-or-update the domain's record; returns the Airtable record id."""
+def _upsert_records(records: List[Dict[str, object]]) -> List[str]:
+    """Create-or-update one record per system, merging on
+    (key field, system field) so systems of the same domain coexist as
+    separate rows. Returns the Airtable record ids in request order."""
     url = f"{API_ROOT}/{SETTINGS.airtable_base_id}/{quote(SETTINGS.airtable_table)}"
     payload = {
-        "performUpsert": {"fieldsToMergeOn": [SETTINGS.airtable_key_field]},
+        "performUpsert": {"fieldsToMergeOn": [
+            SETTINGS.airtable_key_field, SETTINGS.airtable_system_field,
+        ]},
         # typecast lets Airtable auto-create select options (e.g. Status).
         "typecast": True,
-        "records": [{"fields": fields}],
+        "records": [{"fields": fields} for fields in records],
     }
     data = _request("PATCH", url, payload)
     try:
-        return data["records"][0]["id"]
-    except (KeyError, IndexError) as exc:
+        ids = [r["id"] for r in data["records"]]
+        if len(ids) != len(records):
+            raise KeyError("record count mismatch")
+        return ids
+    except (KeyError, IndexError, TypeError) as exc:
         raise AirtablePushError(
             f"Unexpected Airtable upsert response: {data}") from exc
 
@@ -125,11 +130,12 @@ def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> None:
     })
 
 
-def push_executive_report(domain_code: str, scorecards: Dict[str, object],
-                          html_bytes: bytes) -> str:
-    """Upsert the domain's result record and attach the executive report.
+def push_executive_report(domain_code: str, scorecards: Dict[str, Any],
+                          html_bytes: bytes) -> List[str]:
+    """Upsert one result record per system in ``scorecards`` and attach
+    the executive report to each.
 
-    Returns the Airtable record id (useful for the UI success message).
+    Returns the Airtable record ids (useful for the UI success message).
     Raises :class:`AirtablePushError` on any failure, including when the
     feature is not configured.
     """
@@ -138,10 +144,18 @@ def push_executive_report(domain_code: str, scorecards: Dict[str, object],
             "Airtable is not configured - set AIRTABLE_TOKEN and "
             "AIRTABLE_BASE_ID (see .env.example)."
         )
-    record_id = _upsert_record(build_summary_fields(domain_code, scorecards))
-    stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    _upload_report(
-        record_id, f"dq_scorecard_{domain_code or 'report'}_{stamp}.html",
-        html_bytes,
+    if not scorecards:
+        raise AirtablePushError("No scorecard results to send.")
+    codes = list(scorecards)
+    record_ids = _upsert_records(
+        [build_record_fields(domain_code, code, scorecards[code])
+         for code in codes]
     )
-    return record_id
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    for code, record_id in zip(codes, record_ids):
+        _upload_report(
+            record_id,
+            f"dq_scorecard_{domain_code or 'report'}_{code}_{stamp}.html",
+            html_bytes,
+        )
+    return record_ids

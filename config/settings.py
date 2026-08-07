@@ -63,9 +63,11 @@ class Settings:
     airtable_token: str = os.getenv("AIRTABLE_TOKEN", "")
     airtable_base_id: str = os.getenv("AIRTABLE_BASE_ID", "")
     airtable_table: str = os.getenv("AIRTABLE_TABLE", "DQ Scorecard Results")
-    # Field the upsert merges on (one record per domain) and the attachment
-    # field that receives the executive HTML report.
+    # One record per (domain, system): the upsert merges on the key field
+    # (domain) plus the system field, so ADR/ACCE/EPT runs never overwrite
+    # each other. The attachment field receives the executive HTML report.
     airtable_key_field: str = os.getenv("AIRTABLE_KEY_FIELD", "Name")
+    airtable_system_field: str = os.getenv("AIRTABLE_SYSTEM_FIELD", "System")
     airtable_attachment_field: str = os.getenv(
         "AIRTABLE_ATTACHMENT_FIELD", "Executive Report")
 
