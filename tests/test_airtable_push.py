@@ -142,6 +142,45 @@ def test_oversize_report_rejected_before_any_upload(monkeypatch):
                           b"x" * (ap.MAX_ATTACHMENT_BYTES + 1))
 
 
+def test_upload_retries_403_then_succeeds(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    monkeypatch.setattr(ap.time, "sleep", lambda s: None)
+    responses = iter([_Resp({}, status_code=403, text="MODEL_NOT_FOUND"),
+                      _Resp({}, status_code=403, text="MODEL_NOT_FOUND"),
+                      _Resp({})])
+    calls = []
+    monkeypatch.setattr(
+        ap.requests, "request",
+        lambda *a, **k: calls.append(a) or next(responses))
+    ap._upload_report("recXYZ", "r.html", b"<html>")  # must not raise
+    assert len(calls) == 3
+
+
+def test_upload_403_gives_up_after_max_attempts(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    monkeypatch.setattr(ap.time, "sleep", lambda s: None)
+    calls = []
+    monkeypatch.setattr(
+        ap.requests, "request",
+        lambda *a, **k: calls.append(a) or _Resp({}, status_code=403,
+                                                 text="MODEL_NOT_FOUND"))
+    with pytest.raises(ap.AirtablePushError, match="403"):
+        ap._upload_report("recXYZ", "r.html", b"<html>")
+    assert len(calls) == ap._UPLOAD_ATTEMPTS
+
+
+def test_upload_non_403_error_is_not_retried(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    calls = []
+    monkeypatch.setattr(
+        ap.requests, "request",
+        lambda *a, **k: calls.append(a) or _Resp({}, status_code=413,
+                                                 text="TOO_LARGE"))
+    with pytest.raises(ap.AirtablePushError, match="413"):
+        ap._upload_report("recXYZ", "r.html", b"<html>")
+    assert len(calls) == 1
+
+
 def test_http_error_becomes_push_error(monkeypatch):
     monkeypatch.setattr(ap, "SETTINGS", _settings())
     monkeypatch.setattr(

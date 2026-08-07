@@ -45,15 +45,48 @@ def _show(step: str, resp: requests.Response) -> None:
     print()
 
 
+def _app_path() -> int:
+    """Reproduce the button's exact flow with the app's own functions:
+    upsert a throwaway (__diagnostic__/TEST) row, then upload to the
+    record id the upsert just returned - the one step the standalone
+    upload test cannot cover. Delete the row in Airtable afterwards."""
+    from types import SimpleNamespace
+
+    from src import airtable_push as ap
+
+    fake_result = SimpleNamespace(overall_score=99.9, threshold_green=80.0,
+                                  threshold_yellow=60.0)
+    fields = ap.build_record_fields("__diagnostic__", "TEST", fake_result)
+    print(f"upserting row: {fields}")
+    try:
+        record_ids = ap._upsert_records([fields])
+        print(f"upsert OK -> record {record_ids[0]}, uploading now...")
+        ap._upload_report(record_ids[0], "diagnose_app_path.html",
+                          b"<html>app-path diagnostic</html>")
+    except ap.AirtablePushError as exc:
+        print(f"FAILED: {exc}")
+        return 2
+    print("App path worked end to end - delete the '__diagnostic__' row "
+          "in Airtable. If the button still fails, the difference is in "
+          "the Streamlit process (stale env), not in the flow.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--size", type=int, default=3,
                         help="attachment payload size in bytes (default 3)")
+    parser.add_argument("--app-path", action="store_true",
+                        help="reproduce the exact Step 6 push flow "
+                             "(upsert then immediate upload)")
     args = parser.parse_args()
 
     if not (SETTINGS.airtable_token and SETTINGS.airtable_base_id):
         print("AIRTABLE_TOKEN / AIRTABLE_BASE_ID missing in .env - abort.")
         return 1
+
+    if args.app_path:
+        return _app_path()
 
     print(f"base:  {SETTINGS.airtable_base_id}")
     print(f"table: {SETTINGS.airtable_table!r}")

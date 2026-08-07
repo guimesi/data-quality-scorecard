@@ -27,6 +27,7 @@ as an :class:`AirtablePushError`.
 from __future__ import annotations
 
 import base64
+import time
 from datetime import datetime
 from typing import Any, Dict, List
 from urllib.parse import quote
@@ -42,6 +43,12 @@ CONTENT_ROOT = "https://content.airtable.com/v0"
 # Airtable's uploadAttachment endpoint rejects payloads above 5 MB.
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 _TIMEOUT_S = 30
+# content.airtable.com may lag behind api.airtable.com: uploading to a
+# record the upsert JUST created can 403 with the generic
+# INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND until the record propagates, so
+# the upload retries a few times before giving up.
+_UPLOAD_ATTEMPTS = 4
+_UPLOAD_RETRY_WAIT_S = 2.0
 
 
 class AirtablePushError(RuntimeError):
@@ -133,11 +140,21 @@ def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> None:
         f"{CONTENT_ROOT}/{SETTINGS.airtable_base_id}/{record_id}/"
         f"{quote(SETTINGS.airtable_attachment_field)}/uploadAttachment"
     )
-    _request("POST", url, {
+    payload = {
         "contentType": "text/html",
         "filename": filename,
         "file": base64.b64encode(html_bytes).decode("ascii"),
-    }, step="report upload")
+    }
+    for attempt in range(1, _UPLOAD_ATTEMPTS + 1):
+        try:
+            _request("POST", url, payload, step="report upload")
+            return
+        except AirtablePushError as exc:
+            # Only a 403 right after the upsert smells like propagation
+            # lag; anything else (401, 404, 413, transport) is final.
+            if "403" not in str(exc) or attempt == _UPLOAD_ATTEMPTS:
+                raise
+            time.sleep(_UPLOAD_RETRY_WAIT_S)
 
 
 def push_executive_report(domain_code: str, scorecards: Dict[str, Any],
