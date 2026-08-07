@@ -59,18 +59,28 @@ def _headers() -> Dict[str, str]:
     }
 
 
-def _request(method: str, url: str, payload: dict) -> dict:
+def _request(method: str, url: str, payload: dict, step: str) -> dict:
+    """``step`` names the call in errors ("record upsert" / "report
+    upload") - essential to tell an Airtable rejection from a corporate
+    proxy blocking one of the two hosts or payload sizes."""
     try:
         resp = requests.request(
             method, url, json=payload, headers=_headers(), timeout=_TIMEOUT_S,
         )
     except requests.RequestException as exc:  # DNS, timeout, egress blocked…
-        raise AirtablePushError(f"Could not reach Airtable: {exc}") from exc
+        raise AirtablePushError(
+            f"Could not reach Airtable during {step}: {exc}") from exc
     if not resp.ok:
         raise AirtablePushError(
-            f"Airtable returned {resp.status_code}: {resp.text[:300]}"
+            f"Airtable returned {resp.status_code} during {step} "
+            f"({url.split('?')[0]}): {resp.text[:400]}"
         )
-    return resp.json()
+    try:
+        return resp.json()
+    except ValueError as exc:  # non-JSON body (e.g. a proxy block page)
+        raise AirtablePushError(
+            f"Non-JSON response during {step} "
+            f"(status {resp.status_code}): {resp.text[:400]}") from exc
 
 
 def build_record_fields(domain_code: str, dp_code: str,
@@ -102,7 +112,7 @@ def _upsert_records(records: List[Dict[str, object]]) -> List[str]:
         "typecast": True,
         "records": [{"fields": fields} for fields in records],
     }
-    data = _request("PATCH", url, payload)
+    data = _request("PATCH", url, payload, step="record upsert")
     try:
         ids = [r["id"] for r in data["records"]]
         if len(ids) != len(records):
@@ -127,7 +137,7 @@ def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> None:
         "contentType": "text/html",
         "filename": filename,
         "file": base64.b64encode(html_bytes).decode("ascii"),
-    })
+    }, step="report upload")
 
 
 def push_executive_report(domain_code: str, scorecards: Dict[str, Any],
