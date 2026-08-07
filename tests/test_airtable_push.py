@@ -117,7 +117,8 @@ def test_push_upserts_per_system_then_uploads_to_each(monkeypatch):
         assert method == "POST"
         assert url == (f"{ap.CONTENT_ROOT}/appBASE/{rec}/"
                        "Executive%20Report/uploadAttachment")
-        assert payload["contentType"] == "text/html"
+        # text/plain on purpose: the org's Airtable policy 403s text/html.
+        assert payload["contentType"] == "text/plain"
         assert payload["filename"].startswith(
             f"dq_scorecard_cost_estimate_{code}_")
         assert base64.b64decode(payload["file"]) == b"<html>report</html>"

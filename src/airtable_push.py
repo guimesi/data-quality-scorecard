@@ -141,7 +141,12 @@ def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> None:
         f"{quote(SETTINGS.airtable_attachment_field)}/uploadAttachment"
     )
     payload = {
-        "contentType": "text/html",
+        # Deliberately NOT text/html: the org's Airtable policy rejects
+        # text/html uploads with a generic 403 (confirmed by A/B tests -
+        # the .html filename itself is fine). Declared as text/plain the
+        # upload passes, and the downloaded .html still opens normally
+        # in a browser; only Airtable's inline preview shows source.
+        "contentType": "text/plain",
         "filename": filename,
         "file": base64.b64encode(html_bytes).decode("ascii"),
     }
