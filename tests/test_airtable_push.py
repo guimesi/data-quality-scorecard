@@ -1,0 +1,187 @@
+"""Tests for the Airtable write-back (phase 5).
+
+All HTTP is faked at the ``requests.request`` seam - no network. The
+frozen ``SETTINGS`` dataclass is swapped for a stub on the module under
+test, mirroring how the other suites isolate configuration.
+"""
+from __future__ import annotations
+
+import base64
+import os
+
+# Force mock mode before importing anything that reads settings.
+os.environ.setdefault("DATA_SOURCE", "mock")
+
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+
+import src.airtable_push as ap
+
+
+# ==================================================================== fakes
+
+def _settings(**overrides):
+    base = dict(
+        airtable_token="pat-test", airtable_base_id="appBASE",
+        airtable_table="DQ Results", airtable_key_field="Name",
+        airtable_attachment_field="Executive Report",
+        threshold_green=80.0, threshold_yellow=60.0,
+    )
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+class _Resp:
+    def __init__(self, payload=None, status_code=200, text="ok"):
+        self._payload = payload if payload is not None else {}
+        self.status_code = status_code
+        self.ok = status_code < 400
+        self.text = text
+
+    def json(self):
+        return self._payload
+
+
+def _scorecards():
+    return {"EPT": SimpleNamespace(overall_score=61.0),
+            "ADR": SimpleNamespace(overall_score=90.0)}
+
+
+# ==================================================================== summary
+
+def test_summary_fields_average_status_and_per_dp(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    fields = ap.build_summary_fields("cost_estimate", _scorecards())
+    assert fields["Name"] == "cost_estimate"
+    assert fields["Overall Score"] == pytest.approx(75.5)
+    assert fields["Status"] == ap.score_label(75.5, 80.0, 60.0)  # yellow band
+    assert fields["Data Products"] == "EPT: 61.0 · ADR: 90.0"
+    assert fields["Run By"]
+    assert "T" in fields["Last Run"]  # ISO timestamp
+
+
+def test_summary_fields_empty_scorecards(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    fields = ap.build_summary_fields("d", {})
+    assert fields["Overall Score"] == 0.0
+
+
+# ==================================================================== push
+
+def test_push_not_configured_raises(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings(airtable_token=""))
+    with pytest.raises(ap.AirtablePushError, match="not configured"):
+        ap.push_executive_report("d", _scorecards(), b"<html>")
+
+
+def test_push_upserts_then_uploads(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    calls = []
+
+    def fake_request(method, url, json=None, headers=None, timeout=None):
+        calls.append((method, url, json, headers))
+        if url.startswith(ap.API_ROOT):
+            return _Resp({"records": [{"id": "recXYZ"}]})
+        return _Resp({})
+
+    monkeypatch.setattr(ap.requests, "request", fake_request)
+    record_id = ap.push_executive_report(
+        "cost_estimate", _scorecards(), b"<html>report</html>")
+
+    assert record_id == "recXYZ"
+    assert len(calls) == 2
+
+    method, url, payload, headers = calls[0]
+    assert method == "PATCH"
+    assert url == f"{ap.API_ROOT}/appBASE/DQ%20Results"
+    assert payload["performUpsert"] == {"fieldsToMergeOn": ["Name"]}
+    assert payload["typecast"] is True
+    assert payload["records"][0]["fields"]["Name"] == "cost_estimate"
+    assert headers["Authorization"] == "Bearer pat-test"
+
+    method, url, payload, _ = calls[1]
+    assert method == "POST"
+    assert url == (f"{ap.CONTENT_ROOT}/appBASE/recXYZ/"
+                   "Executive%20Report/uploadAttachment")
+    assert payload["contentType"] == "text/html"
+    assert payload["filename"].startswith("dq_scorecard_cost_estimate_")
+    assert base64.b64decode(payload["file"]) == b"<html>report</html>"
+
+
+def test_oversize_report_rejected_before_any_upload(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    monkeypatch.setattr(
+        ap.requests, "request",
+        MagicMock(side_effect=AssertionError("no HTTP expected")))
+    with pytest.raises(ap.AirtablePushError, match="5 MB"):
+        ap._upload_report("recXYZ", "r.html",
+                          b"x" * (ap.MAX_ATTACHMENT_BYTES + 1))
+
+
+def test_http_error_becomes_push_error(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    monkeypatch.setattr(
+        ap.requests, "request",
+        lambda *a, **k: _Resp({}, status_code=422, text="INVALID_FIELD"))
+    with pytest.raises(ap.AirtablePushError, match="422.*INVALID_FIELD"):
+        ap.push_executive_report("d", _scorecards(), b"<html>")
+
+
+def test_transport_error_becomes_push_error(monkeypatch):
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+
+    def boom(*a, **k):
+        raise ap.requests.ConnectionError("egress blocked")
+
+    monkeypatch.setattr(ap.requests, "request", boom)
+    with pytest.raises(ap.AirtablePushError, match="Could not reach"):
+        ap.push_executive_report("d", _scorecards(), b"<html>")
+
+
+# ==================================================================== UI
+
+def test_button_hidden_when_not_configured(monkeypatch):
+    import ui.step_06._exec_report as er
+
+    monkeypatch.setattr(ap, "SETTINGS", _settings(airtable_token=""))
+    fake_st = MagicMock()
+    monkeypatch.setattr(er, "st", fake_st)
+    er._render_airtable_push("d", _scorecards(), b"<html>")
+    fake_st.button.assert_not_called()
+
+
+def test_button_push_success_logs_event(monkeypatch):
+    import ui.step_06._exec_report as er
+
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+    monkeypatch.setattr(ap, "push_executive_report",
+                        lambda *a, **k: "recXYZ")
+    events = []
+    monkeypatch.setattr(er, "log_event",
+                        lambda *a, **k: events.append((a, k)))
+    fake_st = MagicMock()
+    fake_st.button.return_value = True
+    monkeypatch.setattr(er, "st", fake_st)
+    er._render_airtable_push("d", _scorecards(), b"<html>")
+    fake_st.success.assert_called_once()
+    fake_st.error.assert_not_called()
+    assert events and events[0][0][1]["format"] == "airtable_push"
+
+
+def test_button_push_failure_shows_error(monkeypatch):
+    import ui.step_06._exec_report as er
+
+    monkeypatch.setattr(ap, "SETTINGS", _settings())
+
+    def boom(*a, **k):
+        raise ap.AirtablePushError("Airtable returned 401")
+
+    monkeypatch.setattr(ap, "push_executive_report", boom)
+    fake_st = MagicMock()
+    fake_st.button.return_value = True
+    monkeypatch.setattr(er, "st", fake_st)
+    er._render_airtable_push("d", _scorecards(), b"<html>")
+    fake_st.error.assert_called_once()
+    fake_st.success.assert_not_called()

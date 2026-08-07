@@ -56,6 +56,19 @@ class Settings:
     # percentage points versus the previous persisted run.
     drop_alert_pp: float = float(os.getenv("DQS_DROP_ALERT_PP", "5"))
 
+    # Airtable write-back (Step 6 "Send to Airtable"). Empty token or base
+    # means "not configured": the UI hides the button and nothing is sent.
+    # In Streamlit in Snowflake the outbound call additionally requires an
+    # External Access Integration for api.airtable.com/content.airtable.com.
+    airtable_token: str = os.getenv("AIRTABLE_TOKEN", "")
+    airtable_base_id: str = os.getenv("AIRTABLE_BASE_ID", "")
+    airtable_table: str = os.getenv("AIRTABLE_TABLE", "DQ Scorecard Results")
+    # Field the upsert merges on (one record per domain) and the attachment
+    # field that receives the executive HTML report.
+    airtable_key_field: str = os.getenv("AIRTABLE_KEY_FIELD", "Name")
+    airtable_attachment_field: str = os.getenv(
+        "AIRTABLE_ATTACHMENT_FIELD", "Executive Report")
+
     # Scorecard thresholds
     threshold_green: float = float(os.getenv("THRESHOLD_GREEN", "80"))
     threshold_yellow: float = float(os.getenv("THRESHOLD_YELLOW", "60"))

@@ -303,3 +303,35 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
              "press Ctrl+P to save as a shareable PDF.",
     ):
         log_event("export", {"format": "executive_html"}, domain_code)
+    _render_airtable_push(domain_code, scorecards, data)
+
+
+def _render_airtable_push(domain_code: str, scorecards: Dict[str, object],
+                          html_bytes: bytes) -> None:
+    """Send-to-Airtable button (phase 5). Hidden unless AIRTABLE_* is
+    configured; failures surface as an inline error, never a crash."""
+    from src.airtable_push import (
+        AirtablePushError,
+        is_configured,
+        push_executive_report,
+    )
+
+    if not is_configured():
+        return
+    if st.button(
+        "📤 Send to Airtable",
+        key="btn_airtable_push",
+        help="Upserts this domain's record in the Airtable results table "
+             "(score, status, per-DP breakdown) and attaches the executive "
+             "HTML report, giving data owners the full picture in Airtable.",
+    ):
+        try:
+            record_id = push_executive_report(domain_code, scorecards,
+                                              html_bytes)
+        except AirtablePushError as exc:
+            st.error(f"Airtable push failed: {exc}")
+        else:
+            log_event("export", {"format": "airtable_push",
+                                 "record_id": record_id}, domain_code)
+            st.success("Results sent to Airtable - record updated and "
+                       "executive report attached.")
