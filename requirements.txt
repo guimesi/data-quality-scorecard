@@ -10,6 +10,9 @@ numpy>=1.24.0,<3.0
 snowflake-connector-python>=3.6.0,<5.0
 plotly>=5.18.0,<7.0
 python-dotenv>=1.2.2,<2.0
+# Makes SSL use the OS trust store so outbound HTTPS (Airtable push) works
+# behind corporate TLS-inspecting proxies; injected defensively in app.py.
+truststore>=0.9.0,<1.0
 pytest>=8.3.4,<10.0
 pytest-cov>=4.1.0,<8.0
 # Optional: enables IsolationForest / KMeans / PCA / LogisticRegression in

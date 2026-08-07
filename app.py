@@ -5,6 +5,18 @@ Run with:  streamlit run app.py
 """
 from __future__ import annotations
 
+# On corporate machines behind a TLS-inspecting proxy, Python's bundled
+# certifi CAs reject outbound HTTPS (e.g. the Airtable push). truststore
+# switches SSL verification to the OS trust store, where corporate IT
+# already provisions the proxy's root CA. Local-dev convenience only:
+# absent from environment.yml, so in SiS (and any env without it) this
+# no-ops and certificate handling stays exactly as before.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:  # pragma: no cover - SiS / truststore not installed
+    pass
+
 import streamlit as st
 
 from ui import (
