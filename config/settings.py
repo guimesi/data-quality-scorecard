@@ -7,14 +7,13 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# ``python-dotenv`` is a *local-development* convenience only. It is NOT a
-# runtime dependency of Streamlit in Snowflake (it is absent from
-# ``environment.yml``), and there is no ``.env`` inside SiS. Import it
-# defensively so the module loads in SiS, and rely on the env-var defaults
-# below (the Snowpark session supplies identity/warehouse/database/schema).
+# ``python-dotenv`` is a *local-development* convenience only. In Databricks
+# Apps configuration arrives as real environment variables (app.yaml +
+# platform-injected identity), so there is no ``.env`` in production. Import
+# it defensively and rely on the env-var defaults below.
 try:
     from dotenv import load_dotenv
-except ImportError:  # pragma: no cover - SiS / no python-dotenv installed
+except ImportError:  # pragma: no cover - no python-dotenv installed
     load_dotenv = None
 
 # Load .env from project root when available (local dev only).
@@ -28,38 +27,42 @@ class Settings:
     # Data source
     data_source: str = os.getenv("DATA_SOURCE", "mock").lower()
 
-    # Snowflake. Connection details have NO real defaults - they must be
-    # supplied via .env (see .env.example). Empty values mean "not configured";
-    # snowflake_client only connects when DATA_SOURCE=snowflake, and it already
-    # omits an empty warehouse. Do NOT hardcode a real account / warehouse /
-    # database / schema here (it would ship an internal identifier in the repo).
-    sf_account: str = os.getenv("SNOWFLAKE_ACCOUNT", "")
-    sf_user: str = os.getenv("SNOWFLAKE_USER", "")
-    sf_authenticator: str = os.getenv("SNOWFLAKE_AUTHENTICATOR", "externalbrowser")
-    sf_warehouse: str = os.getenv("SNOWFLAKE_WAREHOUSE", "")
-    sf_database: str = os.getenv("SNOWFLAKE_DATABASE", "")
-    sf_schema: str = os.getenv("SNOWFLAKE_SCHEMA", "")
-    sf_role: str = os.getenv("SNOWFLAKE_ROLE", "")
+    # Databricks. All application tables live in a single Unity Catalog
+    # namespace whose defaults below are the known location of the migrated
+    # tables. Identity (host + credentials) is NOT configured here: it is
+    # resolved by ``databricks.sdk.core.Config`` - the service-principal
+    # OAuth env vars injected by Databricks Apps in production, or
+    # DATABRICKS_HOST / DATABRICKS_TOKEN from ``.env`` in local dev. Both
+    # paths are headless (no browser auth).
+    dbx_catalog: str = os.getenv("DATABRICKS_CATALOG", "entai_sandbox_catalog")
+    dbx_schema: str = os.getenv("DATABRICKS_SCHEMA", "data_quality_scorecards")
+    # SQL Warehouse: either the full HTTP path, or just the warehouse id
+    # (what a Databricks App receives when a sql-warehouse resource is
+    # attached). The client builds ``/sql/1.0/warehouses/<id>`` from the id.
+    dbx_http_path: str = os.getenv("DATABRICKS_SQL_HTTP_PATH", "")
+    dbx_warehouse_id: str = os.getenv("DATABRICKS_WAREHOUSE_ID", "")
 
     # Persistence (run history / telemetry / saved projects).
     # Deliberately decoupled from ``data_source``: a local run can read real
-    # data from Snowflake (DATA_SOURCE=snowflake) while still persisting app
-    # state to local files until the DQS_* tables exist in production.
-    #   local     -> JSON-lines files under ``store_dir`` (default)
-    #   snowflake -> DQS_* tables in ``sf_database``.``sf_state_schema``
-    #   off       -> no-op (nothing is persisted)
+    # data from Databricks (DATA_SOURCE=databricks) while still persisting
+    # app state to local files.
+    #   local      -> JSON-lines files under ``store_dir`` (default)
+    #   databricks -> DQS_* tables in ``dbx_catalog``.``dbx_state_schema``
+    #   off        -> no-op (nothing is persisted)
     persistence_backend: str = os.getenv("DQS_PERSISTENCE", "local").lower()
     # Empty = "<project root>/.dqs_store" (resolved in src/persistence.py).
     store_dir: str = os.getenv("DQS_STORE_DIR", "")
-    sf_state_schema: str = os.getenv("DQS_STATE_SCHEMA", "DQS_APP_STATE")
+    # Schema holding the DQS_* app-state tables. Empty = same schema as the
+    # data tables (``dbx_schema``).
+    dbx_state_schema: str = os.getenv("DQS_STATE_SCHEMA", "")
     # Step 6 shows a drop alert when a DP's score fell by at least this many
     # percentage points versus the previous persisted run.
     drop_alert_pp: float = float(os.getenv("DQS_DROP_ALERT_PP", "5"))
 
     # Airtable write-back (Step 6 "Send to Airtable"). Empty token or base
     # means "not configured": the UI hides the button and nothing is sent.
-    # In Streamlit in Snowflake the outbound call additionally requires an
-    # External Access Integration for api.airtable.com/content.airtable.com.
+    # Databricks Apps have outbound internet access, so no extra network
+    # configuration is needed there.
     airtable_token: str = os.getenv("AIRTABLE_TOKEN", "")
     airtable_base_id: str = os.getenv("AIRTABLE_BASE_ID", "")
     airtable_table: str = os.getenv("AIRTABLE_TABLE", "DQ Scorecard Results")

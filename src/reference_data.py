@@ -4,7 +4,7 @@ Reference data registry for referential-integrity DQR rules.
 Custom rules (e.g. EPT E7) need to look up a *master* / reference dataset
 to validate that a foreign key resolves. This module is the single point of
 truth for those lookups so individual rule check functions stay decoupled
-from where the data lives (mock generator vs. Snowflake).
+from where the data lives (mock generator vs. Databricks).
 
 Registered datasets are exposed by **table name** (e.g.
 ``"VWS_GP_STANDARD_SHARE"``) and returned as a pandas DataFrame, or
@@ -16,7 +16,7 @@ passing, the dispatcher records the reason and Step 6 surfaces a
 
 Eager loading: :func:`prefetch_reference_datasets` pre-loads each named
 dataset into the Streamlit session-state cache. Step 2 calls it after
-building the data products so the Snowflake round-trip happens once,
+building the data products so the Databricks round-trip happens once,
 alongside the system table fetches, instead of lazily during Step 6 or on
 every dashboard re-render. :func:`get_reference_dataset` always reads from
 that cache first, falling back to the loader only when the cache is empty
@@ -50,52 +50,28 @@ class _CacheEntry:
 # =============================================================================
 
 def _resolve_reference_location() -> tuple:
-    """Resolve ``(database, schema)`` for the reference dataset that lives
-    alongside the active domain's primary tables.
+    """Resolve ``(catalog, schema)`` for the reference datasets.
 
-    Mirrors ``src.snowflake_client._resolve_location`` so this loader and
-    the table fetcher agree on where to read from. Domains with explicit
-    ``snowflake_database`` / ``snowflake_schema`` (e.g. Quality with
-    ``INGESTION_DB.GP_QUALITY``) win over this module's ``SETTINGS`` -
-    Cost Estimate leaves them empty and falls back to ``SETTINGS`` so
-    legacy callers / tests keep their behaviour.
+    Mirrors ``src.databricks_client._resolve_location`` so this loader and
+    the table fetcher agree on where to read from: every migrated table -
+    reference datasets included - lives in the single Unity Catalog
+    namespace configured in ``SETTINGS`` (default
+    ``entai_sandbox_catalog.data_quality_scorecards``).
     """
-    domain_db = ""
-    domain_schema = ""
-    try:
-        from config.domains import get_active_domain
-        domain = get_active_domain()
-        domain_db = domain.snowflake_database or ""
-        domain_schema = domain.snowflake_schema or ""
-    except Exception:
-        # Domain resolution can fail outside a Streamlit run or if config
-        # is mid-refactor; we log so the SETTINGS fallback isn't silent.
-        logger.warning(
-            "Failed to resolve active domain for reference data; "
-            "falling back to SETTINGS",
-            exc_info=True,
-        )
-    return (
-        domain_db or SETTINGS.sf_database,
-        domain_schema or SETTINGS.sf_schema,
-    )
+    return SETTINGS.dbx_catalog, SETTINGS.dbx_schema
 
 
 def _load_vws_gp_standard_share() -> Optional[pd.DataFrame]:
     """Resolve the ``VWS_GP_STANDARD_SHARE`` reference dataset for the active
-    data source. Lives in the same warehouse / database / schema as the
-    EPT primary table when running against Snowflake.
+    data source.
 
-    Snowflake mode projects ``PROJECT_ID`` (used by E7 for referential
+    Databricks mode projects ``PROJECT_ID`` (used by E7 for referential
     integrity), ``COUNTRY`` (used by E2 to validate project location
     after the EPT → Planview join), ``E05_DEPARTMENT`` (brownfield /
     greenfield classification consumed by E6's segmented-IQR mode) and
     ``BUSINESS`` (business-line classification, same consumer), and uses
     ``DISTINCT`` to keep the result small. The query goes through
-    ``SnowflakeClient.fetch_query`` (rows → pandas, no pyarrow) so we
-    sidestep the ``ArrowInvalid: Schema at index N was different`` error
-    that ``fetch_pandas_all`` raises on this view when nullable columns
-    are inferred as different types across result chunks.
+    ``DatabricksClient.fetch_query`` (rows → pandas).
 
     May raise the underlying connector error, callers
     (:func:`prefetch_reference_datasets`) capture and surface it as a
@@ -103,12 +79,12 @@ def _load_vws_gp_standard_share() -> Optional[pd.DataFrame]:
     """
     if SETTINGS.data_source == "mock":
         return _mock_vws_gp_standard_share()
-    # Snowflake mode - exception propagates to the caller.
-    from src.snowflake_client import get_shared_client
-    database, schema = _resolve_reference_location()
-    qualified = f"{database}.{schema}.VWS_GP_STANDARD_SHARE"
+    # Databricks mode - exception propagates to the caller.
+    from src.databricks_client import get_shared_client
+    catalog, schema = _resolve_reference_location()
+    qualified = f"{catalog}.{schema}.VWS_GP_STANDARD_SHARE"
     sql = (
-        "SELECT DISTINCT PROJECT_ID, COUNTRY, E05_DEPARTMENT, BUSINESS "  # nosec B608 - static column list; only the internal db/schema is interpolated, no user input
+        "SELECT DISTINCT PROJECT_ID, COUNTRY, E05_DEPARTMENT, BUSINESS "  # nosec B608 - static column list; only the internal catalog/schema is interpolated, no user input
         f"FROM {qualified}"
     )
     return get_shared_client().fetch_query(sql)
@@ -119,10 +95,11 @@ def _load_acce_coa_master() -> Optional[pd.DataFrame]:
     data source. Used by A1 to map the leading 3-digit COA group derived
     from ``COMPLETE_WBC`` to ``ISO_COR`` and ``SAB``.
 
-    Lives in ``INGESTION_DB.GP_ADF_CSE`` in production (a different
-    database than ``VWS_GP_STANDARD_SHARE``), the qualified name is
-    fully spelled out so the loader doesn't depend on Snowflake search
-    paths. Snowflake mode projects only the three columns A1 needs.
+    In the Snowflake era this table lived in a different database than
+    the rest (``INGESTION_DB.GP_ADF_CSE``); the Databricks migration
+    consolidated every table into the single configured namespace, so it
+    now resolves like any other reference. Projects only the three
+    columns A1 needs.
 
     May raise the underlying connector error, callers
     (:func:`prefetch_reference_datasets`) capture and surface it as a
@@ -130,14 +107,15 @@ def _load_acce_coa_master() -> Optional[pd.DataFrame]:
     """
     if SETTINGS.data_source == "mock":
         return _mock_acce_coa_master()
-    from src.snowflake_client import get_shared_client
-    qualified = "INGESTION_DB.GP_ADF_CSE.ACCE_COA_MASTER"
-    sql = f"SELECT ICARUS_COA, ISO_COR, SAB FROM {qualified}"  # nosec B608 - static column list + hardcoded internal table name, no user input
+    from src.databricks_client import get_shared_client
+    catalog, schema = _resolve_reference_location()
+    qualified = f"{catalog}.{schema}.ACCE_COA_MASTER"
+    sql = f"SELECT ICARUS_COA, ISO_COR, SAB FROM {qualified}"  # nosec B608 - static column list + internal catalog/schema, no user input
     return get_shared_client().fetch_query(sql)
 
 
 # Logical name -> loader callable. The logical name is the actual table
-# name in Snowflake so the same identifier flows from the catalog metadata
+# name in the warehouse so the same identifier flows from the catalog metadata
 # to the rule card and to the SQL fetcher.
 _REGISTRY: Dict[str, Callable[[], Optional[pd.DataFrame]]] = {
     "VWS_GP_STANDARD_SHARE": _load_vws_gp_standard_share,
@@ -234,7 +212,7 @@ def prefetch_reference_datasets(
                 df=df,
                 error=None if df is not None else f"Loader for '{name}' returned None",
             )
-        except Exception as e:  # broad: Snowflake / network errors of any kind
+        except Exception as e:  # broad: Databricks / network errors of any kind
             cache[name] = _CacheEntry(df=None, error=f"{type(e).__name__}: {e}")
     return {n: cache[n].df for n in names if n in cache}
 

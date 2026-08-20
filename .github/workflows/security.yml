@@ -10,7 +10,7 @@
 # Relationship to the ExxonMobil enterprise tools:
 #   - SAST  -> Erebor          (authoritative; runs in the org pipeline)
 #   - SCA   -> JFrog Xray / Nexus
-#   - DAST  -> Heimdall        (run against the deployed Snowflake endpoint)
+#   - DAST  -> Heimdall        (run against the deployed Databricks App URL)
 # This workflow does NOT replace those — it is an in-repo early-warning layer.
 # The repo still needs onboarding to the org's Erebor/JFrog pipeline (owned by
 # the security/platform team).
@@ -62,17 +62,15 @@ jobs:
         run: pip install "pip-audit>=2.7,<3.0"
       - name: Audit requirements.lock (report-only)
         continue-on-error: true
-        # NOTE: requirements.lock is the LOCAL/CI (PyPI) dependency set and is
-        # scanned here as a PROXY — it shares the core libs (urllib3,
-        # cryptography, ...) with production. The AUTHORITATIVE production set
-        # is environment.yml (Snowflake Anaconda channel), which PyPI-based
-        # tools cannot resolve; it must be scanned via JFrog Xray in the org
-        # pipeline.
+        # NOTE: requirements.lock pins the PyPI dependency set used by local
+        # dev and CI. Production (Databricks Apps) installs requirements.txt
+        # from the same PyPI ranges, so this scan covers the production libs
+        # too; JFrog Xray in the org pipeline remains the authoritative scan.
         run: pip-audit -r requirements.lock --desc
 
   # ---------------------------------------------------------------------------
   # Secret detection — catch credentials/tokens committed to the repo
-  # (critical: this repo is the Streamlit-in-Snowflake deploy source).
+  # (critical: this repo is the Databricks Apps deploy source).
   # ---------------------------------------------------------------------------
   secrets:
     name: Secret scan (gitleaks)

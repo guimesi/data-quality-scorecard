@@ -1,0 +1,36 @@
+# Databricks Apps runtime configuration.
+#
+# The platform builds the app container from this repo (installing
+# requirements.txt) and runs the command below. Identity is the app's
+# service principal: Databricks Apps injects DATABRICKS_HOST +
+# DATABRICKS_CLIENT_ID/SECRET into the environment and
+# databricks.sdk.core.Config picks them up - no browser auth, no
+# credentials in this file.
+#
+# REQUIRED app resource: attach a SQL Warehouse to the app (resource key
+# "sql-warehouse" below, permission CAN_USE). The valueFrom entry maps the
+# attached warehouse's id into DATABRICKS_WAREHOUSE_ID, which the data
+# layer turns into /sql/1.0/warehouses/<id>.
+command: ["streamlit", "run", "app.py"]
+
+env:
+  - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+    value: "false"
+  # Read real data from Unity Catalog (mock mode is for local demos).
+  - name: DATA_SOURCE
+    value: "databricks"
+  # Unity Catalog namespace holding the migrated tables. These match the
+  # in-code defaults; override here if the tables move.
+  - name: DATABRICKS_CATALOG
+    value: "entai_sandbox_catalog"
+  - name: DATABRICKS_SCHEMA
+    value: "data_quality_scorecards"
+  # SQL Warehouse attached as an app resource (see header note).
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: "sql-warehouse"
+  # Persist run history / telemetry / saved projects to the DQS_* tables
+  # (create them once with deploy/databricks/02_persistence_tables.sql).
+  # Switch to "off" if the tables don't exist yet - the app's local-files
+  # backend does not survive app restarts in the container.
+  - name: DQS_PERSISTENCE
+    value: "databricks"

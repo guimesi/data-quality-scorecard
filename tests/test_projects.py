@@ -377,9 +377,9 @@ def test_open_project_build_failure_keeps_user_on_step(monkeypatch):
     fake = _loader_env(monkeypatch, session)
 
     def _boom(systems, **kw):
-        raise RuntimeError("snowflake offline")
+        raise RuntimeError("databricks offline")
     monkeypatch.setattr(dpb, "build_multiple", _boom)
     smode._open_project(record)
     fake.error.assert_called_once()
-    assert "snowflake offline" in fake.error.call_args[0][0]
+    assert "databricks offline" in fake.error.call_args[0][0]
     smode.goto.assert_not_called()

@@ -233,7 +233,7 @@ def run_one_click(
             planview_ids=list(planview_filter) if planview_filter else None,
             filter_column=filter_column,
         )
-    except Exception as e:  # broad: surface build/Snowflake errors to the UI
+    except Exception as e:  # broad: surface build/Databricks errors to the UI
         logger.warning("One-click data-product build failed", exc_info=True)
         raise OneClickError(f"Failed to build data products: {e}") from e
     for dp in dps.values():

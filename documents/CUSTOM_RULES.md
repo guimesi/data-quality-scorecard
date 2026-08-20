@@ -152,7 +152,7 @@ There are three failure shapes:
 |---------|--------------------------|-------------------|
 | Row fails the rule | Returns `False` for that row | Counted in pass-rate; affects custom row score |
 | **Required column missing** from `df` | Returns an all-`False` Series (the dataset is structurally incomplete) | Pass-rate = 0%; rule still appears in the dashboard |
-| **Reference dataset missing** (Snowflake error, missing table, …) | Raises `CustomRuleNotEvaluated` | Recorded in `not_evaluated_custom_rules`; rule omitted from the Boolean results; Step 6 renders a yellow *Not evaluated* warning |
+| **Reference dataset missing** (Databricks error, missing table, …) | Raises `CustomRuleNotEvaluated` | Recorded in `not_evaluated_custom_rules`; rule omitted from the Boolean results; Step 6 renders a yellow *Not evaluated* warning |
 
 The third shape is critical: a rule **must never silently pass** when its
 inputs are missing, that would hide the gap in the score.
@@ -252,7 +252,7 @@ it via [src/reference_data.py](../src/reference_data.py):
   `required_reference_datasets_for_systems(selected_systems)`. The
   fetched DataFrames (and any loader error strings) are cached in
   `st.session_state["_reference_datasets"]`.
-- The Snowflake round-trip happens **once**, alongside the system
+- The Databricks round-trip happens **once**, alongside the system
   table fetches, not lazily during Step 6. Subsequent re-renders
   (including the implicit re-render after a Step 6 *Restart*) hit the
   cache instead of reconnecting.
@@ -1779,7 +1779,7 @@ Examples:
 | NULL / blank | - | (rule fails, no derivation) |
 
 The lookup tolerates either a string `COA` column or a numeric one
-(Snowflake may cast the field as `int64`); both sides of the join
+(the warehouse may deliver the field as `int64`); both sides of the join
 are stringified + stripped + sliced to the first three characters
 before `.map()`.
 
@@ -2790,8 +2790,9 @@ distort throughput metrics.
 |-------|-----------------|
 | Expected Ship Date | `EXPECTED_SHIP_DATE` |
 
-**Implementation notes.** The column is stored as `TIMESTAMP_NTZ`, so
-Snowflake enforces well-formed datetime values at ingestion. In
+**Implementation notes.** The column is a warehouse timestamp type
+(`TIMESTAMP_NTZ` in the original Snowflake spec), so
+well-formed datetime values are enforced at ingestion. In
 production the dominant failure mode is NULL; the round-trip parser is
 preserved for defensive coverage of values arriving via VARIANT / string
 paths.
@@ -2842,7 +2843,8 @@ logistics and contractual fallout.
 | Expected Ship Date | `EXPECTED_SHIP_DATE` |
 | PO Required Ship Date | `PO_REQUIRED_SHIP_DATE` |
 
-**Implementation notes.** Both columns are `TIMESTAMP_NTZ` in Snowflake
+**Implementation notes.** Both columns are timestamp-typed in the
+warehouse (`TIMESTAMP_NTZ` in the original Snowflake spec)
 so the comparison maps directly to `pandas` after
 `pd.to_datetime(..., errors="coerce")` is applied to each side -
 unparseable strings collapse to `NaT` and inherit the NULL-PASS branch.
@@ -2868,9 +2870,10 @@ A row passes when `INSPECTION_TYPE` matches one of the allowed values
 | `Expediting` |
 | `Supplemental Inspection` |
 
-The match is **case-sensitive** per the Snowflake `IN` operator -
+The match is **case-sensitive** per the original Snowflake spec's `IN`
+operator -
 `"source inspection"` is FAIL even though it represents the same
-logical category. NULL values FAIL (Snowflake's `IN` does not match
+logical category. NULL values FAIL (SQL `IN` does not match
 NULLs). Schema-level missing column makes every row fail (same
 convention as the other custom rules).
 
@@ -2924,9 +2927,10 @@ classification levels **verbatim**:
 | `III - Low Critical` | Low priority classification |
 | `IV - Non Critical` | Non-critical classification |
 
-The match is **case-sensitive** per the Snowflake `IN` operator -
+The match is **case-sensitive** per the original Snowflake spec's `IN`
+operator -
 `"i - high critical"` and `"I - HIGH CRITICAL"` both FAIL. NULL values
-FAIL (Snowflake's `IN` does not match NULLs). Empty strings likewise
+FAIL (SQL `IN` does not match NULLs). Empty strings likewise
 FAIL. Schema-level missing column makes every row fail (same
 convention as the other custom rules).
 
@@ -3030,10 +3034,11 @@ statuses **verbatim**:
 | 10 | `Inspection Rejected` |
 | 11 | `OAP Pending` |
 
-The match is **case-sensitive** per the Snowflake `IN` operator -
+The match is **case-sensitive** per the original Snowflake spec's `IN`
+operator -
 `"approved"` and `"APPROVED"` both FAIL. Leading / trailing whitespace
 also FAIL (`" Approved "` is not in the allowed list because `isin`
-performs exact equality). NULL values FAIL (Snowflake's `IN` does not
+performs exact equality). NULL values FAIL (SQL `IN` does not
 match NULLs). Schema-level missing column makes every row fail.
 
 **Why it matters.** `STATUS` drives workflow logic, automated

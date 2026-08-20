@@ -3,7 +3,7 @@
 Data Product Builder.
 
 Takes a system code (ADR, ACCE, EPT), fetches all its tables from either
-mock data or Snowflake, and joins them into a single denormalized DataFrame
+mock data or Databricks, and joins them into a single denormalized DataFrame
 (the "Data Product") using the primary table + left joins on the join_key
 declared in each TableDef.
 
@@ -39,7 +39,7 @@ def _default_fetcher(
     ``row_limit`` is a per-table row cap (``None`` = no cap).
 
     When ``planview_ids`` is non-empty and ``system`` is supplied, the
-    Snowflake branch **pushes the filter down to SQL**: the primary
+    Databricks branch **pushes the filter down to SQL**: the primary
     table is fetched with ``WHERE filter_column IN (...)`` and each
     child table is fetched with ``WHERE join_key IN (SELECT join_key
     FROM primary WHERE ...)``. This avoids a real-world bug where
@@ -54,9 +54,9 @@ def _default_fetcher(
             return fetch_mock_table
         return lambda name: fetch_mock_table(name).head(row_limit)
 
-    # Snowflake branch - shared client so reference-dataset prefetch
-    # reuses the same connection (single auth round-trip per Step 2).
-    from src.snowflake_client import _resolve_location, get_shared_client
+    # Databricks branch - shared client so reference-dataset prefetch
+    # reuses the same connection (single connection per Step 2).
+    from src.databricks_client import _resolve_location, get_shared_client
     client = get_shared_client()
 
     canon_values: List[str] = []
@@ -137,7 +137,7 @@ def _prefix_columns(df: pd.DataFrame, table: TableDef, exclude: List[str]) -> pd
 def _canonicalize_id(value: object) -> Optional[str]:
     """Normalize a single id value for filter comparison.
 
-    Real-world ``PLANVIEW_ID``s in Snowflake are stored as numbers (e.g.
+    Real-world ``PLANVIEW_ID``s in the warehouse are stored as numbers (e.g.
     ``1101168``). When pandas pulls them back with any NULL in the column,
     the dtype is promoted to ``float64`` and a naive ``astype("string")``
     yields ``"1101168.0"`` - which never matches the user's typed
@@ -283,7 +283,7 @@ def build_multiple(
     Each system gets its own fetcher because the SQL pushdown for the
     sidebar Project filter needs the active system's primary-table name
     and per-child ``join_key`` (see :func:`_default_fetcher`). The
-    underlying Snowflake connection is still shared - ``get_shared_client``
+    underlying Databricks connection is still shared - ``get_shared_client``
     is process-wide - so this keeps the single-auth-round-trip behavior.
     """
     return {

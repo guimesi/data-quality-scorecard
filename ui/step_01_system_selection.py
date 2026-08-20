@@ -65,22 +65,17 @@ def _table_row(name: str, description: str, is_primary: bool) -> None:
 
 
 def _connection_banner() -> None:
-    """Show whether we're in mock or live (Snowflake) mode, with a
+    """Show whether we're in mock or live (Databricks) mode, with a
     consistent compact look."""
     if SETTINGS.is_mock:
         st.info(
             "🧪 Running in **mock** mode (synthetic data). "
-            "Edit `.env` to connect to Snowflake."
+            "Set `DATA_SOURCE=databricks` to connect to Databricks."
         )
     else:
-        # Domain-level override wins (e.g. Quality reads from
-        # INGESTION_DB.GP_QUALITY regardless of .env); otherwise the
-        # banner reflects the global Snowflake credentials.
-        domain = get_active_domain()
-        database = domain.snowflake_database or SETTINGS.sf_database
-        schema = domain.snowflake_schema or SETTINGS.sf_schema
         st.success(
-            f"🔌 Connected to **{database}.{schema}** on Snowflake."
+            f"🔌 Connected to **{SETTINGS.dbx_catalog}.{SETTINGS.dbx_schema}** "
+            "on Databricks."
         )
 
 

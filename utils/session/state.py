@@ -106,11 +106,11 @@ def _clear_workflow_state_for_domain_switch() -> None:
     UI-side preferences (``sample_mode``, ``planview_filter``) intact -
     those are general dataset-size controls, not domain artefacts.
     """
-    # Imported lazily to avoid pulling pandas + Snowflake deps when this
+    # Imported lazily to avoid pulling pandas + Databricks deps when this
     # module is imported by lightweight tests that mock streamlit.
     try:
+        from src.databricks_client import close_shared_client
         from src.reference_data import clear_reference_cache
-        from src.snowflake_client import close_shared_client
 
         clear_reference_cache()
         close_shared_client()

@@ -6,7 +6,7 @@ per-domain/system adoption, per-user activity, and a unified audit
 trail. Reached from the entry screen; not part of the scoring flow.
 
 Authorization is deliberately out of scope here - who can open the app
-at all is governed by Snowflake roles/grants (see deploy/). This page
+at all is governed by Databricks Apps permissions (see deploy/). This page
 measures and audits what authorized users did.
 """
 from __future__ import annotations
@@ -93,7 +93,7 @@ def render() -> None:
         "📊 Adoption & audit",
         "Usage recorded by the app through the persistence layer: who "
         "accessed it, what was generated and exported, and a full audit "
-        "trail. Access to the app itself is governed by Snowflake roles; "
+        "trail. Access to the app itself is governed by Databricks Apps permissions; "
         "this page only measures what authorized users did.",
     )
     _render_overview_tiles()

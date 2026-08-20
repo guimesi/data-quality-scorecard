@@ -53,7 +53,7 @@ flowchart LR
 
     %% ==================== CONFIG LAYER ====================
     subgraph Config["Configuration (config/)"]
-        SET["settings.py<br/>(.env loader — local only;<br/>defaults inside SiS)"]
+        SET["settings.py<br/>(.env loader — local only;<br/>env vars via app.yaml in<br/>Databricks Apps)"]
         DOM["domains.py<br/>(DomainDef registry:<br/>Cost Estimate + Quality + ...)"]
         SYS["systems.py<br/>(SystemDef / TableDef +<br/>ADR/ACCE/EPT Cost Estimate)"]
         CAT["dqr_catalog.py<br/>(10 dimensions)"]
@@ -64,8 +64,8 @@ flowchart LR
     %% ==================== DATA LAYER ====================
     subgraph Data["Data Sources"]
         MOCK["mock_data.py<br/>(synthetic generator)"]
-        SF["snowflake_client.py<br/>(Snowpark session in SiS /<br/>externalbrowser connector locally)"]
-        SFDB[("Snowflake DW")]
+        SF["databricks_client.py<br/>(SQL Warehouse via<br/>databricks-sql-connector;<br/>headless auth)"]
+        SFDB[("Databricks<br/>Unity Catalog")]
     end
 
     %% ==================== EXPORTS ====================
@@ -182,7 +182,7 @@ flowchart LR
 | **Presentation** | [app.py](../app.py), [ui/](../ui/), [utils/](../utils/) | Render the Streamlit workflow: the entry **mode picker** ([step_mode_selection.py](../ui/step_mode_selection.py)) routing to **⚡ One-click** ([step_one_click.py](../ui/step_one_click.py)) or the **🛠️ Step-by-step** steps (Step 0 domain picker + Steps 1-6 + sub-steps 4.1/4.2 + Step 7 ML Lab); manage session state and `app_mode`-aware navigation |
 | **Domain / Core** | [src/](../src/) | Pure Python logic for profiling, Standard + Custom rule evaluation, reference-data prefetch, joining, scoring, and the **One-click automation service** ([one_click.py](../src/one_click.py)), no Streamlit imports |
 | **Configuration** | [config/](../config/) | Static system catalog, Standard DQ-dimension catalog, Custom DQR per-DP catalog (partitioned by system in [config/custom_dqr/](../config/custom_dqr/)), source identifiers, environment-driven settings, domain registry |
-| **Data** | [src/mock_data.py](../src/mock_data.py), [src/snowflake_client.py](../src/snowflake_client.py) | Pluggable data fetchers (system tables + reference datasets); selected at runtime by `Settings.data_source` |
+| **Data** | [src/mock_data.py](../src/mock_data.py), [src/databricks_client.py](../src/databricks_client.py) | Pluggable data fetchers (system tables + reference datasets); selected at runtime by `Settings.data_source` |
 | **Output** | [ui/step_06_dashboard.py](../ui/step_06_dashboard.py) | CSV (rows + row score + status + one column per Standard / Custom rule carrying the row's per-rule score, weight embedded in the column header + the reference-dataset columns for every referential-integrity Custom rule, left-joined onto the rows and suffixed with the origin dataset) and JSON (config + scorecard summary) downloads, plus a self-contained **executive HTML report** (every dashboard view, HTML/CSS bars + inline-SVG trend, print stylesheet → Ctrl+P for PDF). The same per-rule score and reference columns drive the "Worst rows" Step 6 tab and the click-to-drill-down tables (clicking a By-CDE / By-Dimension bar or selecting a Rules / Custom Rules row surfaces the failing rows, worst first, capped at 200). |
 | **🧪 ML Lab (beta)** | [src/ml_lab.py](../src/ml_lab.py), [ui/step_07_ml_lab.py](../ui/step_07_ml_lab.py) (orchestrator) + [ui/step_07/](../ui/step_07/) (one module per tab) | Read-only experimental analytics on top of the rules-based scorecard. Re-derives the per-row pass/fail matrix from the same evaluators the dashboard uses, then runs unsupervised + statistical views (anomalies, rule impact, clustering, weight sensitivity, cross-DP) and run-history / supervised views (snapshots, drift, risk model, DQR recommendations, row explainability). See [ML_LAB.md](ML_LAB.md). |
 
@@ -208,7 +208,7 @@ callers don't change:
 flowchart LR
     SET["Settings<br/>(DATA_SOURCE)"] -->|"selects fetcher"| FETCH{Fetcher}
     FETCH -->|"mock"| MOCK["mock_data.py<br/>(50 projects, ~300 items,<br/>injected defects)"]
-    FETCH -->|"snowflake"| SF["snowflake_client.py<br/>SELECT … LIMIT N"]
+    FETCH -->|"databricks"| SF["databricks_client.py<br/>SELECT … LIMIT N"]
 
     SYS["systems.py<br/>(SystemDef + TableDef)"] --> DPB["data_product_builder.py"]
     MOCK --> DPB

@@ -194,7 +194,7 @@ EPT_E7_REQUIRED_COLUMNS = {
 EPT_E7_REFERENCE = {
     # Lives in the same warehouse / database / schema as the EPT primary
     # table; the reference dataset registry resolves the loader for the
-    # active data source (mock vs. Snowflake).
+    # active data source (mock vs. Databricks).
     "reference_dataset": "VWS_GP_STANDARD_SHARE",
     "source_column": "PLANVIEW_ID",      # in EPT
     "reference_column": "PROJECT_ID",    # in VWS_GP_STANDARD_SHARE
@@ -625,7 +625,7 @@ def check_ept_e7(df: pd.DataFrame) -> pd.Series:
 
     Raises :class:`CustomRuleNotEvaluated` when the reference table is
     unavailable, so the rule never silently passes on missing dependencies.
-    The actual loader error (e.g. Snowflake auth / missing table) is
+    The actual loader error (e.g. Databricks auth / missing table) is
     propagated when it was captured by ``prefetch_reference_datasets``.
     """
     # Imported lazily so importing this module doesn't hard-fail when no

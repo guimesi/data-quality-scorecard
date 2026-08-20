@@ -267,8 +267,8 @@ distribution / source weights, the By-CDE and By-Dimension breakdowns
 the persisted score trend with the delta vs the previous run. A
 `@media print` stylesheet keeps it A4-friendly (one DP per page, colors
 preserved), so **Ctrl+P → Save as PDF** produces the shareable executive
-PDF without any PDF library - the pragmatic path inside Streamlit in
-Snowflake, where PDF-generation packages are unavailable.
+PDF without any PDF library - the report stays a single portable file
+with no extra dependency in the app container.
 
 ### 📊 Adoption & audit (admin page)
 
@@ -276,13 +276,13 @@ The app records adoption/audit telemetry through the same fire-and-forget
 persistence layer: one `app_open` per session, one `step_view` per step
 transition (with mode + domain), every CSV/JSON `export`, and
 `project_saved` / `project_loaded` - each stamped with the acting user
-(`CURRENT_USER()` in SiS, OS login locally). The **📊 Usage & audit**
+(the forwarded Databricks Apps viewer identity, OS login locally). The **📊 Usage & audit**
 button on the start screen opens a standalone admin page with headline
 counters (unique users, app opens, scorecard runs, exports, project
 saves/loads), a runs-per-week trend, adoption by domain/system, per-user
 activity, and the unified audit trail. **Authorization stays with
-Snowflake roles/grants** (see `deploy/`) - the app measures what
-authorized users did; it does not gate who may enter.
+Databricks app permissions and Unity Catalog grants** (see `deploy/`) -
+the app measures what authorized users did; it does not gate who may enter.
 
 ## Project structure
 
@@ -295,10 +295,10 @@ onboarding engineers).
 ```
 data_quality_app/
 ├── app.py                       # Streamlit router (current_step -> renderer)
-├── requirements.txt             # Top-level deps with version caps (LOCAL dev / CI)
+├── app.yaml                     # Databricks Apps runtime config (command + env + warehouse resource)
+├── requirements.txt             # Top-level deps with version caps (local dev / CI / Databricks Apps)
 ├── requirements.lock            # Pinned versions for reproducible LOCAL/CI installs
-├── environment.yml              # SiS production deps (Snowflake Anaconda channel)
-├── deploy/                      # SiS deployment reference SQL (role + CREATE STREAMLIT)
+├── deploy/                      # Databricks Apps deployment guide + UC grants / DQS_* DDL
 ├── pyproject.toml               # ruff + pyright config (no build metadata)
 ├── README.md
 ├── ARCHITECTURE.md              # Onboarding map of the layout & patterns
@@ -306,7 +306,7 @@ data_quality_app/
 ├── .gitignore
 ├── .github/workflows/tests.yml  # CI: ruff + pytest with coverage
 ├── config/
-│   ├── settings.py              # General settings (thresholds, mock/snowflake mode)
+│   ├── settings.py              # General settings (thresholds, mock/databricks mode)
 │   ├── domains.py               # Domain registry (Cost Estimate, Quality, ...)
 │   ├── systems.py               # SystemDef / TableDef + Cost Estimate ADR/ACCE/EPT
 │   ├── dqr_catalog.py           # 10 Standard DQR dimensions
@@ -320,14 +320,14 @@ data_quality_app/
 │       └── _sqs_catalog.py      # SQS_RULES list (Quality domain - SQ*)
 ├── src/
 │   ├── models.py                # Dataclasses (CDE, DQRAssignment, Scorecard)
-│   ├── snowflake_client.py      # Snowflake data layer (Snowpark in SiS / connector locally)
+│   ├── databricks_client.py     # Databricks SQL Warehouse data layer (headless auth)
 │   ├── mock_data.py             # Synthetic data generator (demo mode)
 │   ├── data_product_builder.py  # Joins → Data Product
 │   ├── profiler.py              # Column profiling
 │   ├── dqr_engine.py            # Standard DQR (10 dimensions) + dispatcher
 │   ├── dqr_validation.py        # Per-dimension compatibility checks (Step 4.1 / Step 6)
 │   ├── reference_data.py        # Reference dataset registry (e.g. project_master)
-│   ├── persistence.py           # Run history / telemetry / saved projects (local ⇄ Snowflake)
+│   ├── persistence.py           # Run history / telemetry / saved projects (local ⇄ Databricks)
 │   ├── run_history.py           # Auto-snapshot service: fingerprints, dedup, drop detection
 │   ├── projects.py              # Saved projects: versioned config capture + audit changelog
 │   ├── telemetry.py             # Adoption/audit metrics for the 📊 Adoption admin page
@@ -405,7 +405,7 @@ data_quality_app/
     ├── test_domains.py                    # registry + active-domain helpers
     ├── test_helpers.py
     ├── test_session_state.py
-    ├── test_snowflake_client.py
+    ├── test_databricks_client.py
     ├── test_coverage_gaps.py
     ├── test_misc_gaps.py
     ├── test_ui_flow.py                    # End-to-end via streamlit.testing.AppTest
@@ -444,7 +444,7 @@ pip install -r requirements.lock
 
 # 3. Copy the environment file
 cp .env.example .env
-# Edit .env with your Snowflake credentials (or leave DATA_SOURCE=mock)
+# Edit .env with your Databricks host + token (or leave DATA_SOURCE=mock)
 
 # 4. (Optional) Wire pre-commit hooks so ``git commit`` runs ruff first
 pip install pre-commit
@@ -467,30 +467,36 @@ pip freeze > requirements.lock
 streamlit run app.py
 ```
 
-Runs on your machine against mock data by default (or Snowflake via
-`externalbrowser` SSO when `DATA_SOURCE=snowflake`). This is the path used for
-local demos.
+Runs on your machine against mock data by default (or against Databricks
+with `DATABRICKS_HOST` + `DATABRICKS_TOKEN` in `.env` when
+`DATA_SOURCE=databricks`). This is the path used for local demos.
 
-### Production: Streamlit in Snowflake (SiS)
+### Production: Databricks Apps
 
-In production the app is deployed as a **Streamlit in Snowflake** app from this
-GitHub repository (Projects → Streamlit in the Snowflake account). Differences
-from local execution:
+In production the app is deployed as a **Databricks App** (a serverless
+container running Streamlit) from this GitHub repository. Differences from
+local execution:
 
-- The app obtains its Snowflake handle from the **active Snowpark session**
-  (`get_active_session()`) — there is no `.env`, no `externalbrowser`, and no
-  `snowflake.connector`. The data layer (`src/snowflake_client.py`) selects this
-  backend automatically inside Snowflake and falls back to the local connector
-  otherwise.
-- Python dependencies are resolved from the **Snowflake Anaconda channel** via
-  [`environment.yml`](environment.yml) — **not** from `requirements*.txt`
-  (which remain local-dev / CI only).
-- Authentication is the viewer's Snowflake login; data access is the app's
-  Snowflake role — run it under a dedicated **least-privilege, read-only** role.
+- The runtime is configured by [`app.yaml`](app.yaml) at the repo root
+  (start command, env vars, and the SQL Warehouse attached as the
+  `sql-warehouse` app resource → `DATABRICKS_WAREHOUSE_ID`). There is no
+  `.env` in production.
+- Authentication is **headless**: the platform injects the app **service
+  principal's** OAuth credentials (plus `DATABRICKS_HOST`) into the
+  container and `databricks.sdk.core.Config` picks them up. There is no
+  browser-based auth path anywhere. The data layer is
+  `src/databricks_client.py`, which runs queries on a SQL Warehouse
+  against Unity Catalog.
+- Python dependencies come from the same [`requirements.txt`](requirements.txt)
+  used for local dev and CI — Databricks Apps installs it into the container.
+- App viewers authenticate with their own Databricks identity (governed by
+  the app's *Can use* permission); data access is the service principal's
+  **least-privilege** Unity Catalog grants.
 
-Reference deployment scripts (GitHub Git integration + least-privilege role +
-`CREATE STREAMLIT`) live in [`deploy/`](deploy/) — see
-[`deploy/README.md`](deploy/README.md).
+The step-by-step deployment guide plus the reference SQL
+(`deploy/databricks/01_grants.sql` for the UC grants,
+`deploy/databricks/02_persistence_tables.sql` for the DQS_* app-state
+tables) lives in [`deploy/README.md`](deploy/README.md).
 
 ## Operating modes
 
@@ -498,23 +504,29 @@ The `DATA_SOURCE` variable controls the data source:
 
 - `DATA_SOURCE=mock` - generates synthetic in-memory data with deliberately
   injected quality problems (ideal for demo and development).
-- `DATA_SOURCE=snowflake` - reads from Snowflake. **Inside Streamlit in
-  Snowflake** the app uses the active Snowpark session (`get_active_session()`);
-  **for local development** it connects via `snowflake.connector` with
-  `externalbrowser` authentication. The data layer picks the backend
-  automatically. (Locally, `DATA_SOURCE` is read from `.env`; in SiS it defaults
-  to its built-in value since there is no `.env`.)
+- `DATA_SOURCE=databricks` - reads the real tables from a Databricks SQL
+  Warehouse. All tables live in one Unity Catalog namespace,
+  `DATABRICKS_CATALOG`.`DATABRICKS_SCHEMA` (default
+  `entai_sandbox_catalog.data_quality_scorecards`); the warehouse comes from
+  `DATABRICKS_WAREHOUSE_ID` (or the full `DATABRICKS_SQL_HTTP_PATH`).
+  Authentication is headless via `databricks.sdk.core.Config`: **inside
+  Databricks Apps** the platform injects the service principal's OAuth env
+  vars; **for local development** set `DATABRICKS_HOST` +
+  `DATABRICKS_TOKEN` in `.env` (see [`.env.example`](.env.example)). There
+  is no browser-based auth. (Locally, `DATA_SOURCE` is read from `.env`;
+  in Databricks Apps it is set by [`app.yaml`](app.yaml).)
 
 Separately, `DQS_PERSISTENCE` controls where the app **persists its own
 state** (run history, adoption/audit telemetry, saved projects - see
 `src/persistence.py`): `local` (default - JSON-lines files under
-`.dqs_store/`, git-ignored), `snowflake` (append-only `DQS_*` tables,
-created via [`deploy/03_persistence_tables.sql`](deploy/03_persistence_tables.sql)),
+`.dqs_store/`, git-ignored), `databricks` (append-only `DQS_*` tables,
+created via [`deploy/databricks/02_persistence_tables.sql`](deploy/databricks/02_persistence_tables.sql);
+schema via `DQS_STATE_SCHEMA`, defaulting to the data schema),
 or `off`. It is deliberately independent of `DATA_SOURCE`, so a local run
-can read real Snowflake data while still persisting state to local files.
-Every write stamps the acting user (`CURRENT_USER()` inside SiS, the OS
-login locally) and is **fire-and-forget**: a storage failure is logged and
-swallowed, never breaking the dashboard.
+can read real Databricks data while still persisting state to local files.
+Every write stamps the acting user (the viewer identity forwarded by
+Databricks Apps, the OS login locally) and is **fire-and-forget**: a
+storage failure is logged and swallowed, never breaking the dashboard.
 
 ## Multi-domain architecture
 
@@ -553,7 +565,7 @@ domain. A *domain* bundles:
    keyed by system code (empty lists are fine if you don't have rules
    yet - the UI shows a clear empty-state callout in Step 4.2).
 3. **Add mock fixtures** in `src/mock_data.py` for each new table the
-   domain introduces. Register them in `_MOCK_REGISTRY`. The Snowflake
+   domain introduces. Register them in `_MOCK_REGISTRY`. The Databricks
    path doesn't need any code change - the existing
    `_default_fetcher` already routes `SystemDef.tables[*].name` through
    the shared client.
@@ -602,10 +614,11 @@ Estimate code path still asserts on the exact same SystemDef objects.
 
 `config.domains._build_quality_domain()` defines a single system
 (`SQS`) backed by the curated inspection table
-`CT_SQS_AT_INSPECTION`. In Snowflake mode the table is read from
-`INGESTION_DB.GP_QUALITY` - set `SNOWFLAKE_DATABASE=INGESTION_DB` and
-`SNOWFLAKE_SCHEMA=GP_QUALITY` in `.env` before running the workflow
-against Quality. A synthetic generator in `src.mock_data` mirrors the
+`CT_SQS_AT_INSPECTION`. In Databricks mode the table is read from the
+same single Unity Catalog namespace as every other application table
+(`DATABRICKS_CATALOG`.`DATABRICKS_SCHEMA` - see
+`config.domains.get_active_data_location`), so no per-domain override
+is needed. A synthetic generator in `src.mock_data` mirrors the
 inspection-table shape for demo mode. The Quality team is finalizing
 the broader catalog; the domain seeds it with `SQ4` (Validity on
 `EXPECTED_SHIP_DATE`) and grows from there.
@@ -708,14 +721,14 @@ out of the box. Full per-rule documentation lives in
 | SQS | SQ10 | Status / Expected Ship Date sequencing (Completed → ship date not future) | Business Rule | No |
 
 E2 / E7 / A2 / AC2 depend on the `VWS_GP_STANDARD_SHARE` reference
-table (loaded from the same warehouse / database / schema as the
-primary table in Snowflake mode, or from the deterministic project
+table (loaded from the same Unity Catalog namespace as the
+primary table in Databricks mode, or from the deterministic project
 pool in mock mode); E6, A7, A8, AC7, and AC8 optionally depend on
 the same table when their `segment_by_project_type` toggle is on
 (lookup `E05_DEPARTMENT` + `BUSINESS` to derive the project archetype
 the IQR is computed within); A1, A3, AC1, and AC3 depend on
 `ACCE_COA_MASTER`
-(loaded from `INGESTION_DB.GP_ADF_CSE` in Snowflake mode, or from a
+(loaded from the same configured namespace in Databricks mode, or from a
 fixed COA-group pool in mock mode). A1 / AC1 validate the COR/SAB
 resolution by joining a 3-character ICARUS_COA group against the
 master - ADR derives the group via `SPLIT_PART(COMPLETE_WBC, '.', 1)`,
@@ -727,7 +740,7 @@ estimate-basis date (present **and** in the fiscal quarter-year format)
 / gate via the Planview join. The reference
 tables are **eager-loaded in Step 2** alongside the system tables and
 cached in session state, so Step 6 (and the Restart button) never
-re-open a Snowflake connection. The rules raise
+re-open a Databricks connection. The rules raise
 `CustomRuleNotEvaluated` with the underlying loader error when their
 reference table is unavailable.
 
@@ -770,8 +783,8 @@ pytest --cov=. --cov-report=term-missing
   `test_data_product_builder.py`, `test_misc_gaps.py`), pure-Python tests
   for profiling, Standard / Custom DQR rules, validation, scoring, and
   helpers.
-- **Snowflake client** (`test_snowflake_client.py`), the `snowflake.connector`
-  module is mocked, so tests run without network access or credentials.
+- **Databricks client** (`test_databricks_client.py`), the `databricks.sql`
+  connector module is mocked, so tests run without network access or credentials.
 - **Source-selection / Custom UI** (`test_dqr_sources_config.py`,
   `test_step_04_source_selection_ui.py`, `test_step_04_2_custom_ui.py`) -
   Step 4 source picker, Custom rule cards, per-rule options, and the live
@@ -793,7 +806,7 @@ pytest --cov=. --cov-report=term-missing
   heuristics, and the row-explainability waterfall summing exactly to
   `100 − row_score`.
 
-Tests use the `DATA_SOURCE=mock` path by default, no Snowflake credentials
+Tests use the `DATA_SOURCE=mock` path by default, no Databricks credentials
 are required.
 
 ## Documentation index

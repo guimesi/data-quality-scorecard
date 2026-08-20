@@ -230,20 +230,22 @@ def test_build_data_product_column_prefix_fallback(monkeypatch):
     assert any("SOMECHILD" in c for c in dp.df.columns)
 
 
-def test_default_fetcher_snowflake_branch(monkeypatch):
-    """Cover lines 38-42: is_mock=False path building a Snowflake fetcher."""
+def test_default_fetcher_databricks_branch(monkeypatch):
+    """Cover the is_mock=False path building a Databricks fetcher."""
     from config import settings as settings_mod
     from src import data_product_builder as dpb
 
     # Force is_mock to be False
     monkeypatch.setattr(
         dpb, "SETTINGS",
-        settings_mod.Settings(data_source="snowflake"),
+        settings_mod.Settings(data_source="databricks"),
     )
 
     mock_client_instance = MagicMock()
     mock_client_instance.fetch_table.return_value = pd.DataFrame({"X": [1]})
-    with patch("src.snowflake_client.SnowflakeClient", return_value=mock_client_instance):
+    import src.databricks_client as dc
+    monkeypatch.setattr(dc, "_SHARED", None)
+    with patch("src.databricks_client.DatabricksClient", return_value=mock_client_instance):
         fetcher = dpb._default_fetcher(row_limit=100)
         df = fetcher("SOME_TABLE")
         assert list(df.columns) == ["X"]
@@ -267,8 +269,8 @@ def test_default_fetcher_mock_branch_with_limit():
     assert len(df) == 5
 
 
-def test_default_fetcher_snowflake_pushdown_primary_uses_where(monkeypatch):
-    """When the sidebar Project filter is active, the Snowflake fetcher
+def test_default_fetcher_databricks_pushdown_primary_uses_where(monkeypatch):
+    """When the sidebar Project filter is active, the Databricks fetcher
     must push ``WHERE filter_column IN (...)`` onto the primary table -
     Sample mode's LIMIT would otherwise drop the very rows the user
     asked for (the production bug for PLANVIEW_ID=1101168)."""
@@ -278,13 +280,13 @@ def test_default_fetcher_snowflake_pushdown_primary_uses_where(monkeypatch):
 
     monkeypatch.setattr(
         dpb, "SETTINGS",
-        settings_mod.Settings(data_source="snowflake"),
+        settings_mod.Settings(data_source="databricks"),
     )
 
     mock_client = MagicMock()
     mock_client.fetch_table.return_value = pd.DataFrame({"PLANVIEW_ID": ["1101168"]})
-    with patch("src.snowflake_client.get_shared_client", return_value=mock_client), \
-         patch("src.snowflake_client._resolve_location", return_value=("DB", "SC")):
+    with patch("src.databricks_client.get_shared_client", return_value=mock_client), \
+         patch("src.databricks_client._resolve_location", return_value=("DB", "SC")):
         fetcher = dpb._default_fetcher(
             row_limit=50000,
             system=get_system("EPT"),
@@ -300,7 +302,7 @@ def test_default_fetcher_snowflake_pushdown_primary_uses_where(monkeypatch):
     assert kwargs["limit"] == 50000
 
 
-def test_default_fetcher_snowflake_pushdown_child_uses_subquery(monkeypatch):
+def test_default_fetcher_databricks_pushdown_child_uses_subquery(monkeypatch):
     """Child tables must filter via a sub-SELECT on the primary's
     ``join_key`` so the downstream LEFT JOIN finds every matching row.
     Without this, Sample mode's LIMIT could silently drop child rows
@@ -311,13 +313,13 @@ def test_default_fetcher_snowflake_pushdown_child_uses_subquery(monkeypatch):
 
     monkeypatch.setattr(
         dpb, "SETTINGS",
-        settings_mod.Settings(data_source="snowflake"),
+        settings_mod.Settings(data_source="databricks"),
     )
 
     mock_client = MagicMock()
     mock_client.fetch_table.return_value = pd.DataFrame({"ROW_ID": ["r1"]})
-    with patch("src.snowflake_client.get_shared_client", return_value=mock_client), \
-         patch("src.snowflake_client._resolve_location", return_value=("DB", "SC")):
+    with patch("src.databricks_client.get_shared_client", return_value=mock_client), \
+         patch("src.databricks_client._resolve_location", return_value=("DB", "SC")):
         fetcher = dpb._default_fetcher(
             row_limit=50000,
             system=get_system("ADR"),
@@ -338,7 +340,7 @@ def test_default_fetcher_snowflake_pushdown_child_uses_subquery(monkeypatch):
     assert "limit" not in kwargs or kwargs.get("limit") is None
 
 
-def test_default_fetcher_snowflake_no_filter_keeps_historical_behaviour(monkeypatch):
+def test_default_fetcher_databricks_no_filter_keeps_historical_behaviour(monkeypatch):
     """No active filter → no WHERE, plain ``LIMIT N`` like before so
     Step 2 still runs Sample mode against unfiltered Cost Estimate
     tables exactly as it did pre-fix."""
@@ -348,12 +350,12 @@ def test_default_fetcher_snowflake_no_filter_keeps_historical_behaviour(monkeypa
 
     monkeypatch.setattr(
         dpb, "SETTINGS",
-        settings_mod.Settings(data_source="snowflake"),
+        settings_mod.Settings(data_source="databricks"),
     )
 
     mock_client = MagicMock()
     mock_client.fetch_table.return_value = pd.DataFrame({"X": [1]})
-    with patch("src.snowflake_client.get_shared_client", return_value=mock_client):
+    with patch("src.databricks_client.get_shared_client", return_value=mock_client):
         fetcher = dpb._default_fetcher(
             row_limit=50000,
             system=get_system("EPT"),

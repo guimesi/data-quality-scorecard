@@ -19,10 +19,10 @@ token/base configured the feature is invisible in the UI. Errors never
 crash the dashboard: every HTTP/transport failure is normalized into
 :class:`AirtablePushError` with a short actionable message.
 
-SiS note: in Streamlit in Snowflake, outbound HTTPS requires an External
-Access Integration covering ``api.airtable.com`` and
-``content.airtable.com``; without it the request fails and surfaces here
-as an :class:`AirtablePushError`.
+Databricks Apps note: apps have outbound internet access by default, so
+no extra network configuration is needed for ``api.airtable.com`` /
+``content.airtable.com``; transport failures still surface here as
+:class:`AirtablePushError`.
 """
 from __future__ import annotations
 

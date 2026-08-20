@@ -142,13 +142,13 @@ def test_prefetch_records_loader_exception_as_typed_error(fake_st):
     """If a loader raises, the cache captures ``TypeName: message`` so the
     UI can surface the failure instead of silently passing."""
     def boom() -> pd.DataFrame:
-        raise ConnectionError("snowflake unreachable")
+        raise ConnectionError("databricks unreachable")
 
     with patch.dict(rd._REGISTRY, {"FAILING": boom}):
         rd.prefetch_reference_datasets(["FAILING"])
     cache = fake_st.session_state[rd._SESSION_STATE_KEY]
     assert cache["FAILING"].df is None
-    assert cache["FAILING"].error == "ConnectionError: snowflake unreachable"
+    assert cache["FAILING"].error == "ConnectionError: databricks unreachable"
 
 
 def test_prefetch_records_none_return_as_error(fake_st):

@@ -94,14 +94,6 @@ class DomainDef:
             names, values are zero-arg callables returning a DataFrame or
             ``None``. Loaders are merged with the global registry in
             ``src.reference_data`` when the domain becomes active.
-        snowflake_database / snowflake_schema: optional per-domain
-            override for the Snowflake DB / schema where the domain's
-            tables live. When empty, callers fall back to the global
-            ``SETTINGS.sf_database`` / ``SETTINGS.sf_schema``. Used so a
-            single ``.env`` connection can read tables from multiple
-            databases (e.g. Cost Estimate from ``INSIGHTS_DB.UC_GP_CSC``
-            and Quality from ``INGESTION_DB.GP_QUALITY``) without
-            forcing the user to edit the env between runs.
         placeholder: True when the domain ships with TODO content rather
             than fully wired tables and rules. The Step 0 card surfaces
             this to set expectations.
@@ -120,8 +112,6 @@ class DomainDef:
     system_icons: Dict[str, str] = field(default_factory=dict)
     system_accents: Dict[str, str] = field(default_factory=dict)
     reference_dataset_loaders: Dict[str, Any] = field(default_factory=dict)
-    snowflake_database: str = ""
-    snowflake_schema: str = ""
     placeholder: bool = False
     project_filter: ProjectFilterDef = DEFAULT_PROJECT_FILTER
 
@@ -168,10 +158,9 @@ def _build_quality_domain() -> DomainDef:
     """Quality domain.
 
     Single-system domain (``SQS``, Quality Management System) backed by
-    the curated inspection table ``CT_SQS_AT_INSPECTION``. In Snowflake
-    mode the table is read from ``INGESTION_DB.GP_QUALITY`` - set
-    ``SNOWFLAKE_DATABASE=INGESTION_DB`` and ``SNOWFLAKE_SCHEMA=GP_QUALITY``
-    in ``.env`` before running the workflow against Quality.
+    the curated inspection table ``CT_SQS_AT_INSPECTION``, read from the
+    same Unity Catalog namespace as every other table (see
+    ``SETTINGS.dbx_catalog`` / ``SETTINGS.dbx_schema``).
 
     Curated DQR rules are still being defined with the Quality team; the
     catalog seeds the first batch of checks (``SQ4`` - Validity on
@@ -188,8 +177,7 @@ def _build_quality_domain() -> DomainDef:
         description=(
             "Curated inspection records for the Quality domain. Single "
             "table ``CT_SQS_AT_INSPECTION`` keyed by ``PLANVIEW_ID`` "
-            "(project grain) and sourced from ``INGESTION_DB.GP_QUALITY`` "
-            "in Snowflake mode."
+            "(project grain)."
         ),
         tables=[
             TableDef(
@@ -212,9 +200,8 @@ def _build_quality_domain() -> DomainDef:
         description=(
             "Quality domain (beta). Same seven-step DQ workflow as Cost "
             "Estimate, applied to the curated SQS inspection table "
-            "``CT_SQS_AT_INSPECTION`` (``INGESTION_DB.GP_QUALITY``). "
-            "Curated DQR rules are still being defined with the Quality "
-            "team."
+            "``CT_SQS_AT_INSPECTION``. Curated DQR rules are still being "
+            "defined with the Quality team."
         ),
         icon="✅",
         accent="#10b981",
@@ -226,8 +213,6 @@ def _build_quality_domain() -> DomainDef:
         system_icons={"SQS": "🛡️"},
         system_accents={"SQS": "#10b981"},
         reference_dataset_loaders={},
-        snowflake_database="INGESTION_DB",
-        snowflake_schema="GP_QUALITY",
         placeholder=True,
         project_filter=ProjectFilterDef(
             column="PROJECT_CODE",
@@ -314,24 +299,14 @@ def get_active_project_filter() -> ProjectFilterDef:
     return get_active_domain().project_filter
 
 
-def get_active_snowflake_location() -> tuple[str, str]:
-    """Return ``(database, schema)`` for the active domain's Snowflake
-    tables.
+def get_active_data_location() -> tuple[str, str]:
+    """Return ``(catalog, schema)`` where the application tables live.
 
-    Domains that set ``snowflake_database`` / ``snowflake_schema`` on
-    their ``DomainDef`` take precedence (Quality reads from
-    ``INGESTION_DB.GP_QUALITY`` regardless of what's in ``.env``).
-    Domains that leave the fields empty fall back to
-    ``SETTINGS.sf_database`` / ``SETTINGS.sf_schema`` - the historical
-    behaviour Cost Estimate relies on.
-
-    Imported lazily by the Snowflake client and Step 1 banner so a
-    single workflow can switch domains mid-flight without restarting
-    the process.
+    Every domain reads from the single Unity Catalog namespace configured
+    in ``SETTINGS`` (default ``entai_sandbox_catalog.data_quality_scorecards``)
+    - the migration consolidated the formerly per-domain Snowflake
+    databases into one schema. Imported lazily by the Step 1 banner.
     """
     from config.settings import SETTINGS
 
-    domain = get_active_domain()
-    database = domain.snowflake_database or SETTINGS.sf_database
-    schema = domain.snowflake_schema or SETTINGS.sf_schema
-    return database, schema
+    return SETTINGS.dbx_catalog, SETTINGS.dbx_schema

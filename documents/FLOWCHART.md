@@ -10,10 +10,10 @@ End-to-end flow showing the user's journey. The app opens on a **mode picker** (
 
 ```mermaid
 flowchart TD
-    START([User launches app]) --> INIT["init_state()<br/>load Settings (.env locally; defaults in SiS)<br/>session_state.app_mode = None<br/>session_state.domain = None"]
+    START([User launches app]) --> INIT["init_state()<br/>load Settings (.env locally; app.yaml env<br/>in Databricks Apps)<br/>session_state.app_mode = None<br/>session_state.domain = None"]
     INIT --> MODE{"DATA_SOURCE<br/>= ?"}
     MODE -->|mock| MOCK["src/mock_data.py<br/>seed = 42"]
-    MODE -->|snowflake| SF["src/snowflake_client.py<br/>Snowpark session (SiS) /<br/>externalbrowser connector (local)"]
+    MODE -->|databricks| SF["src/databricks_client.py<br/>SQL Warehouse connection<br/>(headless auth: app service<br/>principal / local PAT)"]
     MOCK --> READY[Fetcher ready]
     SF --> READY
 
@@ -352,7 +352,7 @@ flowchart LR
     USER[/User clicks Back / Next / Restart/] --> ROUTE{Which button?}
     ROUTE -->|Back| PREV["prev_step()<br/>(skip hidden 4.1/4.2 sub-steps)"]
     ROUTE -->|Next| NEXT["next_step()<br/>(skip hidden 4.1/4.2 sub-steps)"]
-    ROUTE -->|Restart| RESET["restart_app()<br/>clear configs + caches<br/>+ Snowflake client<br/>+ app_mode → mode_selection"]
+    ROUTE -->|Restart| RESET["restart_app()<br/>clear configs + caches<br/>+ Databricks client<br/>+ app_mode → mode_selection"]
     PREV --> GOTO["goto(target)<br/>set _scroll_to_top = True<br/>st.rerun()"]
     NEXT --> GOTO
     RESET --> GOTO

@@ -135,17 +135,19 @@ def test_step1_shows_mock_mode_banner(monkeypatch):
     assert any("mock" in i.lower() for i in infos)
 
 
-def test_step1_shows_snowflake_success_when_not_mock(monkeypatch):
-    """Covers the `else` branch showing Snowflake connection banner."""
+def test_step1_shows_databricks_success_when_not_mock(monkeypatch):
+    """Covers the `else` branch showing the Databricks connection banner."""
     import ui.step_01_system_selection as s1
     from config import settings as settings_mod
     monkeypatch.setattr(
         s1, "SETTINGS",
-        settings_mod.Settings(data_source="snowflake", sf_database="DB", sf_schema="SC"),
+        settings_mod.Settings(
+            data_source="databricks", dbx_catalog="CAT", dbx_schema="SC",
+        ),
     )
     at = _new_app()
     successes = [s.value for s in at.success]
-    assert any("DB.SC" in s for s in successes)
+    assert any("CAT.SC" in s for s in successes)
 
 
 def test_step1_select_system_enables_next():
@@ -1169,7 +1171,7 @@ def test_step5_with_e4_only_lands_with_blank_weight():
 
 def test_step2_prefetches_reference_datasets_when_ept_selected():
     """Step 2 must eagerly load VWS_GP_STANDARD_SHARE into the session-state
-    cache so Step 6 doesn't open a fresh Snowflake connection on render."""
+    cache so Step 6 doesn't open a fresh Databricks connection on render."""
     from src.reference_data import _SESSION_STATE_KEY
 
     at = _new_app(
@@ -1184,7 +1186,7 @@ def test_step2_prefetches_reference_datasets_when_ept_selected():
 def test_step2_prefetches_acce_reference_datasets():
     """ACCE ships AC1 (`ACCE_COA_MASTER`) and AC2 (`VWS_GP_STANDARD_SHARE`).
     Step 2 must prefetch both so the rules can evaluate in Step 6 without
-    re-opening a Snowflake connection."""
+    re-opening a Databricks connection."""
     from src.reference_data import _SESSION_STATE_KEY
 
     at = _new_app(
@@ -1218,7 +1220,7 @@ def test_step2_surfaces_reference_load_error_as_warning(monkeypatch):
     import src.reference_data as ref_mod
 
     def boom():
-        raise RuntimeError("Snowflake auth failed for VWS_GP_STANDARD_SHARE")
+        raise RuntimeError("Databricks auth failed for VWS_GP_STANDARD_SHARE")
 
     monkeypatch.setitem(ref_mod._REGISTRY, "VWS_GP_STANDARD_SHARE", boom)
 
@@ -1228,7 +1230,7 @@ def test_step2_surfaces_reference_load_error_as_warning(monkeypatch):
     )
     warnings = [w.value for w in at.warning]
     assert any(
-        "VWS_GP_STANDARD_SHARE" in w and "Snowflake auth failed" in w
+        "VWS_GP_STANDARD_SHARE" in w and "Databricks auth failed" in w
         for w in warnings
     )
 

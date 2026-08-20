@@ -12,7 +12,7 @@ Covers a long list of one-off branches identified from
 * src/dqr_validation: every per-dimension validator's edge branches
 * src/data_product_builder: PLANVIEW_ID filter when SHARED_KEY is absent
 * src/dqr_engine: empty-assignments early return
-* src/reference_data: snowflake branch for the ACCE COA loader
+* src/reference_data: databricks branch for the ACCE COA loader
 """
 from __future__ import annotations
 
@@ -264,22 +264,22 @@ def test_evaluate_all_safe_empty_assignments_returns_empty_results():
 
 
 # ===========================================================================
-# src/reference_data.py - snowflake branch
+# src/reference_data.py - databricks branch
 # ===========================================================================
 
-def test_load_acce_coa_master_snowflake_branch(monkeypatch):
-    """Covers lines 99-102 - the snowflake fetch path for ACCE COA master."""
+def test_load_acce_coa_master_databricks_branch(monkeypatch):
+    """Covers the databricks fetch path for ACCE COA master."""
     from config import settings as settings_mod
     from src import reference_data as ref_mod
 
     monkeypatch.setattr(
-        ref_mod, "SETTINGS", settings_mod.Settings(data_source="snowflake")
+        ref_mod, "SETTINGS", settings_mod.Settings(data_source="databricks")
     )
     fake_client = MagicMock()
     fake_client.fetch_query.return_value = pd.DataFrame({
         "ICARUS_COA": ["A"], "ISO_COR": ["B"], "SAB": ["C"],
     })
-    with patch("src.snowflake_client.get_shared_client", return_value=fake_client):
+    with patch("src.databricks_client.get_shared_client", return_value=fake_client):
         out = ref_mod._load_acce_coa_master()
 
     fake_client.fetch_query.assert_called_once()

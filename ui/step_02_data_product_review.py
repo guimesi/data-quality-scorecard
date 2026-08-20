@@ -193,7 +193,7 @@ def render() -> None:
         # Eager-load reference datasets for the selected systems' custom
         # rules. Caching them here means Step 6 (and any dashboard
         # re-render, e.g. on Restart) hits the cache instead of opening a
-        # fresh Snowflake connection.
+        # fresh Databricks connection.
         ref_names = required_reference_datasets_for_systems(systems)
         if ref_names:
             with st.spinner(

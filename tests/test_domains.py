@@ -454,14 +454,14 @@ def test_system_codes_returns_a_fresh_list_each_call():
 
 
 # ---------------------------------------------------------------------------
-# get_active_snowflake_location
+# get_active_data_location
 # ---------------------------------------------------------------------------
 
-def test_get_active_snowflake_location_falls_back_to_settings(monkeypatch):
-    """Cost Estimate leaves ``snowflake_database`` / ``snowflake_schema``
-    empty; the helper must therefore fall back to ``SETTINGS``."""
+def test_get_active_data_location_uses_settings_namespace(monkeypatch):
+    """Every domain reads from the single configured Unity Catalog
+    namespace - the migration removed the per-domain overrides."""
     from config import settings as settings_mod
-    from config.domains import get_active_snowflake_location
+    from config.domains import get_active_data_location
 
     state = _session_state_dict(monkeypatch)
     state["domain"] = DOMAIN_COST_ESTIMATE
@@ -469,20 +469,18 @@ def test_get_active_snowflake_location_falls_back_to_settings(monkeypatch):
         settings_mod, "SETTINGS",
         settings_mod.Settings(
             data_source="mock",
-            sf_database="FALLBACK_DB",
-            sf_schema="FALLBACK_SCHEMA",
+            dbx_catalog="MY_CAT",
+            dbx_schema="MY_SCHEMA",
         ),
     )
-    db, schema = get_active_snowflake_location()
-    assert (db, schema) == ("FALLBACK_DB", "FALLBACK_SCHEMA")
+    assert get_active_data_location() == ("MY_CAT", "MY_SCHEMA")
 
 
-def test_get_active_snowflake_location_uses_domain_override(monkeypatch):
-    """Quality sets explicit ``snowflake_database`` / ``snowflake_schema`` on
-    its DomainDef; those win over ``SETTINGS`` so the user doesn't have to
-    edit ``.env`` between Cost Estimate and Quality runs."""
+def test_get_active_data_location_same_for_every_domain(monkeypatch):
+    """Quality no longer carries its Snowflake-era INGESTION_DB override:
+    it resolves to the same namespace as Cost Estimate."""
     from config import settings as settings_mod
-    from config.domains import DOMAIN_QUALITY, get_active_snowflake_location
+    from config.domains import DOMAIN_QUALITY, get_active_data_location
 
     state = _session_state_dict(monkeypatch)
     state["domain"] = DOMAIN_QUALITY
@@ -490,14 +488,11 @@ def test_get_active_snowflake_location_uses_domain_override(monkeypatch):
         settings_mod, "SETTINGS",
         settings_mod.Settings(
             data_source="mock",
-            sf_database="SHOULD_BE_IGNORED",
-            sf_schema="SHOULD_BE_IGNORED",
+            dbx_catalog="MY_CAT",
+            dbx_schema="MY_SCHEMA",
         ),
     )
-    db, schema = get_active_snowflake_location()
-    # Quality is set to INGESTION_DB.GP_QUALITY in the DomainDef registry.
-    assert db == "INGESTION_DB"
-    assert schema == "GP_QUALITY"
+    assert get_active_data_location() == ("MY_CAT", "MY_SCHEMA")
 
 
 # ---------------------------------------------------------------------------

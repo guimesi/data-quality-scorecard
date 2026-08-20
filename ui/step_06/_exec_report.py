@@ -9,8 +9,8 @@ the previous run.
 
 A ``@media print`` stylesheet keeps it A4-friendly (one DP per page,
 colors preserved), so **Ctrl+P → Save as PDF** produces the shareable
-executive PDF without any PDF library - the pragmatic path inside
-Streamlit in Snowflake, where PDF-generation packages are unavailable.
+executive PDF without any PDF library - keeping the runtime image
+slim (no PDF-generation packages needed).
 
 Every dynamic string is HTML-escaped. The builder is pure (no Streamlit
 calls) so it is unit-testable; only the small download wrapper at the

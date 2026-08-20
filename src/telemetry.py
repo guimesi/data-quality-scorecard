@@ -7,7 +7,7 @@ records the app already persists (events, run snapshots, project
 versions) - nothing here writes.
 
 Authorization is intentionally NOT handled in-app: who may open the app
-at all is governed by Snowflake roles/grants (see deploy/). This module
+at all is governed by Databricks Apps permissions (see deploy/). This module
 only measures and audits what authorized users did.
 """
 from __future__ import annotations

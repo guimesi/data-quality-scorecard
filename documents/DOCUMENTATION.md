@@ -15,7 +15,7 @@ It supports two operating modes:
 | Mode | Description | When to use |
 |------|-------------|-------------|
 | `mock` (default) | Synthetic ADR / ACCE / EPT data with intentional defects | Demo, dev, testing |
-| `snowflake` | Live Snowflake — Snowpark session inside Streamlit in Snowflake (production); `externalbrowser` connector for local dev | Production assessments |
+| `databricks` | Live Databricks — SQL Warehouse queries against Unity Catalog; headless auth (app service-principal OAuth inside Databricks Apps; `DATABRICKS_HOST` + `DATABRICKS_TOKEN` for local dev) | Production assessments |
 
 ---
 
@@ -25,7 +25,7 @@ It supports two operating modes:
 - **Streamlit**: UI framework (uses `st.data_editor` for the CDE selection grid in Step 3)
 - **Pandas / NumPy**: profiling, joins, scoring, ML Lab fallbacks
 - **Plotly**: gauges, charts, waterfalls, drift visualisations
-- **snowflake-connector-python**: Snowflake client
+- **databricks-sql-connector / databricks-sdk**: Databricks SQL Warehouse client + headless auth resolution
 - **python-dotenv**: environment configuration
 - **pytest / pytest-cov**: testing (1,200+ tests across 30 modules; ML Lab adds 27)
 - **scikit-learn** *(optional)* - unlocks `IsolationForest`, `KMeans`, `PCA`, `LogisticRegression` swap-ins in Step 7. The lab works without it (numpy fallbacks); install only if you want the toggle.
@@ -77,7 +77,7 @@ data-quality-app/
 │   ├── run_history.py        # Auto-snapshot service (fingerprints, dedup, drop detection)
 │   ├── projects.py           # Saved projects (versioned config capture + audit changelog)
 │   ├── telemetry.py          # Adoption/audit metrics for the 📊 Adoption page
-│   ├── snowflake_client.py
+│   ├── databricks_client.py
 │   ├── custom_dqr_engine.py  # SLIM re-export of src/custom_dqr/*
 │   └── custom_dqr/           # Custom-DQR engine partitioned by family (C1)
 │       ├── _shared.py        # CustomRuleNotEvaluated + reusable predicates +
@@ -354,13 +354,13 @@ Design notes:
 The reference data registry lives in [src/reference_data.py](../src/reference_data.py). The `VWS_GP_STANDARD_SHARE` loader resolves to:
 
 - **Mock mode**: `_mock_vws_gp_standard_share()` - returns the deterministic project pool keyed by `PROJECT_ID`.
-- **Snowflake mode**: `SnowflakeClient.fetch_table("VWS_GP_STANDARD_SHARE")` - uses the same warehouse / database / schema configured for the EPT primary table.
+- **Databricks mode**: `DatabricksClient.fetch_table("VWS_GP_STANDARD_SHARE")` - uses the same SQL Warehouse and Unity Catalog namespace configured for the EPT primary table.
 
 #### Eager loading (Step 2) and caching
 
 `prefetch_reference_datasets(names)` is called from Step 2 right after the source tables are built, with the names returned by `required_reference_datasets_for_systems(selected_systems)`. The fetched DataFrames (and any loader error strings) are cached in `st.session_state["_reference_datasets"]`. As a result:
 
-- The Snowflake round-trip happens **once**, alongside the system table fetches, not lazily during Step 6.
+- The Databricks round-trip happens **once**, alongside the system table fetches, not lazily during Step 6.
 - Subsequent dashboard re-renders (including the implicit re-render that fires when the user clicks **Restart** in Step 6) hit the cache instead of reconnecting.
 - Load errors are surfaced **immediately** in Step 2 as a yellow warning identifying the dataset and the underlying error message, so the user knows up-front which Custom rules will be marked Not evaluated in Step 6.
 
@@ -525,7 +525,7 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 
 | File | Responsibility |
 |------|----------------|
-| [config/settings.py](../config/settings.py) | Immutable `Settings` dataclass: data source, Snowflake location, score thresholds, max rows per table. Loads `.env` for **local dev** (import is optional — there is no `.env`/`python-dotenv` inside Streamlit in Snowflake, where the built-in defaults apply and the session supplies identity/warehouse/db/schema) |
+| [config/settings.py](../config/settings.py) | Immutable `Settings` dataclass: data source, Unity Catalog location (`DATABRICKS_CATALOG` / `DATABRICKS_SCHEMA`), SQL Warehouse (`DATABRICKS_WAREHOUSE_ID` / `DATABRICKS_SQL_HTTP_PATH`), score thresholds, max rows per table. Loads `.env` for **local dev** (import is optional — inside Databricks Apps configuration arrives as real env vars from `app.yaml` plus the platform-injected identity, so there is no `.env`) |
 | [config/systems.py](../config/systems.py) | `SystemDef` / `TableDef` definitions for ADR, ACCE, EPT |
 | [config/dqr_catalog.py](../config/dqr_catalog.py) | Catalog of the 10 standard dimensions + `suggest_dimensions_for()` heuristic |
 | [config/dqr_sources.py](../config/dqr_sources.py) | `SOURCE_STANDARD`, `SOURCE_CUSTOM`, `SOURCE_LABELS` |
@@ -541,16 +541,16 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | [src/dqr_validation.py](../src/dqr_validation.py) | Standard-DQR compatibility layer: `DIMENSION_SUPPORTED_GROUPS`, `validate_assignment`, `validate_assignments_for_dp`, `DQRValidationReport` / `DQRValidationIssue` |
 | [src/custom_dqr_engine.py](../src/custom_dqr_engine.py) | Custom rule check functions (E1-E7, A1-A8, AC1-AC8) + reusable validators (`validate_completeness_rule`, `validate_referential_integrity_rule`) + `evaluate_custom_rules` dispatcher + `_check_supports_params` introspection + `CustomRuleNotEvaluated` exception + per-rule `TypedDict` params (`EPTE3Params`, `EPTE6Params`, `ADRA3Params`, `ADRA7Params`, `ADRA8Params`, `ACCEAC3Params`, `ACCEAC7Params`, `ACCEAC8Params`). SLIM re-export; implementations live in [src/custom_dqr/](../src/custom_dqr/): `_shared.py` (errors + helpers), `_validators.py`, `_ept_rules.py` (E1-E7), `_adr_rules.py` (A1-A8), `_acce_rules.py` (AC1-AC8), `_dispatcher.py`. |
 | [src/reference_data.py](../src/reference_data.py) | Reference dataset registry - `get_reference_dataset`, `prefetch_reference_datasets` (eager-loaded in Step 2), `get_reference_dataset_error`, `clear_reference_cache`, `required_reference_datasets_for_systems` |
-| [src/data_product_builder.py](../src/data_product_builder.py) | Joins source tables into a `DataProduct`; pluggable fetcher (mock vs. Snowflake) |
+| [src/data_product_builder.py](../src/data_product_builder.py) | Joins source tables into a `DataProduct`; pluggable fetcher (mock vs. Databricks) |
 | [src/scorecard.py](../src/scorecard.py) | `compute_scorecard`: per-source row scoring, source-weighted combination, threshold bucketing |
 | [src/one_click.py](../src/one_click.py) | ⚡ **One-click automation service** (UI-free). `run_one_click(domain, systems, …)` builds + profiles each Data Product, prefetches reference datasets, applies the default custom-only config and computes scorecards; `build_one_click_config` derives the required CDEs and equal weights; `default_rule_params` reproduces an untouched Step 4.2 params dict. Returns an `OneClickResult` (scored products + skipped reasons + warnings); raises `OneClickError` for blocking input/build failures. Reuses `build_multiple` / `profile_dataframe` / `prefetch_reference_datasets` / `compute_scorecard` / `effective_required_columns` / `distribute_equally`. |
 | [src/ml_lab.py](../src/ml_lab.py) | 🧪 **ML Lab algorithms** (Step 7, beta). Public functions: `build_rule_flag_matrix`, `compute_row_anomalies`, `compute_rule_impact`, `compute_cde_profile_clusters`, `simulate_weight_perturbation`, `compare_data_products`, `snapshot_scorecard`, `load_snapshot_from_json`, `load_snapshot_from_csv`, `compute_drift` (PSI + KS), `train_risk_classifier`, `recommend_dqrs_for_cde`, `explain_row_score`, `sklearn_status`. Pure numpy/pandas with **optional** sklearn swap-ins (IsolationForest, KMeans, PCA, LogisticRegression) detected lazily. Read-only - never mutates the main flow's state. See [ML_LAB.md](ML_LAB.md). |
 | [src/mock_data.py](../src/mock_data.py) | Deterministic synthetic data generator with injected defects (incl. `CODE_OF_RESOURCE` / `STANDARD_ACTIVITY_BREAKDOWN` for EPT, plus `WBC_LEVEL_5` / `TOTAL_HOURS` / `TOTAL_COST_USD` exercising the E3 statistical outlier detector) |
-| [src/snowflake_client.py](../src/snowflake_client.py) | `SnowflakeClient` data layer with two auto-selected backends: the in-platform **Snowpark session** (`get_active_session()`) inside Streamlit in Snowflake, and `snowflake.connector` + `externalbrowser` SSO as the local-dev fallback. Filter values are bound server-side (qmark `?` for Snowpark, `%s` for the connector). `execute()` is the persistence layer's write path (INSERT into the DQS_* app-state tables); data reads stay on the fetch methods. |
+| [src/databricks_client.py](../src/databricks_client.py) | `DatabricksClient` data layer over a **Databricks SQL Warehouse** (`databricks-sql-connector`). Auth is headless via `databricks.sdk.core.Config` - the app service principal's OAuth env vars inside Databricks Apps, `DATABRICKS_HOST` + `DATABRICKS_TOKEN` from `.env` locally; no browser auth path. Callers keep building `%s` placeholders; the client translates them to named parameters (`:p0`, `:p1`, …) bound server-side. `fetch_table` uses the Arrow path (`fetchall_arrow`), `fetch_query` uses `fetchall`; column names are normalized to UPPERCASE. A shared client (`get_shared_client` / `close_shared_client`) reuses one connection per Streamlit run. `execute()` is the persistence layer's write path (INSERT into the DQS_* app-state tables); data reads stay on the fetch methods. |
 | [src/run_history.py](../src/run_history.py) | **Run-history service** (phase 1). `config_fingerprint` (stable hash of CDEs/rules/params/weights/sources; assignment order-insensitive) and `result_fingerprint` (hash of the scoring outcome) drive dedup; `record_run_if_new` persists an ML-Lab-compatible snapshot (`snapshot_scorecard`) via `save_run` unless both fingerprints match the last persisted run; `load_history` returns runs (with who/when/config_hash); `score_drop` compares the two most recent runs and flags whether the config changed alongside the score. |
 | [src/telemetry.py](../src/telemetry.py) | **Adoption & audit metrics** (phase 2) - UI-free aggregations over persisted events/runs/project versions for the 📊 Adoption page: `adoption_overview` (headline counters + last activity), `runs_per_week` (ISO-week trend), `runs_by_system` (adoption per domain/DP), `user_activity` (per-user rollup + last seen), `recent_activity` (unified audit trail, newest first, capped). Nothing here writes. |
 | [src/projects.py](../src/projects.py) | **Saved projects** (phase 3). `serialize_project` / `deserialize_project` round-trip the full configuration (domain, systems, CDEs, rules, params, weights - never the data); `change_summary` produces the human-readable "what changed" line (systems/CDEs/rules added-removed, weight/param changes, source changes; name lists > 3 collapse to counts); `save_project` appends an immutable version (v1 = "Project created.") and logs a `project_saved` event; `list_projects` / `get_project` back the browser. Version list = audit changelog. |
-| [src/persistence.py](../src/persistence.py) | **Persistence layer** (F0 foundation for run history, adoption/audit telemetry and saved projects). `current_username()` (CURRENT_USER() in SiS / OS login locally, cached); three backends selected by `DQS_PERSISTENCE` - `LocalStore` (JSON-lines under `.dqs_store/`, default), `SnowflakeStore` (append-only `DQS_RUNS`/`DQS_EVENTS`/`DQS_PROJECTS` tables, [deploy/03_persistence_tables.sql](../deploy/03_persistence_tables.sql)), `NullStore` (`off`). Domain API: `save_run`/`list_runs`, `log_event`/`list_events`, `save_project_version`/`list_project_versions` (append-only versions = audit changelog). Every write stamps `ts` + `username`; every function is fire-and-forget (storage failures log + degrade, never raise). |
+| [src/persistence.py](../src/persistence.py) | **Persistence layer** (F0 foundation for run history, adoption/audit telemetry and saved projects). `current_username()` (the viewer identity forwarded by Databricks Apps via HTTP headers / OS login locally, cached); three backends selected by `DQS_PERSISTENCE` - `LocalStore` (JSON-lines under `.dqs_store/`, default), `DatabricksStore` (append-only `DQS_RUNS`/`DQS_EVENTS`/`DQS_PROJECTS` tables, [deploy/databricks/02_persistence_tables.sql](../deploy/databricks/02_persistence_tables.sql)), `NullStore` (`off`). Domain API: `save_run`/`list_runs`, `log_event`/`list_events`, `save_project_version`/`list_project_versions` (append-only versions = audit changelog). Every write stamps `ts` + `username`; every function is fire-and-forget (storage failures log + degrade, never raise). |
 
 ### 5.3 UI Steps (`ui/`)
 
@@ -568,7 +568,7 @@ Both modes honour the sidebar **Sample mode** and **Project filter**.
 | 5 | [ui/step_05_weight_assignment.py](../ui/step_05_weight_assignment.py) | Distribute 100 points across rules in each active source |
 | 6 | [ui/step_06_dashboard.py](../ui/step_06_dashboard.py) | Scorecard dashboard (standard + custom subscores, custom rules tab) + CSV / JSON export. Clicking a By-CDE / By-Dimension bar or selecting a Rules / Custom Rules table row drills down to the failing data rows ([ui/step_06/_drilldown.py](../ui/step_06/_drilldown.py)). Every computed scorecard is auto-persisted (deduplicated) and surfaced on a per-DP **History** tab - score trend (◆ = config change), run log (who/when/config), "what changed" drift vs the previous run - plus a drop-alert banner when the score fell ≥ `DQS_DROP_ALERT_PP` (default 5 pp) ([ui/step_06/_history.py](../ui/step_06/_history.py)). A **💾 Save as project** panel captures the whole configuration as a new immutable version with an audit changelog ([ui/step_06/_projects.py](../ui/step_06/_projects.py)), and a **📑 Executive report (HTML)** button downloads a fully self-contained report with every dashboard view (HTML/CSS bars + inline-SVG trend, `@media print` stylesheet → Ctrl+P for a shareable PDF) ([ui/step_06/_exec_report.py](../ui/step_06/_exec_report.py)). Nav row exposes a **🧪 ML Lab (beta)** button that opens Step 7. |
 | 7 | [ui/step_07_ml_lab.py](../ui/step_07_ml_lab.py) | 🧪 **ML Lab (beta)** orchestrator + tab dispatcher: wires the 9 read-only analytics tabs into `st.tabs(...)`. Each tab is its own module in [ui/step_07/](../ui/step_07/): 🔎 `_row_anomalies.py` · 🎯 `_rule_impact.py` · 🌿 `_cde_clusters.py` · ⚖️ `_weight_sensitivity.py` · 🔭 `_cross_dp.py` · 📜 `_run_history.py` · 🧠 `_risk_model.py` · 💡 `_recommendations.py` · 🧩 `_row_explain.py` (shared CSS + helpers in `_shared.py`). Violet/lavender BETA theme + 🔬 *Use scikit-learn* toggle. See [ML_LAB.md](ML_LAB.md). |
-| Admin | [ui/step_adoption.py](../ui/step_adoption.py) | 📊 **Adoption & audit** - standalone admin page reached from the entry screen ("📊 Usage & audit" button; visible in the stepper only while inside). Headline counters (unique users, app opens, runs, exports, project saves/loads), runs-per-week trend, adoption by domain/system, per-user activity and the unified audit trail - all computed by [src/telemetry.py](../src/telemetry.py) from persisted events/runs/versions. Authorization stays with Snowflake roles; this page only measures what authorized users did. |
+| Admin | [ui/step_adoption.py](../ui/step_adoption.py) | 📊 **Adoption & audit** - standalone admin page reached from the entry screen ("📊 Usage & audit" button; visible in the stepper only while inside). Headline counters (unique users, app opens, runs, exports, project saves/loads), runs-per-week trend, adoption by domain/system, per-user activity and the unified audit trail - all computed by [src/telemetry.py](../src/telemetry.py) from persisted events/runs/versions. Authorization stays with Databricks app permissions + Unity Catalog grants; this page only measures what authorized users did. |
 
 ### 5.4 Utilities (`utils/`)
 
@@ -587,15 +587,15 @@ Copy [.env.example](../.env.example) to `.env` and edit:
 
 ```bash
 # Data source
-DATA_SOURCE=mock                # or "snowflake"
+DATA_SOURCE=mock                # or "databricks"
 
-# Snowflake (only when DATA_SOURCE=snowflake)
-SNOWFLAKE_ACCOUNT=...
-SNOWFLAKE_USER=...
-SNOWFLAKE_WAREHOUSE=...
-SNOWFLAKE_DATABASE=...
-SNOWFLAKE_SCHEMA=...
-SNOWFLAKE_ROLE=...
+# Databricks (only when DATA_SOURCE=databricks; local dev only -
+# Databricks Apps injects host + service-principal credentials)
+DATABRICKS_HOST=...
+DATABRICKS_TOKEN=...
+DATABRICKS_WAREHOUSE_ID=...     # or DATABRICKS_SQL_HTTP_PATH=...
+# DATABRICKS_CATALOG=entai_sandbox_catalog
+# DATABRICKS_SCHEMA=data_quality_scorecards
 
 # Score thresholds (0–100)
 THRESHOLD_GREEN=80
@@ -644,7 +644,7 @@ ruff check .
 The autouse `_force_mock_data_source` fixture in
 [tests/conftest.py](../tests/conftest.py) pins `SETTINGS.data_source =
 "mock"` regardless of the shell `DATA_SOURCE`, so no test ever hits
-Snowflake. CI ([.github/workflows/tests.yml](../.github/workflows/tests.yml))
+Databricks. CI ([.github/workflows/tests.yml](../.github/workflows/tests.yml))
 runs `ruff check` first, then `pytest -q` with coverage.
 
 | Test module | Covers |
@@ -657,8 +657,8 @@ runs `ruff check` first, then `pytest -q` with coverage.
 | [tests/test_data_product_builder.py](../tests/test_data_product_builder.py) | Joins, prefixing, 1:N aggregation |
 | [tests/test_helpers.py](../tests/test_helpers.py) | Color / label / weight utilities |
 | [tests/test_session_state.py](../tests/test_session_state.py) | Navigation & sample toggle |
-| [tests/test_snowflake_client.py](../tests/test_snowflake_client.py) | Snowflake client (mocked) |
-| [tests/test_persistence.py](../tests/test_persistence.py) | Persistence layer: identity resolution (SiS `CURRENT_USER()` / OS fallback / cache), Local/Snowflake/Null backends, backend selection via `DQS_PERSISTENCE`, fire-and-forget degradation, project-version increments, `SnowflakeClient.execute` bind paths |
+| [tests/test_databricks_client.py](../tests/test_databricks_client.py) | Databricks client (mocked) |
+| [tests/test_persistence.py](../tests/test_persistence.py) | Persistence layer: identity resolution (forwarded Databricks Apps headers / OS fallback / cache), Local/Databricks/Null backends, backend selection via `DQS_PERSISTENCE`, fire-and-forget degradation, project-version increments, `DatabricksClient.execute` bind paths |
 | [tests/test_run_history.py](../tests/test_run_history.py) | Run-history service + Step 6 history UI: fingerprint stability/sensitivity, record dedup (rerun vs data change vs config change), `score_drop` deltas + config-change flag, session-cached recording, drop-alert thresholds, History-tab trend/log/drift rendering, ML Lab persisted-snapshot merge |
 | [tests/test_projects.py](../tests/test_projects.py) | Saved projects: serialization round-trip, change-summary cases (rules/CDEs/systems added-removed, weights/params, sources, domain, name-list capping), versioned saves + changelog + telemetry events, browser listing/opening, loader (rebuild, prefetch, corrupt record, unknown domain, build failure) |
 | [tests/test_telemetry.py](../tests/test_telemetry.py) | Adoption/audit: overview counters, ISO-week run trend (incl. unparsable timestamps), per-system/per-user rollups, unified audit trail (merging, detail formats, limit), session-once `app_open` / transition-only `step_view` logging, Adoption page rendering (empty + populated + back nav) |
@@ -703,7 +703,7 @@ Every step renders the same three-button nav at the bottom (the `mode_selection`
 | Button | Action | Where the click is handled |
 |--------|--------|----------------------------|
 | **⬅ Back** | Move to the previous *visible* step (sub-steps 4.1 / 4.2 are skipped when no DP opted into their source; the Step-by-step / One-click steps of the *other* mode are never in the visible list). | `utils.session_state.prev_step` |
-| **🔄 Restart** | Wipe `selected_systems`, `data_products`, `configs`, `scorecards`, `domain`, **`app_mode`** and the `one_click_summary` banner, clear the reference-dataset cache, close the shared Snowflake client, and jump back to the **mode picker** (`mode_selection`). | `utils.session_state.restart_app` |
+| **🔄 Restart** | Wipe `selected_systems`, `data_products`, `configs`, `scorecards`, `domain`, **`app_mode`** and the `one_click_summary` banner, clear the reference-dataset cache, close the shared Databricks client, and jump back to the **mode picker** (`mode_selection`). | `utils.session_state.restart_app` |
 | **Next ➡** / **Generate Scorecard ➡** | Move to the next visible step. Disabled while step-specific validation is failing (e.g. Step 3 needs ≥ 1 CDE; Step 5 needs Σ rule weights = 100% per active source). In One-click mode the forward action is **⚡ Generate scorecards**, which jumps straight to the dashboard. | `utils.session_state.next_step` |
 
 Restart is intentionally available on every step, so the user can always abort the workflow (or switch modes) without hunting for the dashboard. The button is rendered inline next to **Back** for visual consistency.

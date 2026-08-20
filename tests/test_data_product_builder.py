@@ -56,7 +56,7 @@ def test_build_multiple_returns_all():
 
 
 def test_apply_planview_filter_matches_numeric_column_against_string_input():
-    """Real Snowflake ``PLANVIEW_ID``s are numeric (``1101168``). When the
+    """Real warehouse ``PLANVIEW_ID``s are numeric (``1101168``). When the
     column has any NULL, pandas promotes the dtype to ``float64`` and the
     pre-fix code compared the user's ``"1101168"`` against the column's
     ``"1101168.0"``, producing zero rows. The canonicalizer must collapse
@@ -84,7 +84,7 @@ def test_apply_planview_filter_matches_numeric_column_against_string_input():
 
 def test_apply_planview_filter_strips_whitespace_and_handles_object_dtype():
     """Object-dtype column with mixed int / float entries (another
-    Snowflake-pandas shape) and whitespace-padded user input must still
+    warehouse-pandas shape) and whitespace-padded user input must still
     resolve to the right rows."""
     import pandas as pd
 
@@ -212,13 +212,13 @@ def test_default_fetcher_binds_adversarial_id_as_param_not_sql(monkeypatch):
     from src import data_product_builder as dpb
 
     monkeypatch.setattr(
-        dpb, "SETTINGS", settings_mod.Settings(data_source="snowflake")
+        dpb, "SETTINGS", settings_mod.Settings(data_source="databricks")
     )
     evil = "1101168'); DROP TABLE ADR_DIM_ESTIMATEITEMRECORD; --"
     mock_client = MagicMock()
     mock_client.fetch_table.return_value = pd.DataFrame({"ROW_ID": ["r1"]})
-    with patch("src.snowflake_client.get_shared_client", return_value=mock_client), \
-         patch("src.snowflake_client._resolve_location", return_value=("DB", "SC")):
+    with patch("src.databricks_client.get_shared_client", return_value=mock_client), \
+         patch("src.databricks_client._resolve_location", return_value=("DB", "SC")):
         fetcher = dpb._default_fetcher(
             row_limit=50000,
             system=get_system("ADR"),

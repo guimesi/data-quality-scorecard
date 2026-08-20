@@ -186,14 +186,14 @@ def test_generate_blocking_error_keeps_user_on_step(monkeypatch):
     from src.one_click import OneClickError
 
     def _boom(*a, **k):
-        raise OneClickError("snowflake exploded")
+        raise OneClickError("databricks exploded")
 
     monkeypatch.setattr(oc_ui, "run_one_click", _boom)
     at = _one_click_app_no_run(domain="cost_estimate", selected_systems=["EPT"])
     at.run()
     at.button(key="oneclick_generate").click().run()
     assert at.session_state["current_step"] == "one_click"
-    assert any("snowflake exploded" in e.value for e in at.error)
+    assert any("databricks exploded" in e.value for e in at.error)
 
 
 def test_generate_csv_failure_is_recorded_but_nonblocking(monkeypatch):

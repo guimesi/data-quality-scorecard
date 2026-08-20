@@ -186,7 +186,7 @@ def build_rule_flag_matrix(dp, config) -> Tuple[pd.DataFrame, Dict[str, Dict[str
     surfaced as "Not evaluated" / "Not computed" on the dashboard.
     """
     # Imported lazily - keeps this module loadable from unit tests that
-    # don't pull in pandas/Snowflake helpers transitively via the engines.
+    # don't pull in pandas/Databricks helpers transitively via the engines.
     from src.custom_dqr_engine import evaluate_custom_rules
     from src.dqr_engine import evaluate_all_safe
 

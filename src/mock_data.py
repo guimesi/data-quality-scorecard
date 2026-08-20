@@ -1218,8 +1218,9 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
         inspector[i] = None
 
     # EXPECTED_SHIP_DATE drives SQ4 (Validity). The real column is a
-    # TIMESTAMP_NTZ, so Snowflake enforces well-formed datetimes at
-    # ingestion - the dominant FAIL case is NULL. ~6% nulls give SQ4
+    # TIMESTAMP (as in the source system), so ingestion enforces
+    # well-formed datetimes
+    # upstream - the dominant FAIL case is NULL. ~6% nulls give SQ4
     # real failures to detect in mock mode.
     expected_ship_date = [
         datetime(2024, 1, 1) + timedelta(days=int(RNG.integers(30, 900)))

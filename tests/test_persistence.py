@@ -1,8 +1,8 @@
 """Tests for the persistence layer (src/persistence.py, F0).
 
-Covers identity resolution, the three backends (Local / Snowflake / Null),
-backend selection, the fire-and-forget domain API, and the new
-``SnowflakeClient.execute`` write path.
+Covers identity resolution, the three backends (Local / Databricks / Null),
+backend selection, the fire-and-forget domain API, and the
+``DatabricksClient.execute`` write path.
 """
 from __future__ import annotations
 
@@ -38,33 +38,43 @@ def local_pers(tmp_path, monkeypatch):
 # ================================================================== identity
 
 def test_current_username_falls_back_to_os_user(local_pers, monkeypatch):
-    import src.snowflake_client as sfc
-    monkeypatch.setattr(sfc, "_active_snowpark_session", lambda: None)
+    monkeypatch.setattr(pers, "_forwarded_username", lambda: "")
     monkeypatch.setattr(pers.getpass, "getuser", lambda: "local-dev")
     assert local_pers.current_username() == "local-dev"
 
 
-def test_current_username_uses_snowpark_current_user(local_pers, monkeypatch):
-    import src.snowflake_client as sfc
-    session = MagicMock()
-    session.sql.return_value.collect.return_value = [("SNOW_USER",)]
-    monkeypatch.setattr(sfc, "_active_snowpark_session", lambda: session)
-    assert local_pers.current_username() == "SNOW_USER"
-    session.sql.assert_called_once_with("SELECT CURRENT_USER()")
+def test_current_username_uses_forwarded_app_identity(local_pers, monkeypatch):
+    """Inside Databricks Apps the viewer identity forwarded by the platform
+    (X-Forwarded-* headers) wins over the container OS user."""
+    monkeypatch.setattr(pers, "_forwarded_username", lambda: "viewer@corp.com")
+    monkeypatch.setattr(pers.getpass, "getuser", lambda: "container-user")
+    assert local_pers.current_username() == "viewer@corp.com"
 
 
-def test_current_username_session_failure_falls_back(local_pers, monkeypatch):
-    import src.snowflake_client as sfc
-    session = MagicMock()
-    session.sql.side_effect = RuntimeError("no warehouse")
-    monkeypatch.setattr(sfc, "_active_snowpark_session", lambda: session)
-    monkeypatch.setattr(pers.getpass, "getuser", lambda: "fallback-user")
-    assert local_pers.current_username() == "fallback-user"
+def test_forwarded_username_reads_streamlit_headers(local_pers, monkeypatch):
+    """``_forwarded_username`` resolves the first populated X-Forwarded-*
+    header via ``st.context.headers`` and returns "" outside a request."""
+    import sys
+    import types
+
+    fake_st = types.SimpleNamespace(
+        context=types.SimpleNamespace(headers={
+            "X-Forwarded-Preferred-Username": "pref.user@corp.com",
+            "X-Forwarded-Email": "mail@corp.com",
+        })
+    )
+    monkeypatch.setitem(sys.modules, "streamlit", fake_st)
+    assert pers._forwarded_username() == "pref.user@corp.com"
+
+    fake_st.context.headers = {"X-Forwarded-Email": "mail@corp.com"}
+    assert pers._forwarded_username() == "mail@corp.com"
+
+    fake_st.context.headers = {}
+    assert pers._forwarded_username() == ""
 
 
 def test_current_username_unknown_when_everything_fails(local_pers, monkeypatch):
-    import src.snowflake_client as sfc
-    monkeypatch.setattr(sfc, "_active_snowpark_session", lambda: None)
+    monkeypatch.setattr(pers, "_forwarded_username", lambda: "")
 
     def _boom():
         raise OSError("no login")
@@ -73,8 +83,7 @@ def test_current_username_unknown_when_everything_fails(local_pers, monkeypatch)
 
 
 def test_current_username_is_cached_until_reset(local_pers, monkeypatch):
-    import src.snowflake_client as sfc
-    monkeypatch.setattr(sfc, "_active_snowpark_session", lambda: None)
+    monkeypatch.setattr(pers, "_forwarded_username", lambda: "")
     calls = []
 
     def _user():
@@ -132,12 +141,12 @@ def test_get_store_off_yields_null_store(local_pers, monkeypatch):
     assert store.load("runs") == []
 
 
-def test_get_store_snowflake_backend(local_pers, monkeypatch):
+def test_get_store_databricks_backend(local_pers, monkeypatch):
     monkeypatch.setattr(pers, "SETTINGS", Settings(
-        data_source="snowflake", persistence_backend="snowflake",
+        data_source="databricks", persistence_backend="databricks",
     ))
     pers.reset_store()
-    assert isinstance(pers.get_store(), pers.SnowflakeStore)
+    assert isinstance(pers.get_store(), pers.DatabricksStore)
 
 
 def test_get_store_unknown_backend_falls_back_to_local(local_pers, monkeypatch,
@@ -169,8 +178,7 @@ def test_get_store_default_dir_used_when_store_dir_empty(local_pers, monkeypatch
 # ================================================================ domain API
 
 def test_save_run_stamps_ts_and_username(local_pers, monkeypatch):
-    import src.snowflake_client as sfc
-    monkeypatch.setattr(sfc, "_active_snowpark_session", lambda: None)
+    monkeypatch.setattr(pers, "_forwarded_username", lambda: "")
     monkeypatch.setattr(pers.getpass, "getuser", lambda: "alex")
     assert local_pers.save_run("EPT", "cost_estimate", {"overall": 91.5},
                                config_hash="abc123")
@@ -242,102 +250,102 @@ def test_domain_api_is_fire_and_forget(local_pers, monkeypatch):
     assert local_pers.list_project_versions() == []
 
 
-# ============================================================ SnowflakeStore
+# ============================================================ DatabricksStore
 
 @pytest.fixture
-def fake_sf_client(monkeypatch):
-    import src.snowflake_client as sfc
+def fake_dbx_client(monkeypatch):
+    import src.databricks_client as dbc
     client = MagicMock()
-    monkeypatch.setattr(sfc, "get_shared_client", lambda: client)
+    monkeypatch.setattr(dbc, "get_shared_client", lambda: client)
     monkeypatch.setattr(pers, "SETTINGS", Settings(
-        data_source="snowflake", persistence_backend="snowflake",
-        sf_database="APPDB", sf_state_schema="DQS_APP_STATE",
+        data_source="databricks", persistence_backend="databricks",
+        dbx_catalog="APPCAT", dbx_state_schema="DQS_APP_STATE",
     ))
     pers.reset_store()
     yield client
     pers.reset_store()
 
 
-def test_snowflake_store_append_binds_columns_and_payload(fake_sf_client):
-    store = pers.SnowflakeStore()
+def test_databricks_store_append_binds_columns_and_payload(fake_dbx_client):
+    store = pers.DatabricksStore()
     record = {
         "ts": "2026-07-21T12:00:00+00:00", "username": "u",
         "event_type": "export", "domain_code": "quality",
         "payload": {"format": "csv"},
     }
     store.append("events", record)
-    sql, values = fake_sf_client.execute.call_args[0]
-    assert "APPDB.DQS_APP_STATE.DQS_EVENTS" in sql
-    assert "PARSE_JSON(%s)" in sql
+    sql, values = fake_dbx_client.execute.call_args[0]
+    assert "APPCAT.DQS_APP_STATE.DQS_EVENTS" in sql
+    # Payload travels as a JSON string bound like every other value -
+    # 4 promoted columns + PAYLOAD = 5 placeholders, no PARSE_JSON.
+    assert sql.count("%s") == 5
+    assert "PARSE_JSON" not in sql
     assert values[:4] == ["2026-07-21T12:00:00+00:00", "u", "export", "quality"]
     assert json.loads(values[4]) == record
 
 
-def test_snowflake_store_load_parses_payloads(fake_sf_client):
-    fake_sf_client.fetch_query.return_value = pd.DataFrame({
+def test_databricks_store_state_schema_defaults_to_data_schema(
+    fake_dbx_client, monkeypatch,
+):
+    """Empty DQS_STATE_SCHEMA means the DQS_* tables live next to the data
+    tables in the configured schema."""
+    monkeypatch.setattr(pers, "SETTINGS", Settings(
+        data_source="databricks", persistence_backend="databricks",
+        dbx_catalog="APPCAT", dbx_schema="APPSCHEMA", dbx_state_schema="",
+    ))
+    store = pers.DatabricksStore()
+    store.append("events", {"ts": "t", "username": "u"})
+    sql, _ = fake_dbx_client.execute.call_args[0]
+    assert "APPCAT.APPSCHEMA.DQS_EVENTS" in sql
+
+
+def test_databricks_store_load_parses_payloads(fake_dbx_client):
+    fake_dbx_client.fetch_query.return_value = pd.DataFrame({
         "PAYLOAD": [
-            json.dumps({"a": 1}),      # string payload (connector path)
-            {"a": 2},                  # already-parsed dict (snowpark path)
+            json.dumps({"a": 1}),      # string payload (normal path)
+            {"a": 2},                  # already-parsed dict (defensive)
             "{broken",                 # unparsable -> skipped with warning
         ],
     })
-    out = pers.SnowflakeStore().load("runs")
+    out = pers.DatabricksStore().load("runs")
     assert out == [{"a": 1}, {"a": 2}]
-    sql = fake_sf_client.fetch_query.call_args[0][0]
-    assert "APPDB.DQS_APP_STATE.DQS_RUNS" in sql
+    sql = fake_dbx_client.fetch_query.call_args[0][0]
+    assert "APPCAT.DQS_APP_STATE.DQS_RUNS" in sql
     assert "ORDER BY TS" in sql
 
 
-def test_snowflake_backend_end_to_end_through_domain_api(fake_sf_client, monkeypatch):
-    import src.snowflake_client as sfc
-    monkeypatch.setattr(sfc, "_active_snowpark_session", lambda: None)
+def test_databricks_backend_end_to_end_through_domain_api(fake_dbx_client, monkeypatch):
+    monkeypatch.setattr(pers, "_forwarded_username", lambda: "")
     monkeypatch.setattr(pers.getpass, "getuser", lambda: "u")
     pers.reset_identity_cache()
     assert pers.save_run("EPT", "d", {"score": 88.0}, config_hash="h1")
-    assert fake_sf_client.execute.called
-    sql, values = fake_sf_client.execute.call_args[0]
+    assert fake_dbx_client.execute.called
+    sql, values = fake_dbx_client.execute.call_args[0]
     assert "DQS_RUNS" in sql
     assert "EPT" in values
 
 
-# ==================================================== SnowflakeClient.execute
+# =================================================== DatabricksClient.execute
 
 def _client_with_fake_conn():
-    from src.snowflake_client import SnowflakeClient
-    client = SnowflakeClient()
+    from src.databricks_client import DatabricksClient
+    client = DatabricksClient()
     conn = MagicMock()
     client._conn = conn
     return client, conn
 
 
-def test_client_execute_connector_with_params():
+def test_client_execute_translates_placeholders_to_named_params():
     client, conn = _client_with_fake_conn()
     client.execute("INSERT INTO T VALUES (%s, %s)", ["a", 1])
     cur = conn.cursor.return_value
-    cur.execute.assert_called_once_with("INSERT INTO T VALUES (%s, %s)", ["a", 1])
+    cur.execute.assert_called_once_with(
+        "INSERT INTO T VALUES (:p0, :p1)", {"p0": "a", "p1": 1}
+    )
     cur.close.assert_called_once()
 
 
-def test_client_execute_connector_without_params():
+def test_client_execute_without_params():
     client, conn = _client_with_fake_conn()
     client.execute("DELETE FROM NOTHING")
     conn.cursor.return_value.execute.assert_called_once_with("DELETE FROM NOTHING")
-
-
-def test_client_execute_snowpark_translates_placeholders():
-    from src.snowflake_client import SnowflakeClient
-    client = SnowflakeClient()
-    session = MagicMock()
-    client._session = session
-    client.execute("INSERT INTO T VALUES (%s)", ["x"])
-    session.sql.assert_called_once_with("INSERT INTO T VALUES (?)", params=["x"])
-    session.sql.return_value.collect.assert_called_once()
-
-
-def test_client_execute_snowpark_without_params():
-    from src.snowflake_client import SnowflakeClient
-    client = SnowflakeClient()
-    session = MagicMock()
-    client._session = session
-    client.execute("CREATE TABLE X (A INT)")
-    session.sql.assert_called_once_with("CREATE TABLE X (A INT)")

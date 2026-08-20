@@ -29,13 +29,14 @@ The app opens on a **mode picker** (`mode_selection`, the entry step):
 Two data-source modes via `DATA_SOURCE`:
 
 - `mock`: synthetic data from `src/mock_data.py` (default, deterministic).
-- `snowflake`: real Snowflake fetch through `src/snowflake_client.py`, which has
-  **two interchangeable backends**: the in-platform **Snowpark session**
-  (`get_active_session()`) when running inside **Streamlit in Snowflake**, and
-  `snowflake.connector` + `externalbrowser` SSO as the **local-dev fallback**.
-  The backend is auto-selected; user-supplied filter values are bound
-  server-side either way (qmark `?` for Snowpark, pyformat `%s` for the
-  connector — translated internally).
+- `databricks`: real fetch through `src/databricks_client.py`, which connects
+  to a **Databricks SQL Warehouse** (`databricks-sql-connector`) against one
+  Unity Catalog namespace. Auth is **headless** via `databricks.sdk.core.Config`:
+  in **Databricks Apps** the platform injects the service principal's OAuth env
+  vars; locally `DATABRICKS_HOST` + `DATABRICKS_TOKEN` come from `.env`. There
+  is no browser-based auth path. Callers still build WHERE fragments with
+  pyformat `%s` placeholders; the client translates them to named parameters
+  (`:p0`, `:p1`, …) bound server-side.
 
 Tests always run against `mock` (an autouse fixture in `tests/conftest.py`
 pins it regardless of the shell `DATA_SOURCE`).
@@ -80,7 +81,7 @@ src/
   telemetry.py                 # adoption/audit metrics (pure aggregation over
                                #   persisted events/runs/versions; never writes)
   reference_data.py            # registry + session-state cache for ref datasets
-  snowflake_client.py          # data layer: Snowpark session (SiS) / connector (local)
+  databricks_client.py         # data layer: SQL Warehouse via databricks-sql-connector
   mock_data.py                 # deterministic synthetic data builders
   ml_lab.py                    # algorithms used by Step 7
   custom_dqr_engine.py         # SLIM re-export of src/custom_dqr/*
@@ -186,21 +187,24 @@ The `Makefile` exposes `install / run / test / clean`. CI
 `ruff check`, then `pytest` with `--cov-fail-under=90` (current
 coverage is ~97%).
 
-### Deploying to Streamlit in Snowflake (SiS)
+### Deploying to Databricks Apps
 
-Local `streamlit run` is the dev/demo path. **Production runs as Streamlit in
-Snowflake**, deployed from this GitHub repo:
+Local `streamlit run` is the dev/demo path. **Production runs as a Databricks
+App** (serverless container), deployed from this GitHub repo:
 
-- Dependencies come from the Snowflake Anaconda channel via
-  [environment.yml](environment.yml) (NOT `requirements*.txt`). Keep the two in
-  rough sync, but `environment.yml` is the production source of truth.
-- The data layer auto-switches to the active Snowpark session inside SiS (no
-  `.env`/connector). See `src/snowflake_client.py`.
-- Reference deployment SQL (GitHub Git integration + a least-privilege read-only
-  role + `CREATE STREAMLIT`) lives in [deploy/](deploy/) — run it in Snowflake
+- The runtime is configured by [app.yaml](app.yaml) at the repo root: start
+  command, env vars, and the SQL Warehouse attached as the `sql-warehouse`
+  app resource (mapped into `DATABRICKS_WAREHOUSE_ID`).
+- Dependencies come from [requirements.txt](requirements.txt) — the single
+  manifest for local dev, CI, and the Apps container.
+- Auth is headless: the platform injects the app service principal's OAuth
+  credentials; there is no `.env` in production. See
+  `src/databricks_client.py`.
+- Reference deployment SQL (least-privilege Unity Catalog grants + the DQS_*
+  app-state DDL) lives in [deploy/databricks/](deploy/databricks/) — run it
   with the privileges noted in [deploy/README.md](deploy/README.md).
 - `pyproject.toml` `target-version` and CI both track Python 3.11 to match the
-  SiS runtime.
+  Databricks Apps runtime.
 
 ## Patterns to follow
 
@@ -290,7 +294,7 @@ comment. The two allowed exceptions are:
    helpers - they MUST return `None` outside a Streamlit run.
 
 ### Vectorize DQR checks
-Standard DQR rules run on potentially large Snowflake frames. Prefer
+Standard DQR rules run on potentially large warehouse frames. Prefer
 pandas string accessors (`.str.fullmatch`, `.str.len`),
 `pd.Series.duplicated`, or numpy operations over `.apply(lambda v: ...)`.
 See `src/dqr_engine.py:_rule_validity` for the regex pattern.
@@ -310,13 +314,14 @@ history, adoption/audit telemetry, saved-project versions). Three rules:
   them and returns `False` / `[]`. A dead store must never break a render.
 - **Append-only**: nothing is ever updated or deleted - a project "save"
   is a new version row, which makes the version list the audit changelog.
-  The Snowflake grants enforce this (INSERT+SELECT only, see
-  `deploy/03_persistence_tables.sql` - a scoped exception to the app's
-  read-only posture documented in `01_least_privilege_role.sql`).
-- **Backend via `DQS_PERSISTENCE`** (`local` / `snowflake` / `off`),
+  The Unity Catalog grants scope this (`MODIFY` on the three DQS_* tables
+  only, see `deploy/databricks/01_grants.sql` - a scoped exception to the
+  app's otherwise read-only posture).
+- **Backend via `DQS_PERSISTENCE`** (`local` / `databricks` / `off`),
   deliberately decoupled from `DATA_SOURCE` so local runs against real
   data keep writing to `.dqs_store/` until the prod tables exist. Writes
-  stamp `ts` + `username` (`CURRENT_USER()` in SiS, OS login locally).
+  stamp `ts` + `username` (the viewer identity forwarded by Databricks
+  Apps via HTTP headers, OS login locally).
 
 Feature code (dashboard history, telemetry, projects) talks only to the
 domain API (`save_run` / `log_event` / `save_project_version` / the
@@ -347,8 +352,9 @@ transition) from `app.py`; the Step 6 export buttons emit `export`. The
 stepper only while inside it) renders the metrics computed by
 `src/telemetry.py` - pure aggregation over persisted events / runs /
 project versions, no writes. In-app authorization is deliberately out of
-scope: who may open the app is governed by Snowflake roles (deploy/);
-the app measures what authorized users did.
+scope: who may open the app is governed by the Databricks app's *Can use*
+permission and the Unity Catalog grants (deploy/); the app measures what
+authorized users did.
 
 ### One-click reuses the Step-by-step builders, it doesn't fork them
 `src/one_click.py` is deliberately thin: `run_one_click` calls the same
@@ -369,7 +375,7 @@ session state + the dashboard.
 
 - `sample_df`: small DataFrame with deliberate quality issues.
 - `_force_mock_data_source` (autouse): pins `SETTINGS.data_source =
-  "mock"` regardless of the shell env, so tests never hit Snowflake.
+  "mock"` regardless of the shell env, so tests never hit Databricks.
 
 Common helpers introduced when modules were partitioned:
 
@@ -471,7 +477,7 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   false-positive errors on call sites that always pass a single string
   column. Affected modules (`src/custom_dqr/_*.py`, `src/dqr_engine.py`,
   `src/profiler.py`, `src/mock_data.py`, `src/data_product_builder.py`,
-  `src/snowflake_client.py`, `src/ml_lab.py`, `src/scorecard.py`,
+  `src/databricks_client.py`, `src/ml_lab.py`, `src/scorecard.py`,
   `src/custom_dqr/_validators.py`) carry a top-of-file `# pyright:`
   pragma silencing the noisy categories
   (`reportArgumentType`, `reportReturnType`, `reportCallIssue`,
@@ -524,7 +530,7 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   `get_active_project_filter().column` into `build_multiple` so the
   filter resolves against the right column for the active domain.
 
-- **Project filter is SQL-pushdown, not in-memory**: in Snowflake mode
+- **Project filter is SQL-pushdown, not in-memory**: in Databricks mode
   `_default_fetcher` builds a per-table fetcher that emits
   `SELECT * FROM primary WHERE filter_column IN (%s, ...)` and, for
   child tables, `WHERE join_key IN (SELECT join_key FROM primary
@@ -534,7 +540,7 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   project whose rows weren't in the first 50k saw an empty data
   product (the original 2026-05 bug for PLANVIEW_ID=1101168). The
   in-memory `_apply_planview_filter` is still called but is a no-op
-  for Snowflake mode (defense for mock, and a safety net). User
+  for Databricks mode (defense for mock, and a safety net). User
   input flows through `_canonicalize_id` and then via parameterized
   `cursor.execute(sql, params)` - never string-concatenated into the
   SQL, so the filter is injection-safe.
@@ -580,7 +586,8 @@ runs on `push` to `main` and on PRs. Steps:
 3. `pytest -q --cov=src --cov=utils --cov=config --cov=ui --cov-report=term`
    with `DATA_SOURCE=mock`.
 
-CI does not itself deploy. **Deployment target is Streamlit in Snowflake**,
-pulled from this GitHub repo via a Snowflake Git integration (see
-[deploy/](deploy/) and the "Deploying to Streamlit in Snowflake" section above).
+CI does not itself deploy. **Deployment target is Databricks Apps**,
+built from this GitHub repo with [app.yaml](app.yaml) as the runtime config
+(see [deploy/README.md](deploy/README.md) and the "Deploying to Databricks
+Apps" section above).
 Locally the app still runs via `streamlit run app.py` for development/demo.

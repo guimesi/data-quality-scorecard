@@ -292,7 +292,7 @@ def test_run_one_click_build_failure_raises(monkeypatch):
 
     monkeypatch.setattr(
         oc, "build_multiple",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("snowflake down")),
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("databricks down")),
     )
     with active_domain("cost_estimate"):
         with pytest.raises(OneClickError, match="Failed to build data products"):

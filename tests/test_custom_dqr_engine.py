@@ -1318,7 +1318,7 @@ def test_acce_ac1_picks_best_available_mapping_for_duplicate_coa(
 def test_acce_ac1_accepts_numeric_coa_column_dtype(
     _a1_coa_master_with_known_groups,
 ):
-    """ACCE's ``COA`` may arrive as an int64 column when Snowflake casts
+    """ACCE's ``COA`` may arrive as an int64 column when the warehouse casts
     the numeric code. Stringify-then-strip on both sides of the lookup
     must keep the join working - otherwise mock vs prod dtypes would
     silently produce all-NaN lookups."""
@@ -2034,7 +2034,7 @@ def test_acce_ac3_passes_rows_whose_iso_or_sab_is_invalid(monkeypatch):
 def test_acce_ac3_accepts_numeric_coa_column_dtype(
     _ac3_coa_master_with_population,
 ):
-    """COA may arrive from Snowflake as a numeric column. Stringify-
+    """COA may arrive from the warehouse as a numeric column. Stringify-
     then-strip-then-truncate on both sides of the lookup must keep
     the join working - otherwise mock vs prod dtypes would silently
     produce all-NaN lookups and the rule would short-circuit to PASS."""
@@ -7892,7 +7892,7 @@ def test_ept_e5_word_boundary_excludes_false_positives():
 
 
 def test_ept_e5_treats_string_numerics_correctly():
-    """Numeric columns may arrive as strings (CSV / Snowflake VARCHAR);
+    """Numeric columns may arrive as strings (CSV / warehouse VARCHAR);
     ``pd.to_numeric`` coerces them, so the rule still distinguishes
     populated cost from missing hours."""
     from src.custom_dqr_engine import check_ept_e5
@@ -8200,7 +8200,7 @@ def test_ept_e6_empty_dataframe_returns_empty_pass_series():
 
 
 def test_ept_e6_treats_string_numerics_correctly():
-    """Numeric columns may arrive as strings (CSV / Snowflake VARCHAR);
+    """Numeric columns may arrive as strings (CSV / warehouse VARCHAR);
     ``pd.to_numeric`` coerces them so the aggregation still works."""
     from src.custom_dqr_engine import check_ept_e6
     rows = _e6_normal_population(n=6, ratio=50.0)
@@ -8666,7 +8666,7 @@ def test_prefetch_records_error_when_loader_raises():
         "import streamlit as st\n"
         "import src.reference_data as ref\n"
         "def boom():\n"
-        "    raise RuntimeError('snowflake auth blew up')\n"
+        "    raise RuntimeError('databricks auth blew up')\n"
         "ref._REGISTRY['BROKEN'] = boom\n"
         "ref.prefetch_reference_datasets(['BROKEN'])\n"
         "st.session_state['err'] = ref.get_reference_dataset_error('BROKEN')\n"
@@ -8676,7 +8676,7 @@ def test_prefetch_records_error_when_loader_raises():
     at.run()
     assert at.session_state["df_is_none"] is True
     err = at.session_state["err"]
-    assert err and "snowflake auth blew up" in err
+    assert err and "databricks auth blew up" in err
     assert "RuntimeError" in err
 
 
@@ -8714,7 +8714,7 @@ def test_e7_exception_includes_cached_loader_error():
 def test_get_reference_dataset_uses_session_cache():
     """Once prefetched, subsequent calls hit the cache instead of the
     loader, this is what prevents Step 6 / Restart from re-opening the
-    Snowflake connection."""
+    Databricks connection."""
     from streamlit.testing.v1 import AppTest
 
     code = (

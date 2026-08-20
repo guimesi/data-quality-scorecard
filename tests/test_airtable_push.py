@@ -19,7 +19,6 @@ import pytest
 
 import src.airtable_push as ap
 
-
 # ==================================================================== fakes
 
 def _settings(**overrides):

@@ -11,16 +11,15 @@ One interface, three interchangeable backends selected by
 - ``local`` (default) - JSON-lines files under ``.dqs_store/`` at the
   project root (git-ignored). Used until the DQS_* tables exist in
   production; also what local development and tests exercise.
-- ``snowflake`` - append-only ``DQS_RUNS`` / ``DQS_EVENTS`` /
-  ``DQS_PROJECTS`` tables in ``SETTINGS.sf_database``.
-  ``SETTINGS.sf_state_schema`` (DDL + grants in
-  ``deploy/03_persistence_tables.sql``). Writes go through
-  :meth:`src.snowflake_client.SnowflakeClient.execute` so SiS (Snowpark)
-  and local connector runs share one code path.
+- ``databricks`` - append-only ``DQS_RUNS`` / ``DQS_EVENTS`` /
+  ``DQS_PROJECTS`` tables in ``SETTINGS.dbx_catalog``.
+  ``SETTINGS.dbx_state_schema`` (DDL + grants in
+  ``deploy/databricks/02_persistence_tables.sql``). Writes go through
+  :meth:`src.databricks_client.DatabricksClient.execute`.
 - ``off`` - a no-op store: nothing is persisted, reads return empty.
 
 The backend is deliberately decoupled from ``DATA_SOURCE``: a local run
-can read real Snowflake data while still persisting app state to local
+can read real Databricks data while still persisting app state to local
 files.
 
 **Fire-and-forget contract**: every public function catches all storage
@@ -48,12 +47,12 @@ logger = logging.getLogger(__name__)
 _ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_STORE_DIR = _ROOT / ".dqs_store"
 
-# Record kinds and, for the Snowflake backend, their tables and the record
+# Record kinds and, for the Databricks backend, their tables and the record
 # keys promoted to real (queryable) columns; everything else about a record
-# travels in the PAYLOAD VARIANT column.
+# travels in the PAYLOAD column (JSON as STRING).
 _KINDS = ("runs", "events", "projects")
-_SF_TABLES = {"runs": "DQS_RUNS", "events": "DQS_EVENTS", "projects": "DQS_PROJECTS"}
-_SF_COLUMNS = {
+_DBX_TABLES = {"runs": "DQS_RUNS", "events": "DQS_EVENTS", "projects": "DQS_PROJECTS"}
+_DBX_COLUMNS = {
     "runs": ["ts", "username", "domain_code", "dp_code", "config_hash"],
     "events": ["ts", "username", "event_type", "domain_code"],
     "projects": ["ts", "username", "project_name", "version", "change_summary"],
@@ -71,29 +70,45 @@ def _utc_now_iso() -> str:
 _CACHED_USERNAME: Optional[str] = None
 
 
+def _forwarded_username() -> str:
+    """End-user identity forwarded by Databricks Apps, or ``""``.
+
+    Databricks Apps authenticates every viewer and forwards their identity
+    to the app process as HTTP headers (``X-Forwarded-Preferred-Username``
+    / ``X-Forwarded-Email`` / ``X-Forwarded-User``). Streamlit >= 1.37
+    exposes request headers via ``st.context.headers``. Outside a request
+    context (unit tests, bare scripts) this simply returns ``""``.
+    """
+    try:
+        import streamlit as st
+        headers = st.context.headers
+        for key in (
+            "X-Forwarded-Preferred-Username",
+            "X-Forwarded-Email",
+            "X-Forwarded-User",
+        ):
+            value = headers.get(key)
+            if value:
+                return str(value)
+    except Exception:  # nosec B110 - best-effort identity outside a request
+        pass
+    return ""
+
+
 def current_username() -> str:
     """Best-effort identity of the person driving this app process.
 
-    Inside Streamlit in Snowflake the Snowpark session answers
-    ``CURRENT_USER()`` - the authenticated Snowflake user. Locally there is
-    no Snowflake identity, so the OS login is used. Falls back to
-    ``"unknown"`` rather than raising; cached for the process lifetime
-    (:func:`reset_identity_cache` clears it, for tests).
+    Inside Databricks Apps the platform forwards the authenticated
+    viewer's identity via HTTP headers (see :func:`_forwarded_username`).
+    Locally there is no forwarded identity, so the OS login is used.
+    Falls back to ``"unknown"`` rather than raising; cached for the
+    process lifetime (:func:`reset_identity_cache` clears it, for tests).
     """
     global _CACHED_USERNAME
     if _CACHED_USERNAME is not None:
         return _CACHED_USERNAME
 
-    name = ""
-    # Local import: keeps mock mode importable without snowflake packages.
-    from src.snowflake_client import _active_snowpark_session
-
-    session = _active_snowpark_session()
-    if session is not None:
-        try:
-            name = str(session.sql("SELECT CURRENT_USER()").collect()[0][0])
-        except Exception:
-            logger.warning("CURRENT_USER() lookup failed", exc_info=True)
+    name = _forwarded_username()
     if not name:
         try:
             name = getpass.getuser()
@@ -150,30 +165,32 @@ class LocalStore:
         return out
 
 
-class SnowflakeStore:
-    """Append-only DQS_* tables (``deploy/03_persistence_tables.sql``).
+class DatabricksStore:
+    """Append-only DQS_* tables (``deploy/databricks/02_persistence_tables.sql``).
 
     Indexed record keys become real columns; the full record also travels
-    in the PAYLOAD VARIANT column, so ``load`` can reconstruct the exact
-    dict that was appended (single source of truth, no column drift).
+    in the PAYLOAD column (JSON serialized to STRING), so ``load`` can
+    reconstruct the exact dict that was appended (single source of truth,
+    no column drift).
     """
 
     def _qualified(self, kind: str) -> str:
-        return f"{SETTINGS.sf_database}.{SETTINGS.sf_state_schema}.{_SF_TABLES[kind]}"
+        schema = SETTINGS.dbx_state_schema or SETTINGS.dbx_schema
+        return f"{SETTINGS.dbx_catalog}.{schema}.{_DBX_TABLES[kind]}"
 
     def _client(self):
-        from src.snowflake_client import get_shared_client
+        from src.databricks_client import get_shared_client
         return get_shared_client()
 
     def append(self, kind: str, record: Dict[str, Any]) -> None:
-        cols = _SF_COLUMNS[kind]
+        cols = _DBX_COLUMNS[kind]
         col_sql = ", ".join(c.upper() for c in cols)
-        placeholders = ", ".join(["%s"] * len(cols))
-        # nosec B608 - table/columns are internal config, never user input;
-        # every value is bound server-side.
+        placeholders = ", ".join(["%s"] * (len(cols) + 1))
+        # Table/columns are internal config, never user input; every value
+        # is bound server-side.
         sql = (
-            f"INSERT INTO {self._qualified(kind)} ({col_sql}, PAYLOAD) "
-            f"SELECT {placeholders}, PARSE_JSON(%s)"
+            f"INSERT INTO {self._qualified(kind)} ({col_sql}, PAYLOAD) "  # nosec B608
+            f"VALUES ({placeholders})"
         )
         values = [record.get(c) for c in cols]
         values.append(json.dumps(record, default=str))
@@ -218,8 +235,8 @@ def get_store():
     backend = SETTINGS.persistence_backend
     if backend == "off":
         _STORE = NullStore()
-    elif backend == "snowflake":
-        _STORE = SnowflakeStore()
+    elif backend == "databricks":
+        _STORE = DatabricksStore()
     else:
         if backend != "local":
             logger.warning(

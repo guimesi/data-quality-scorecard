@@ -117,7 +117,7 @@ def _open_project(record: dict) -> None:
     Enters Step-by-step mode so every step stays editable - the user can
     walk back, tweak, and save again as a new version.
     """
-    # Imported lazily: data building pulls pandas/Snowflake machinery this
+    # Imported lazily: data building pulls pandas/Databricks machinery this
     # lightweight entry step doesn't otherwise need.
     from config.domains import get_active_project_filter
     from src.data_product_builder import build_multiple
