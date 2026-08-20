@@ -12,7 +12,10 @@ Two fingerprints drive the dedup:
   (CDEs, rules, params, weights, sources). Stored on the run record so
   readers can tell "the data changed" apart from "the config changed".
 - :func:`result_fingerprint` - hash of the scoring outcome. A rerun with
-  identical config *and* identical result records nothing.
+  identical config *and* identical result records nothing - unless the
+  previous record is older than ``SETTINGS.reverify_hours``, in which
+  case it is re-recorded (marked ``unchanged``) so the trend also shows
+  *verification cadence*: "checked again on day X, still stable".
 
 Snapshots reuse :func:`src.ml_lab.snapshot_scorecard`, so persisted runs
 are directly consumable by the ML Lab's Run History / drift tooling.
@@ -21,9 +24,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from config.settings import SETTINGS
 from src.persistence import list_runs, save_run
+
+logger = logging.getLogger(__name__)
 
 
 def _sha16(payload: Any) -> str:
@@ -90,6 +98,21 @@ def result_fingerprint(result) -> str:
     return _sha16(canonical)
 
 
+def _hours_since(ts: object) -> Optional[float]:
+    """Age in hours of an ISO-8601 timestamp, or ``None`` when unparsable.
+
+    Naive timestamps are assumed UTC (matching the ``_stamp`` writer in
+    :mod:`src.persistence`).
+    """
+    try:
+        then = datetime.fromisoformat(str(ts))
+        if then.tzinfo is None:
+            then = then.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - then).total_seconds() / 3600.0
+    except (TypeError, ValueError):
+        return None
+
+
 def record_run_if_new(dp_code: str, dp, result, config,
                       domain_code: str = "") -> bool:
     """Persist a snapshot of this run unless it duplicates the last one.
@@ -98,6 +121,15 @@ def record_run_if_new(dp_code: str, dp, result, config,
     fingerprint, result fingerprint) of the most recent persisted run for
     this DP - Streamlit reruns of an unchanged dashboard record nothing,
     while either a config edit or a data change records a new run.
+
+    **Re-verify window**: an identical run IS re-recorded once the previous
+    record is older than ``SETTINGS.reverify_hours`` (default 24h), with
+    ``payload["unchanged"] = True``, so the History trend also shows how
+    often a stable scorecard was re-checked. ``DQS_REVERIFY_HOURS=0``
+    disables re-recording (identical runs never re-record). A previous
+    record with an unparsable ``ts`` counts as *recent* - flooding the
+    store is worse than missing one cadence point.
+
     Storage failures degrade to False (persistence is fire-and-forget).
     """
     # Imported lazily: ml_lab pulls optional heavy deps at module import.
@@ -105,15 +137,27 @@ def record_run_if_new(dp_code: str, dp, result, config,
 
     cfg_hash = config_fingerprint(config)
     res_fp = result_fingerprint(result)
+    unchanged = False
     last = list_runs(dp_code=dp_code, limit=1)
     if last:
         prev = last[-1]
         if (prev.get("config_hash") == cfg_hash
                 and (prev.get("payload") or {}).get("result_fingerprint") == res_fp):
-            return False
+            window = SETTINGS.reverify_hours
+            age = _hours_since(prev.get("ts"))
+            if age is None:
+                logger.warning(
+                    "Unparsable ts on previous %s run; treating as recent "
+                    "(no re-record)", dp_code,
+                )
+            if window <= 0 or age is None or age < window:
+                return False
+            unchanged = True
     snapshot = snapshot_scorecard(dp_code, dp, result)
     snapshot["source"] = "auto"
     snapshot["result_fingerprint"] = res_fp
+    if unchanged:
+        snapshot["unchanged"] = True
     return save_run(dp_code, domain_code, snapshot, config_hash=cfg_hash)
 
 

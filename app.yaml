@@ -34,6 +34,10 @@ env:
   # backend does not survive app restarts in the container.
   - name: DQS_PERSISTENCE
     value: "databricks"
+  # Re-record an identical run (marked "unchanged") once the previous
+  # record is this many hours old, so History shows verification cadence.
+  - name: DQS_REVERIFY_HOURS
+    value: "24"
   # Airtable write-back (Step 6 "Send to Airtable"). The token comes from
   # the app secret resource with key "airtable-token" (scope dq-scorecard);
   # the base id is plain config. The button stays hidden until BOTH are

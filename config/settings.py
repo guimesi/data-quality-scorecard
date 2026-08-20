@@ -58,6 +58,13 @@ class Settings:
     # Step 6 shows a drop alert when a DP's score fell by at least this many
     # percentage points versus the previous persisted run.
     drop_alert_pp: float = float(os.getenv("DQS_DROP_ALERT_PP", "5"))
+    # Run-history dedup window (hours). A run identical to the previous one
+    # (same config + same result) is normally not re-recorded; once the
+    # previous record is older than this window, the run is recorded anyway
+    # (marked ``unchanged``) so the History trend shows verification cadence
+    # ("checked on day X, still stable"). 0 disables re-recording entirely
+    # (identical runs are never re-recorded, the pre-window behaviour).
+    reverify_hours: float = float(os.getenv("DQS_REVERIFY_HOURS", "24"))
 
     # Airtable write-back (Step 6 "Send to Airtable"). Empty token or base
     # means "not configured": the UI hides the button and nothing is sent.

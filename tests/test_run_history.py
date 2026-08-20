@@ -116,6 +116,80 @@ def test_record_run_if_new_records_on_data_change():
     assert len(rh.load_history("EPT")) == 2
 
 
+def test_reverify_window_rerecords_identical_run_when_previous_is_old(monkeypatch):
+    """An identical run outside the re-verify window IS recorded, marked
+    ``unchanged``, so the trend shows verification cadence."""
+    cfg = _cfg()
+    df = _df()
+    dp, result = _ept_dp(df), _result(df, cfg)
+    assert rh.record_run_if_new("EPT", dp, result, cfg, "cost_estimate") is True
+    # Previous run is 25h old; default window is 24h.
+    monkeypatch.setattr(rh, "_hours_since", lambda ts: 25.0)
+    assert rh.record_run_if_new("EPT", dp, result, cfg, "cost_estimate") is True
+    history = rh.load_history("EPT")
+    assert len(history) == 2
+    assert "unchanged" not in history[0]["payload"]
+    assert history[1]["payload"]["unchanged"] is True
+    # Fingerprints identical: this is a cadence point, not a change.
+    assert (history[0]["payload"]["result_fingerprint"]
+            == history[1]["payload"]["result_fingerprint"])
+
+
+def test_reverify_window_skips_identical_run_when_previous_is_recent(monkeypatch):
+    """Inside the window the historical dedup behaviour holds."""
+    cfg = _cfg()
+    df = _df()
+    dp, result = _ept_dp(df), _result(df, cfg)
+    assert rh.record_run_if_new("EPT", dp, result, cfg) is True
+    monkeypatch.setattr(rh, "_hours_since", lambda ts: 23.9)
+    assert rh.record_run_if_new("EPT", dp, result, cfg) is False
+    assert len(rh.load_history("EPT")) == 1
+
+
+def test_reverify_window_zero_disables_rerecording(monkeypatch):
+    """DQS_REVERIFY_HOURS=0 restores the pre-window behaviour: identical
+    runs are never re-recorded, however old the previous record is."""
+    from config.settings import Settings
+
+    monkeypatch.setattr(rh, "SETTINGS", Settings(reverify_hours=0))
+    cfg = _cfg()
+    df = _df()
+    dp, result = _ept_dp(df), _result(df, cfg)
+    assert rh.record_run_if_new("EPT", dp, result, cfg) is True
+    monkeypatch.setattr(rh, "_hours_since", lambda ts: 9999.0)
+    assert rh.record_run_if_new("EPT", dp, result, cfg) is False
+    assert len(rh.load_history("EPT")) == 1
+
+
+def test_reverify_treats_unparsable_ts_as_recent(monkeypatch):
+    """A corrupt previous ``ts`` must not open the floodgates: identical
+    runs stay deduped (and a real change still records)."""
+    cfg = _cfg()
+    df = _df()
+    dp, result = _ept_dp(df), _result(df, cfg)
+    assert rh.record_run_if_new("EPT", dp, result, cfg) is True
+    # Corrupt the persisted ts on disk-level by patching the parser.
+    monkeypatch.setattr(rh, "_hours_since", lambda ts: None)
+    assert rh.record_run_if_new("EPT", dp, result, cfg) is False
+    df2 = _df(fail_rows=2)
+    assert rh.record_run_if_new("EPT", _ept_dp(df2), _result(df2, cfg), cfg) is True
+
+
+def test_hours_since_parses_iso_and_rejects_garbage():
+    from datetime import datetime, timedelta, timezone
+
+    recent = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    age = rh._hours_since(recent)
+    assert age is not None and 1.9 < age < 2.1
+    # Naive timestamps are assumed UTC (matches the persistence writer).
+    naive = (datetime.now(timezone.utc) - timedelta(hours=30)).replace(
+        tzinfo=None).isoformat()
+    age_naive = rh._hours_since(naive)
+    assert age_naive is not None and 29.9 < age_naive < 30.1
+    assert rh._hours_since("not-a-date") is None
+    assert rh._hours_since(None) is None
+
+
 def test_record_run_if_new_records_on_config_change():
     df = _df()
     dp = _ept_dp(df)
