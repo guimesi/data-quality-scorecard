@@ -34,3 +34,11 @@ env:
   # backend does not survive app restarts in the container.
   - name: DQS_PERSISTENCE
     value: "databricks"
+  # Airtable write-back (Step 6 "Send to Airtable"). The token comes from
+  # the app secret resource with key "airtable-token" (scope dq-scorecard);
+  # the base id is plain config. The button stays hidden until BOTH are
+  # non-empty at runtime.
+  - name: AIRTABLE_TOKEN
+    valueFrom: "airtable-token"
+  - name: AIRTABLE_BASE_ID
+    value: ""  # TODO: set to the Airtable base id (appXXXXXXXXXXXXXX)
