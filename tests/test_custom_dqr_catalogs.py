@@ -54,7 +54,7 @@ def test_acce_catalog_is_non_empty_list_of_custom_rule_defs():
 
 
 def test_sqs_catalog_is_non_empty_list_of_custom_rule_defs():
-    """SQS (Quality domain) ships its first curated rule (SQ4)."""
+    """SQS (Quality domain) ships the dq-inspection-12 / -13 pair."""
     assert SQS_RULES
     assert all(isinstance(r, CustomRuleDef) for r in SQS_RULES)
 

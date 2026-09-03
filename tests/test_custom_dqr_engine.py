@@ -9033,821 +9033,116 @@ def test_check_supports_params_now_true_for_every_outlier_rule():
 
 
 # =============================================================================
-# SQ4: Valid Date (Quality domain - SQS - EXPECTED_SHIP_DATE)
+# dq-inspection-12: Mandatory on Completion (Quality domain - SQS)
 # =============================================================================
 
-def test_sqs_sq4_required_columns_constant():
+def test_sqs_dq_inspection_12_required_columns_constant():
     """Constant exported from the engine matches the catalog metadata."""
-    from src.custom_dqr_engine import SQS_SQ4_REQUIRED_COLUMNS
+    from src.custom_dqr_engine import SQS_DQ_INSPECTION_12_REQUIRED_COLUMNS
 
-    assert SQS_SQ4_REQUIRED_COLUMNS == {
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
-    }
-
-
-def test_sqs_sq4_passes_when_all_dates_valid():
-    """Row passes when ``EXPECTED_SHIP_DATE`` is a valid calendar date."""
-    from src.custom_dqr_engine import check_sqs_sq4
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime([
-            "2024-06-15", "2025-01-01", "2024-12-31"
-        ]),
-    })
-    assert check_sqs_sq4(df).tolist() == [True, True, True]
-
-
-def test_sqs_sq4_fails_when_null():
-    """NULL ``EXPECTED_SHIP_DATE`` (the dominant production failure mode)
-    must FAIL."""
-    from src.custom_dqr_engine import check_sqs_sq4
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": [pd.Timestamp("2024-06-15"), None, pd.NaT],
-    })
-    assert check_sqs_sq4(df).tolist() == [True, False, False]
-
-
-def test_sqs_sq4_fails_on_unparseable_string():
-    """Strings that don't parse as a calendar date land as NaT after
-    ``pd.to_datetime(errors="coerce")`` and FAIL - mirrors the SQL spec's
-    ``TRY_TO_DATE(TO_VARCHAR(..., 'YYYY-MM-DD'), 'YYYY-MM-DD')`` round-trip
-    for values that arrive via VARIANT / string paths."""
-    from src.custom_dqr_engine import check_sqs_sq4
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": ["2024-06-15", "not-a-date", "2024-13-40"],
-    })
-    assert check_sqs_sq4(df).tolist() == [True, False, False]
-
-
-def test_sqs_sq4_passes_when_strings_parse():
-    """ISO-format date strings parse cleanly and PASS."""
-    from src.custom_dqr_engine import check_sqs_sq4
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": ["2024-06-15", "2025-01-01"],
-    })
-    assert check_sqs_sq4(df).tolist() == [True, True]
-
-
-def test_sqs_sq4_fails_for_all_rows_when_column_missing():
-    """Schema-level missing column → rule FAILS for every row (does not
-    raise) - same convention as the other custom rules."""
-    from src.custom_dqr_engine import check_sqs_sq4
-
-    df = pd.DataFrame({"OTHER_COL": ["x", "y"]})
-    assert check_sqs_sq4(df).tolist() == [False, False]
-
-
-def test_sqs_sq4_handles_empty_dataframe():
-    from src.custom_dqr_engine import check_sqs_sq4
-
-    df = pd.DataFrame({"EXPECTED_SHIP_DATE": pd.to_datetime([])})
-    out = check_sqs_sq4(df)
-    assert isinstance(out, pd.Series)
-    assert len(out) == 0
-
-
-def test_sqs_sq4_dispatches_through_quality_domain(monkeypatch):
-    """End-to-end: switching to Quality and dispatching against SQS surfaces
-    SQ4 with the correct row verdicts."""
-    from config.domains import DOMAIN_QUALITY
-    from src.custom_dqr_engine import evaluate_custom_rules
-    from src.models import CustomDQRAssignment
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": [pd.Timestamp("2024-06-15"), None],
-    })
-    assignments = [CustomDQRAssignment(rule_id="SQ4", weight=100.0)]
-    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
-    assert list(out.columns) == ["SQ4"]
-    assert out["SQ4"].tolist() == [True, False]
-    assert not_evaluated == {}
-
-
-# =============================================================================
-# SQ5: Not after PO Required Ship Date (Business Rule)
-# =============================================================================
-
-def test_sqs_sq5_required_columns_constant():
-    """Constant exported from the engine matches the catalog metadata."""
-    from src.custom_dqr_engine import SQS_SQ5_REQUIRED_COLUMNS
-
-    assert SQS_SQ5_REQUIRED_COLUMNS == {
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
-        "PO Required Ship Date": "PO_REQUIRED_SHIP_DATE",
-    }
-
-
-def test_sqs_sq5_passes_when_expected_before_po_required():
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime(["2024-06-10"]),
-        "PO_REQUIRED_SHIP_DATE": pd.to_datetime(["2024-06-15"]),
-    })
-    assert check_sqs_sq5(df).tolist() == [True]
-
-
-def test_sqs_sq5_passes_when_dates_are_equal():
-    """The comparison is strict `>` per spec - equal dates are compliant."""
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime(["2024-06-15"]),
-        "PO_REQUIRED_SHIP_DATE": pd.to_datetime(["2024-06-15"]),
-    })
-    assert check_sqs_sq5(df).tolist() == [True]
-
-
-def test_sqs_sq5_fails_when_expected_after_po_required():
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime(["2024-06-20"]),
-        "PO_REQUIRED_SHIP_DATE": pd.to_datetime(["2024-06-15"]),
-    })
-    assert check_sqs_sq5(df).tolist() == [False]
-
-
-def test_sqs_sq5_passes_when_either_side_is_null():
-    """NULL on either side → PASS (the rule cannot be evaluated without
-    both values; SQ4 covers the completeness gap separately)."""
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": [None, pd.Timestamp("2024-06-10"), None],
-        "PO_REQUIRED_SHIP_DATE": [pd.Timestamp("2024-06-15"), None, None],
-    })
-    assert check_sqs_sq5(df).tolist() == [True, True, True]
-
-
-@pytest.mark.filterwarnings(
-    "ignore:Could not infer format.*:UserWarning"
-)
-def test_sqs_sq5_passes_when_unparseable_string():
-    """Unparseable strings land as NaT after `pd.to_datetime(errors=
-    'coerce')` and PASS - SQ4 owns the validity check. The pandas
-    format-inference warning is suppressed because the rule intentionally
-    runs with ``errors='coerce'`` and treats parse failures as NULL."""
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": ["not-a-date", "2024-06-20"],
-        "PO_REQUIRED_SHIP_DATE": ["2024-06-15", "not-a-date"],
-    })
-    assert check_sqs_sq5(df).tolist() == [True, True]
-
-
-def test_sqs_sq5_mixed_rows():
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime([
-            "2024-06-10", "2024-06-15", "2024-06-20", "2024-06-25",
-        ]),
-        "PO_REQUIRED_SHIP_DATE": pd.to_datetime([
-            "2024-06-15", "2024-06-15", "2024-06-15", "2024-06-20",
-        ]),
-    })
-    # before / equal / after / after
-    assert check_sqs_sq5(df).tolist() == [True, True, False, False]
-
-
-def test_sqs_sq5_fails_for_all_rows_when_either_column_missing():
-    """Schema-level missing column → rule FAILS for every row (same
-    convention as the other custom rules - it's the structural-gap
-    signal, distinct from the per-row NULL-handling PASS)."""
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df_missing_po = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime(["2024-06-10"]),
-    })
-    assert check_sqs_sq5(df_missing_po).tolist() == [False]
-
-    df_missing_expected = pd.DataFrame({
-        "PO_REQUIRED_SHIP_DATE": pd.to_datetime(["2024-06-15"]),
-    })
-    assert check_sqs_sq5(df_missing_expected).tolist() == [False]
-
-
-def test_sqs_sq5_handles_empty_dataframe():
-    from src.custom_dqr_engine import check_sqs_sq5
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime([]),
-        "PO_REQUIRED_SHIP_DATE": pd.to_datetime([]),
-    })
-    out = check_sqs_sq5(df)
-    assert isinstance(out, pd.Series)
-    assert len(out) == 0
-
-
-def test_sqs_sq5_dispatches_through_quality_domain(monkeypatch):
-    """End-to-end: switching to Quality and dispatching against SQS
-    surfaces SQ5 with the correct row verdicts."""
-    from config.domains import DOMAIN_QUALITY
-    from src.custom_dqr_engine import evaluate_custom_rules
-    from src.models import CustomDQRAssignment
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-
-    df = pd.DataFrame({
-        "EXPECTED_SHIP_DATE": pd.to_datetime(["2024-06-10", "2024-06-20"]),
-        "PO_REQUIRED_SHIP_DATE": pd.to_datetime(["2024-06-15", "2024-06-15"]),
-    })
-    assignments = [CustomDQRAssignment(rule_id="SQ5", weight=100.0)]
-    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
-    assert list(out.columns) == ["SQ5"]
-    assert out["SQ5"].tolist() == [True, False]
-    assert not_evaluated == {}
-
-
-# =============================================================================
-# SQ6: INSPECTION_TYPE value in allowed set (Validity)
-# =============================================================================
-
-def test_sqs_sq6_allowed_values_constant():
-    """Allowed-value tuple matches the SQL spec verbatim (case-sensitive)."""
-    from src.custom_dqr_engine import SQS_SQ6_ALLOWED_VALUES
-
-    assert SQS_SQ6_ALLOWED_VALUES == (
-        "Source Inspection",
-        "Supplier Assessment",
-        "Expediting",
-        "Supplemental Inspection",
-    )
-
-
-def test_sqs_sq6_required_columns_constant():
-    from src.custom_dqr_engine import SQS_SQ6_REQUIRED_COLUMNS
-
-    assert SQS_SQ6_REQUIRED_COLUMNS == {
-        "Inspection Type": "INSPECTION_TYPE",
-    }
-
-
-def test_sqs_sq6_passes_for_every_allowed_value():
-    from src.custom_dqr_engine import SQS_SQ6_ALLOWED_VALUES, check_sqs_sq6
-
-    df = pd.DataFrame({"INSPECTION_TYPE": list(SQS_SQ6_ALLOWED_VALUES)})
-    assert check_sqs_sq6(df).tolist() == [True] * len(SQS_SQ6_ALLOWED_VALUES)
-
-
-def test_sqs_sq6_fails_on_null():
-    from src.custom_dqr_engine import check_sqs_sq6
-
-    df = pd.DataFrame({"INSPECTION_TYPE": ["Source Inspection", None, "Expediting"]})
-    assert check_sqs_sq6(df).tolist() == [True, False, True]
-
-
-def test_sqs_sq6_fails_on_case_mismatch():
-    """The match is case-sensitive per the Snowflake ``IN`` operator -
-    ``source inspection`` is FAIL even though it represents the same
-    logical category. This is the documented behaviour, not an accident."""
-    from src.custom_dqr_engine import check_sqs_sq6
-
-    df = pd.DataFrame({
-        "INSPECTION_TYPE": [
-            "Source Inspection",
-            "source inspection",
-            "SOURCE INSPECTION",
-        ]
-    })
-    assert check_sqs_sq6(df).tolist() == [True, False, False]
-
-
-def test_sqs_sq6_fails_on_unexpected_value():
-    from src.custom_dqr_engine import check_sqs_sq6
-
-    df = pd.DataFrame({
-        "INSPECTION_TYPE": ["Source Inspection", "Audit", "Expedite", ""]
-    })
-    # Audit, "Expedite" (typo, not "Expediting"), and empty string all FAIL.
-    assert check_sqs_sq6(df).tolist() == [True, False, False, False]
-
-
-def test_sqs_sq6_fails_for_all_rows_when_column_missing():
-    from src.custom_dqr_engine import check_sqs_sq6
-
-    df = pd.DataFrame({"OTHER_COL": ["x", "y"]})
-    assert check_sqs_sq6(df).tolist() == [False, False]
-
-
-def test_sqs_sq6_handles_empty_dataframe():
-    from src.custom_dqr_engine import check_sqs_sq6
-
-    df = pd.DataFrame({"INSPECTION_TYPE": pd.Series([], dtype=object)})
-    out = check_sqs_sq6(df)
-    assert isinstance(out, pd.Series)
-    assert len(out) == 0
-
-
-def test_sqs_sq6_dispatches_through_quality_domain(monkeypatch):
-    """End-to-end via the dispatcher: switching to Quality and asking for
-    SQ6 surfaces the rule with the correct row verdicts."""
-    from config.domains import DOMAIN_QUALITY
-    from src.custom_dqr_engine import evaluate_custom_rules
-    from src.models import CustomDQRAssignment
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-
-    df = pd.DataFrame({
-        "INSPECTION_TYPE": [
-            "Supplier Assessment",
-            None,
-            "Audit",
-            "Supplemental Inspection",
-        ],
-    })
-    assignments = [CustomDQRAssignment(rule_id="SQ6", weight=100.0)]
-    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
-    assert list(out.columns) == ["SQ6"]
-    assert out["SQ6"].tolist() == [True, False, False, True]
-    assert not_evaluated == {}
-
-
-# =============================================================================
-# SQ7: WORK_CRITICALITY value in allowed set (Validity)
-# =============================================================================
-
-def test_sqs_sq7_allowed_values_constant():
-    """Allowed-value tuple matches the SQL spec verbatim (case-sensitive)."""
-    from src.custom_dqr_engine import SQS_SQ7_ALLOWED_VALUES
-
-    assert SQS_SQ7_ALLOWED_VALUES == (
-        "I - High Critical",
-        "II - Medium Critical",
-        "III - Low Critical",
-        "IV - Non Critical",
-    )
-
-
-def test_sqs_sq7_required_columns_constant():
-    from src.custom_dqr_engine import SQS_SQ7_REQUIRED_COLUMNS
-
-    assert SQS_SQ7_REQUIRED_COLUMNS == {
-        "Work Criticality": "WORK_CRITICALITY",
-    }
-
-
-def test_sqs_sq7_passes_for_every_allowed_value():
-    from src.custom_dqr_engine import SQS_SQ7_ALLOWED_VALUES, check_sqs_sq7
-
-    df = pd.DataFrame({"WORK_CRITICALITY": list(SQS_SQ7_ALLOWED_VALUES)})
-    assert check_sqs_sq7(df).tolist() == [True] * len(SQS_SQ7_ALLOWED_VALUES)
-
-
-def test_sqs_sq7_fails_on_null():
-    from src.custom_dqr_engine import check_sqs_sq7
-
-    df = pd.DataFrame({
-        "WORK_CRITICALITY": ["I - High Critical", None, "IV - Non Critical"]
-    })
-    assert check_sqs_sq7(df).tolist() == [True, False, True]
-
-
-def test_sqs_sq7_fails_on_case_mismatch():
-    """The match is case-sensitive per the Snowflake ``IN`` operator -
-    ``"i - high critical"`` and ``"I - HIGH CRITICAL"`` both FAIL."""
-    from src.custom_dqr_engine import check_sqs_sq7
-
-    df = pd.DataFrame({
-        "WORK_CRITICALITY": [
-            "I - High Critical",
-            "i - high critical",
-            "I - HIGH CRITICAL",
-        ]
-    })
-    assert check_sqs_sq7(df).tolist() == [True, False, False]
-
-
-def test_sqs_sq7_fails_on_empty_string_and_unexpected_value():
-    from src.custom_dqr_engine import check_sqs_sq7
-
-    df = pd.DataFrame({
-        "WORK_CRITICALITY": [
-            "II - Medium Critical",
-            "",
-            "V - Unknown",
-            "High",
-        ]
-    })
-    assert check_sqs_sq7(df).tolist() == [True, False, False, False]
-
-
-def test_sqs_sq7_fails_for_all_rows_when_column_missing():
-    from src.custom_dqr_engine import check_sqs_sq7
-
-    df = pd.DataFrame({"OTHER_COL": ["x", "y"]})
-    assert check_sqs_sq7(df).tolist() == [False, False]
-
-
-def test_sqs_sq7_handles_empty_dataframe():
-    from src.custom_dqr_engine import check_sqs_sq7
-
-    df = pd.DataFrame({"WORK_CRITICALITY": pd.Series([], dtype=object)})
-    out = check_sqs_sq7(df)
-    assert isinstance(out, pd.Series)
-    assert len(out) == 0
-
-
-def test_sqs_sq7_dispatches_through_quality_domain(monkeypatch):
-    """End-to-end via the dispatcher: switching to Quality and asking for
-    SQ7 surfaces the rule with the correct row verdicts."""
-    from config.domains import DOMAIN_QUALITY
-    from src.custom_dqr_engine import evaluate_custom_rules
-    from src.models import CustomDQRAssignment
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-
-    df = pd.DataFrame({
-        "WORK_CRITICALITY": [
-            "I - High Critical",
-            None,
-            "V - Unknown",
-            "IV - Non Critical",
-        ],
-    })
-    assignments = [CustomDQRAssignment(rule_id="SQ7", weight=100.0)]
-    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
-    assert list(out.columns) == ["SQ7"]
-    assert out["SQ7"].tolist() == [True, False, False, True]
-    assert not_evaluated == {}
-
-
-# =============================================================================
-# SQ8: STATUS required (Completeness)
-# =============================================================================
-
-def test_sqs_sq8_required_columns_constant():
-    from src.custom_dqr_engine import SQS_SQ8_REQUIRED_COLUMNS
-
-    assert SQS_SQ8_REQUIRED_COLUMNS == {"Status": "STATUS"}
-
-
-def test_sqs_sq8_passes_when_status_populated():
-    from src.custom_dqr_engine import check_sqs_sq8
-
-    df = pd.DataFrame({
-        "STATUS": ["OPEN", "Completed", "In Progress", "REJECTED"],
-    })
-    assert check_sqs_sq8(df).tolist() == [True, True, True, True]
-
-
-def test_sqs_sq8_fails_on_null():
-    from src.custom_dqr_engine import check_sqs_sq8
-
-    df = pd.DataFrame({"STATUS": ["OPEN", None, "CLOSED"]})
-    assert check_sqs_sq8(df).tolist() == [True, False, True]
-
-
-def test_sqs_sq8_fails_on_empty_string():
-    from src.custom_dqr_engine import check_sqs_sq8
-
-    df = pd.DataFrame({"STATUS": ["OPEN", "", "CLOSED"]})
-    assert check_sqs_sq8(df).tolist() == [True, False, True]
-
-
-def test_sqs_sq8_fails_on_whitespace_only():
-    """The spec uses ``TRIM(STATUS) = ''`` so any whitespace-only value
-    (spaces, tabs, newlines) FAILs."""
-    from src.custom_dqr_engine import check_sqs_sq8
-
-    df = pd.DataFrame({"STATUS": ["OPEN", "   ", "\t\n", "  \t  "]})
-    assert check_sqs_sq8(df).tolist() == [True, False, False, False]
-
-
-def test_sqs_sq8_fails_for_all_rows_when_column_missing():
-    from src.custom_dqr_engine import check_sqs_sq8
-
-    df = pd.DataFrame({"OTHER_COL": ["x", "y"]})
-    assert check_sqs_sq8(df).tolist() == [False, False]
-
-
-def test_sqs_sq8_handles_empty_dataframe():
-    from src.custom_dqr_engine import check_sqs_sq8
-
-    df = pd.DataFrame({"STATUS": pd.Series([], dtype=object)})
-    out = check_sqs_sq8(df)
-    assert isinstance(out, pd.Series)
-    assert len(out) == 0
-
-
-def test_sqs_sq8_dispatches_through_quality_domain(monkeypatch):
-    """End-to-end via the dispatcher: switching to Quality and asking for
-    SQ8 surfaces the rule with the correct row verdicts."""
-    from config.domains import DOMAIN_QUALITY
-    from src.custom_dqr_engine import evaluate_custom_rules
-    from src.models import CustomDQRAssignment
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-
-    df = pd.DataFrame({
-        "STATUS": ["OPEN", None, "   ", "Completed"],
-    })
-    assignments = [CustomDQRAssignment(rule_id="SQ8", weight=100.0)]
-    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
-    assert list(out.columns) == ["SQ8"]
-    assert out["SQ8"].tolist() == [True, False, False, True]
-    assert not_evaluated == {}
-
-
-# =============================================================================
-# SQ9: STATUS value in allowed set (Validity)
-# =============================================================================
-
-def test_sqs_sq9_allowed_values_constant():
-    """Allowed-value tuple matches the SQL spec verbatim (11 canonical
-    workflow statuses, in the documented order)."""
-    from src.custom_dqr_engine import SQS_SQ9_ALLOWED_VALUES
-
-    assert SQS_SQ9_ALLOWED_VALUES == (
-        "Approved",
-        "Inspection In Progress",
-        "Completed",
-        "Inspection Approved",
-        "Pending SER Review",
-        "Additional Funding Requested",
-        "Deprecated",
-        "Pending Review",
-        "Completed (Short Closed)",
-        "Inspection Rejected",
-        "OAP Pending",
-    )
-
-
-def test_sqs_sq9_required_columns_constant():
-    from src.custom_dqr_engine import SQS_SQ9_REQUIRED_COLUMNS
-
-    assert SQS_SQ9_REQUIRED_COLUMNS == {"Status": "STATUS"}
-
-
-def test_sqs_sq9_passes_for_every_allowed_value():
-    from src.custom_dqr_engine import SQS_SQ9_ALLOWED_VALUES, check_sqs_sq9
-
-    df = pd.DataFrame({"STATUS": list(SQS_SQ9_ALLOWED_VALUES)})
-    assert check_sqs_sq9(df).tolist() == [True] * len(SQS_SQ9_ALLOWED_VALUES)
-
-
-def test_sqs_sq9_fails_on_null():
-    from src.custom_dqr_engine import check_sqs_sq9
-
-    df = pd.DataFrame({"STATUS": ["Approved", None, "Completed"]})
-    assert check_sqs_sq9(df).tolist() == [True, False, True]
-
-
-def test_sqs_sq9_fails_on_case_mismatch():
-    """Match is case-sensitive per the Snowflake ``IN`` operator -
-    ``"approved"`` and ``"APPROVED"`` both FAIL."""
-    from src.custom_dqr_engine import check_sqs_sq9
-
-    df = pd.DataFrame({
-        "STATUS": ["Approved", "approved", "APPROVED"]
-    })
-    assert check_sqs_sq9(df).tolist() == [True, False, False]
-
-
-def test_sqs_sq9_fails_on_leading_or_trailing_whitespace():
-    """Spec calls out `` Approved `` as FAIL - ``isin`` performs an
-    exact equality match, so surrounding whitespace breaks it."""
-    from src.custom_dqr_engine import check_sqs_sq9
-
-    df = pd.DataFrame({
-        "STATUS": ["Approved", " Approved", "Approved ", " Approved "]
-    })
-    assert check_sqs_sq9(df).tolist() == [True, False, False, False]
-
-
-def test_sqs_sq9_fails_on_unexpected_value():
-    from src.custom_dqr_engine import check_sqs_sq9
-
-    df = pd.DataFrame({
-        "STATUS": ["Completed", "Cancelled", "In Progress", ""]
-    })
-    # "Cancelled" is off-list; "In Progress" is off-list (canonical form
-    # is "Inspection In Progress"); empty string is off-list.
-    assert check_sqs_sq9(df).tolist() == [True, False, False, False]
-
-
-def test_sqs_sq9_fails_for_all_rows_when_column_missing():
-    from src.custom_dqr_engine import check_sqs_sq9
-
-    df = pd.DataFrame({"OTHER_COL": ["x", "y"]})
-    assert check_sqs_sq9(df).tolist() == [False, False]
-
-
-def test_sqs_sq9_handles_empty_dataframe():
-    from src.custom_dqr_engine import check_sqs_sq9
-
-    df = pd.DataFrame({"STATUS": pd.Series([], dtype=object)})
-    out = check_sqs_sq9(df)
-    assert isinstance(out, pd.Series)
-    assert len(out) == 0
-
-
-def test_sqs_sq9_dispatches_through_quality_domain(monkeypatch):
-    """End-to-end via the dispatcher: switching to Quality and asking
-    for SQ9 surfaces the rule with the correct row verdicts."""
-    from config.domains import DOMAIN_QUALITY
-    from src.custom_dqr_engine import evaluate_custom_rules
-    from src.models import CustomDQRAssignment
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-
-    df = pd.DataFrame({
-        "STATUS": [
-            "Inspection In Progress",
-            None,
-            "Cancelled",
-            "Completed",
-        ],
-    })
-    assignments = [CustomDQRAssignment(rule_id="SQ9", weight=100.0)]
-    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
-    assert list(out.columns) == ["SQ9"]
-    assert out["SQ9"].tolist() == [True, False, False, True]
-    assert not_evaluated == {}
-
-
-def test_sqs_sq8_and_sq9_layer_correctly():
-    """SQ8 (Completeness) and SQ9 (Validity in allowed set) target the
-    same column. A populated-but-off-list value should PASS SQ8 and
-    FAIL SQ9; a NULL should FAIL both."""
-    from src.custom_dqr_engine import check_sqs_sq8, check_sqs_sq9
-
-    df = pd.DataFrame({
-        "STATUS": ["Approved", "Cancelled", None, "   "],
-    })
-    # SQ8: PASS, PASS (populated), FAIL (null), FAIL (whitespace)
-    assert check_sqs_sq8(df).tolist() == [True, True, False, False]
-    # SQ9: PASS, FAIL (off-list), FAIL (null), FAIL ("   " not in set)
-    assert check_sqs_sq9(df).tolist() == [True, False, False, False]
-
-
-# =============================================================================
-# SQ10: Status / Expected Ship Date sequencing (Business Rule)
-# =============================================================================
-
-def test_sqs_sq10_required_columns_constant():
-    from src.custom_dqr_engine import SQS_SQ10_REQUIRED_COLUMNS
-
-    assert SQS_SQ10_REQUIRED_COLUMNS == {
+    assert SQS_DQ_INSPECTION_12_REQUIRED_COLUMNS == {
         "Status": "STATUS",
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
+        "Total Consumed Hours": "TOTAL_CONSUMED_HOURS",
     }
 
 
-def test_sqs_sq10_completed_status_constant():
-    from src.custom_dqr_engine import SQS_SQ10_COMPLETED_STATUS
+def test_sqs_dq_inspection_12_completed_status_constant():
+    from src.custom_dqr_engine import SQS_DQ_INSPECTION_12_COMPLETED_STATUS
 
-    assert SQS_SQ10_COMPLETED_STATUS == "Completed"
+    assert SQS_DQ_INSPECTION_12_COMPLETED_STATUS == "Completed"
 
 
-def test_sqs_sq10_passes_when_status_is_not_completed():
-    """Every status other than ``"Completed"`` is out of scope - even a
-    far-future ship date PASSes when STATUS isn't ``"Completed"``."""
-    from src.custom_dqr_engine import check_sqs_sq10
+def test_sqs_dq_inspection_12_passes_when_status_is_not_completed():
+    """Out-of-scope rows PASS regardless of the hours value (spec ``ELSE
+    'PASS'``)."""
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
 
-    future = pd.Timestamp.now() + pd.Timedelta(days=365)
     df = pd.DataFrame({
-        "STATUS": ["Approved", "In Progress", "Pending", "Inspection Approved"],
-        "EXPECTED_SHIP_DATE": [future, future, future, future],
+        "STATUS": ["Approved", "Inspection In Progress", None, "   "],
+        "TOTAL_CONSUMED_HOURS": [None, None, None, None],
     })
-    assert check_sqs_sq10(df).tolist() == [True, True, True, True]
+    assert check_sqs_dq_inspection_12(df).tolist() == [True, True, True, True]
 
 
-def test_sqs_sq10_passes_when_completed_with_past_date():
-    from src.custom_dqr_engine import check_sqs_sq10
+def test_sqs_dq_inspection_12_passes_when_completed_with_hours():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
 
-    past = pd.Timestamp.now() - pd.Timedelta(days=30)
     df = pd.DataFrame({
-        "STATUS": ["Completed"],
-        "EXPECTED_SHIP_DATE": [past],
+        "STATUS": ["Completed", "Completed"],
+        "TOTAL_CONSUMED_HOURS": [12.5, 0.0],
     })
-    assert check_sqs_sq10(df).tolist() == [True]
+    assert check_sqs_dq_inspection_12(df).tolist() == [True, True]
 
 
-def test_sqs_sq10_fails_when_completed_with_future_date():
-    from src.custom_dqr_engine import check_sqs_sq10
-
-    future = pd.Timestamp.now() + pd.Timedelta(days=30)
-    df = pd.DataFrame({
-        "STATUS": ["Completed"],
-        "EXPECTED_SHIP_DATE": [future],
-    })
-    assert check_sqs_sq10(df).tolist() == [False]
-
-
-def test_sqs_sq10_passes_when_completed_with_null_date():
-    """Spec: completed record with NULL ship date PASSes (the rule
-    targets future dates only; date completeness is SQ4's concern)."""
-    from src.custom_dqr_engine import check_sqs_sq10
+def test_sqs_dq_inspection_12_fails_when_completed_with_null_hours():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
 
     df = pd.DataFrame({
         "STATUS": ["Completed"],
-        "EXPECTED_SHIP_DATE": [None],
+        "TOTAL_CONSUMED_HOURS": [None],
     })
-    assert check_sqs_sq10(df).tolist() == [True]
+    assert check_sqs_dq_inspection_12(df).tolist() == [False]
 
 
-def test_sqs_sq10_passes_when_unparseable_date():
-    """Unparseable string ship date collapses to NaT after
-    ``pd.to_datetime(errors='coerce')`` and PASSes - same NULL handling
-    as the rest of the spec."""
-    from src.custom_dqr_engine import check_sqs_sq10
+def test_sqs_dq_inspection_12_fails_when_completed_with_blank_string_hours():
+    """A string-typed blank is treated as missing (``_is_filled``)."""
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
 
     df = pd.DataFrame({
-        "STATUS": ["Completed"],
-        "EXPECTED_SHIP_DATE": ["not-a-date"],
+        "STATUS": ["Completed", "Completed"],
+        "TOTAL_CONSUMED_HOURS": ["   ", "40"],
     })
-    assert check_sqs_sq10(df).tolist() == [True]
+    assert check_sqs_dq_inspection_12(df).tolist() == [False, True]
 
 
-def test_sqs_sq10_mixed_rows():
-    from src.custom_dqr_engine import check_sqs_sq10
-
-    now = pd.Timestamp.now()
-    past = now - pd.Timedelta(days=30)
-    future = now + pd.Timedelta(days=30)
-    df = pd.DataFrame({
-        "STATUS": [
-            "Completed",        # past → PASS
-            "Completed",        # future → FAIL
-            "Completed",        # NULL → PASS
-            "Approved",         # future, but not completed → PASS
-            "Approved",         # past → PASS
-        ],
-        "EXPECTED_SHIP_DATE": [past, future, None, future, past],
-    })
-    assert check_sqs_sq10(df).tolist() == [True, False, True, True, True]
-
-
-def test_sqs_sq10_completed_status_match_is_case_sensitive():
-    """Per spec ``STATUS = 'Completed'`` is the trigger predicate, an
-    exact match. ``"completed"`` (lowercase) is out of scope and PASSes
-    even when paired with a future ship date - SQ9 owns the
-    case-sensitivity gripe on STATUS itself."""
-    from src.custom_dqr_engine import check_sqs_sq10
-
-    future = pd.Timestamp.now() + pd.Timedelta(days=30)
-    df = pd.DataFrame({
-        "STATUS": ["Completed", "completed", "COMPLETED"],
-        "EXPECTED_SHIP_DATE": [future, future, future],
-    })
-    assert check_sqs_sq10(df).tolist() == [False, True, True]
-
-
-def test_sqs_sq10_fails_for_all_rows_when_status_column_missing():
-    from src.custom_dqr_engine import check_sqs_sq10
-
-    df = pd.DataFrame({"EXPECTED_SHIP_DATE": [pd.Timestamp.now()]})
-    assert check_sqs_sq10(df).tolist() == [False]
-
-
-def test_sqs_sq10_fails_for_all_rows_when_ship_date_column_missing():
-    from src.custom_dqr_engine import check_sqs_sq10
-
-    df = pd.DataFrame({"STATUS": ["Completed"]})
-    assert check_sqs_sq10(df).tolist() == [False]
-
-
-def test_sqs_sq10_handles_empty_dataframe():
-    from src.custom_dqr_engine import check_sqs_sq10
+def test_sqs_dq_inspection_12_completed_match_is_exact_and_case_sensitive():
+    """Only the exact ``"Completed"`` value is in scope - the spec uses SQL
+    ``=``; ``"completed"`` and ``"Completed (Short Closed)"`` PASS."""
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
 
     df = pd.DataFrame({
-        "STATUS": pd.Series([], dtype=object),
-        "EXPECTED_SHIP_DATE": pd.to_datetime([]),
+        "STATUS": ["completed", "Completed (Short Closed)", " Completed ", "Completed"],
+        "TOTAL_CONSUMED_HOURS": [None, None, None, None],
     })
-    out = check_sqs_sq10(df)
+    assert check_sqs_dq_inspection_12(df).tolist() == [True, True, True, False]
+
+
+def test_sqs_dq_inspection_12_mixed_rows():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
+
+    df = pd.DataFrame({
+        "STATUS": ["Completed", "Completed", "Approved", None, "Completed"],
+        "TOTAL_CONSUMED_HOURS": [80.0, None, None, 5.0, 0.5],
+    })
+    assert check_sqs_dq_inspection_12(df).tolist() == [True, False, True, True, True]
+
+
+def test_sqs_dq_inspection_12_fails_for_all_rows_when_status_column_missing():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
+
+    df = pd.DataFrame({"TOTAL_CONSUMED_HOURS": [1.0, None]})
+    assert check_sqs_dq_inspection_12(df).tolist() == [False, False]
+
+
+def test_sqs_dq_inspection_12_fails_for_all_rows_when_hours_column_missing():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
+
+    df = pd.DataFrame({"STATUS": ["Completed", "Approved"]})
+    assert check_sqs_dq_inspection_12(df).tolist() == [False, False]
+
+
+def test_sqs_dq_inspection_12_handles_empty_dataframe():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_12
+
+    df = pd.DataFrame({"STATUS": [], "TOTAL_CONSUMED_HOURS": []})
+    out = check_sqs_dq_inspection_12(df)
     assert isinstance(out, pd.Series)
     assert len(out) == 0
 
 
-def test_sqs_sq10_dispatches_through_quality_domain(monkeypatch):
+def test_sqs_dq_inspection_12_dispatches_through_quality_domain(monkeypatch):
     """End-to-end via the dispatcher: switching to Quality and asking
-    for SQ10 surfaces the rule with the correct row verdicts."""
+    for dq-inspection-12 surfaces the rule with the correct row verdicts."""
     from config.domains import DOMAIN_QUALITY
     from src.custom_dqr_engine import evaluate_custom_rules
     from src.models import CustomDQRAssignment
@@ -9857,19 +9152,121 @@ def test_sqs_sq10_dispatches_through_quality_domain(monkeypatch):
         lambda: DOMAIN_QUALITY,
     )
 
-    now = pd.Timestamp.now()
     df = pd.DataFrame({
         "STATUS": ["Completed", "Completed", "Approved"],
-        "EXPECTED_SHIP_DATE": [
-            now - pd.Timedelta(days=30),    # past → PASS
-            now + pd.Timedelta(days=30),    # future → FAIL
-            now + pd.Timedelta(days=30),    # future, non-completed → PASS
-        ],
+        "TOTAL_CONSUMED_HOURS": [40.0, None, None],
     })
-    assignments = [CustomDQRAssignment(rule_id="SQ10", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="dq-inspection-12", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
-    assert list(out.columns) == ["SQ10"]
-    assert out["SQ10"].tolist() == [True, False, True]
+    assert list(out.columns) == ["dq-inspection-12"]
+    assert out["dq-inspection-12"].tolist() == [True, False, True]
+    assert not_evaluated == {}
+
+
+# =============================================================================
+# dq-inspection-13: Mandatory Approved Hours (Quality domain - SQS)
+# =============================================================================
+
+def test_sqs_dq_inspection_13_required_columns_constant():
+    from src.custom_dqr_engine import SQS_DQ_INSPECTION_13_REQUIRED_COLUMNS
+
+    assert SQS_DQ_INSPECTION_13_REQUIRED_COLUMNS == {
+        "Alloted Hours": "ALLOTED_HOURS",
+    }
+
+
+def test_sqs_dq_inspection_13_passes_when_hours_populated():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_13
+
+    df = pd.DataFrame({"ALLOTED_HOURS": [8.0, 0.0, 150]})
+    assert check_sqs_dq_inspection_13(df).tolist() == [True, True, True]
+
+
+def test_sqs_dq_inspection_13_fails_on_null():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_13
+
+    df = pd.DataFrame({"ALLOTED_HOURS": [None, 12.0, float("nan")]})
+    assert check_sqs_dq_inspection_13(df).tolist() == [False, True, False]
+
+
+def test_sqs_dq_inspection_13_fails_on_blank_string():
+    """String-typed blanks count as missing (shared Completeness semantics)."""
+    from src.custom_dqr_engine import check_sqs_dq_inspection_13
+
+    df = pd.DataFrame({"ALLOTED_HOURS": ["", "   ", "24"]})
+    assert check_sqs_dq_inspection_13(df).tolist() == [False, False, True]
+
+
+def test_sqs_dq_inspection_13_ignores_other_columns():
+    """Unlike dq-inspection-12 the rule is unconditional - STATUS plays
+    no part in the verdict."""
+    from src.custom_dqr_engine import check_sqs_dq_inspection_13
+
+    df = pd.DataFrame({
+        "STATUS": ["Completed", None],
+        "ALLOTED_HOURS": [None, 10.0],
+    })
+    assert check_sqs_dq_inspection_13(df).tolist() == [False, True]
+
+
+def test_sqs_dq_inspection_13_fails_for_all_rows_when_column_missing():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_13
+
+    df = pd.DataFrame({"TOTAL_CONSUMED_HOURS": [1.0, 2.0]})
+    assert check_sqs_dq_inspection_13(df).tolist() == [False, False]
+
+
+def test_sqs_dq_inspection_13_handles_empty_dataframe():
+    from src.custom_dqr_engine import check_sqs_dq_inspection_13
+
+    df = pd.DataFrame({"ALLOTED_HOURS": []})
+    out = check_sqs_dq_inspection_13(df)
+    assert isinstance(out, pd.Series)
+    assert len(out) == 0
+
+
+def test_sqs_dq_inspection_13_dispatches_through_quality_domain(monkeypatch):
+    from config.domains import DOMAIN_QUALITY
+    from src.custom_dqr_engine import evaluate_custom_rules
+    from src.models import CustomDQRAssignment
+
+    monkeypatch.setattr(
+        "config.domains.get_active_domain_code",
+        lambda: DOMAIN_QUALITY,
+    )
+
+    df = pd.DataFrame({"ALLOTED_HOURS": [16.0, None]})
+    assignments = [CustomDQRAssignment(rule_id="dq-inspection-13", weight=100.0)]
+    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
+    assert list(out.columns) == ["dq-inspection-13"]
+    assert out["dq-inspection-13"].tolist() == [True, False]
+    assert not_evaluated == {}
+
+
+def test_sqs_both_rules_dispatch_together(monkeypatch):
+    """Both Quality rules evaluate side by side and independently."""
+    from config.domains import DOMAIN_QUALITY
+    from src.custom_dqr_engine import evaluate_custom_rules
+    from src.models import CustomDQRAssignment
+
+    monkeypatch.setattr(
+        "config.domains.get_active_domain_code",
+        lambda: DOMAIN_QUALITY,
+    )
+
+    df = pd.DataFrame({
+        "STATUS": ["Completed", "Approved", "Completed"],
+        "TOTAL_CONSUMED_HOURS": [None, None, 30.0],
+        "ALLOTED_HOURS": [40.0, None, None],
+    })
+    assignments = [
+        CustomDQRAssignment(rule_id="dq-inspection-12", weight=50.0),
+        CustomDQRAssignment(rule_id="dq-inspection-13", weight=50.0),
+    ]
+    out, not_evaluated = evaluate_custom_rules(df, assignments, "SQS")
+    assert list(out.columns) == ["dq-inspection-12", "dq-inspection-13"]
+    assert out["dq-inspection-12"].tolist() == [False, True, True]
+    assert out["dq-inspection-13"].tolist() == [True, False, False]
     assert not_evaluated == {}
 
 

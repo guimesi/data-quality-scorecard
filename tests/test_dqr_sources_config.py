@@ -292,10 +292,10 @@ def test_effective_required_columns_for_rule_without_options_is_identity():
     assert effective_required_columns(rule, params={"any": True}) == rule.required_columns
 
 
-def test_sqs_catalog_includes_sq4(monkeypatch):
-    """SQS (Quality domain) exposes SQ4 with the documented metadata: a
-    non-blocking Validity rule on ``EXPECTED_SHIP_DATE`` with no reference
-    dataset."""
+def test_sqs_catalog_includes_dq_inspection_12(monkeypatch):
+    """SQS (Quality domain) exposes dq-inspection-12 with the documented
+    metadata: a non-blocking Completeness rule on ``TOTAL_CONSUMED_HOURS``
+    scoped to Completed inspections, no reference dataset, no options."""
     from config.domains import DOMAIN_QUALITY
 
     monkeypatch.setattr(
@@ -304,159 +304,45 @@ def test_sqs_catalog_includes_sq4(monkeypatch):
     )
     rules = get_available_custom_dqr_rules("SQS")
     by_id = {r.id: r for r in rules}
-    assert "SQ4" in by_id
-    sq4 = by_id["SQ4"]
-    assert sq4.type == "Validity"
-    assert sq4.blocking is False
-    assert sq4.reference is None
-    assert sq4.required_columns == {
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
-    }
-    assert sq4.options == []
-    assert sq4.select_options == []
-
-
-def test_sqs_catalog_includes_sq5(monkeypatch):
-    """SQS (Quality domain) exposes SQ5 (Business Rule) - the
-    ``EXPECTED_SHIP_DATE <= PO_REQUIRED_SHIP_DATE`` constraint - with no
-    reference dataset and no per-rule options."""
-    from config.domains import DOMAIN_QUALITY
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ5" in by_id
-    sq5 = by_id["SQ5"]
-    assert sq5.type == "Business Rule"
-    assert sq5.blocking is False
-    assert sq5.reference is None
-    assert sq5.required_columns == {
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
-        "PO Required Ship Date": "PO_REQUIRED_SHIP_DATE",
-    }
-    assert sq5.options == []
-    assert sq5.select_options == []
-
-
-def test_sqs_catalog_includes_sq6(monkeypatch):
-    """SQS exposes SQ6 - Validity check pinning ``INSPECTION_TYPE`` to a
-    fixed allowed-value set with no reference dataset and no options."""
-    from config.domains import DOMAIN_QUALITY
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ6" in by_id
-    sq6 = by_id["SQ6"]
-    assert sq6.type == "Validity"
-    assert sq6.blocking is False
-    assert sq6.reference is None
-    assert sq6.required_columns == {
-        "Inspection Type": "INSPECTION_TYPE",
-    }
-    assert sq6.options == []
-    assert sq6.select_options == []
-
-
-def test_sqs_catalog_includes_sq7(monkeypatch):
-    """SQS exposes SQ7 - Validity check pinning ``WORK_CRITICALITY`` to a
-    fixed roman-numeral classification set."""
-    from config.domains import DOMAIN_QUALITY
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ7" in by_id
-    sq7 = by_id["SQ7"]
-    assert sq7.type == "Validity"
-    assert sq7.blocking is False
-    assert sq7.reference is None
-    assert sq7.required_columns == {
-        "Work Criticality": "WORK_CRITICALITY",
-    }
-    assert sq7.options == []
-    assert sq7.select_options == []
-
-
-def test_sqs_catalog_includes_sq8(monkeypatch):
-    """SQS exposes SQ8 - Completeness check on ``STATUS`` (NULL or
-    whitespace-only FAIL, mirrors the ``TRIM(STATUS) = ''`` spec)."""
-    from config.domains import DOMAIN_QUALITY
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ8" in by_id
-    sq8 = by_id["SQ8"]
-    assert sq8.type == "Completeness"
-    assert sq8.blocking is False
-    assert sq8.reference is None
-    assert sq8.required_columns == {"Status": "STATUS"}
-    assert sq8.options == []
-    assert sq8.select_options == []
-
-
-def test_sqs_catalog_includes_sq9(monkeypatch):
-    """SQS exposes SQ9 - Validity check pinning ``STATUS`` to the 11
-    canonical workflow statuses."""
-    from config.domains import DOMAIN_QUALITY
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ9" in by_id
-    sq9 = by_id["SQ9"]
-    assert sq9.type == "Validity"
-    assert sq9.blocking is False
-    assert sq9.reference is None
-    assert sq9.required_columns == {"Status": "STATUS"}
-    assert sq9.options == []
-    assert sq9.select_options == []
-
-
-def test_sqs_catalog_includes_sq10(monkeypatch):
-    """SQS exposes SQ10 - cross-column Business Rule pinning Completed
-    inspections to a non-future ``EXPECTED_SHIP_DATE``."""
-    from config.domains import DOMAIN_QUALITY
-
-    monkeypatch.setattr(
-        "config.domains.get_active_domain_code",
-        lambda: DOMAIN_QUALITY,
-    )
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ10" in by_id
-    sq10 = by_id["SQ10"]
-    assert sq10.type == "Business Rule"
-    assert sq10.blocking is False
-    assert sq10.reference is None
-    assert sq10.required_columns == {
+    assert "dq-inspection-12" in by_id
+    rule = by_id["dq-inspection-12"]
+    assert rule.name == "Mandatory on Completion"
+    assert rule.type == "Completeness"
+    assert rule.blocking is False
+    assert rule.reference is None
+    assert rule.required_columns == {
         "Status": "STATUS",
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
+        "Total Consumed Hours": "TOTAL_CONSUMED_HOURS",
     }
-    assert sq10.options == []
-    assert sq10.select_options == []
+    assert rule.options == []
+    assert rule.select_options == []
 
 
-def test_sqs_catalog_orders_sq4_through_sq10(monkeypatch):
-    """SQS catalog ordering pins Step 4.2 card placement: SQ4 → SQ5 →
-    SQ6 → SQ7 → SQ8 → SQ9 → SQ10. SQ10 closes out the STATUS-focused
-    cluster as the cross-column sequencing check."""
+def test_sqs_catalog_includes_dq_inspection_13(monkeypatch):
+    """SQS exposes dq-inspection-13 - unconditional Completeness on
+    ``ALLOTED_HOURS`` with no reference dataset and no options."""
+    from config.domains import DOMAIN_QUALITY
+
+    monkeypatch.setattr(
+        "config.domains.get_active_domain_code",
+        lambda: DOMAIN_QUALITY,
+    )
+    rules = get_available_custom_dqr_rules("SQS")
+    by_id = {r.id: r for r in rules}
+    assert "dq-inspection-13" in by_id
+    rule = by_id["dq-inspection-13"]
+    assert rule.name == "Mandatory Approved Hours"
+    assert rule.type == "Completeness"
+    assert rule.blocking is False
+    assert rule.reference is None
+    assert rule.required_columns == {"Alloted Hours": "ALLOTED_HOURS"}
+    assert rule.options == []
+    assert rule.select_options == []
+
+
+def test_sqs_catalog_orders_dq_inspection_12_then_13(monkeypatch):
+    """SQS catalog ordering pins Step 4.2 card placement:
+    dq-inspection-12 → dq-inspection-13."""
     from config.domains import DOMAIN_QUALITY
 
     monkeypatch.setattr(
@@ -464,4 +350,4 @@ def test_sqs_catalog_orders_sq4_through_sq10(monkeypatch):
         lambda: DOMAIN_QUALITY,
     )
     rule_ids = [r.id for r in get_available_custom_dqr_rules("SQS")]
-    assert rule_ids == ["SQ4", "SQ5", "SQ6", "SQ7", "SQ8", "SQ9", "SQ10"]
+    assert rule_ids == ["dq-inspection-12", "dq-inspection-13"]

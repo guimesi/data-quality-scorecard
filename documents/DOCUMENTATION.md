@@ -4,7 +4,7 @@
 
 The **Data Quality Scorecard App** is a Streamlit-based web application that lets data stewards define, execute, and visualize data quality (DQ) assessments across multi-table source systems. It joins source tables into denormalized **Data Products**, lets users curate **Critical Data Elements (CDEs)**, configure **Data Quality Rules (DQRs)** across 10 dimensions, distribute weights across rules, and produces a **Scorecard** with row-level, CDE-level, and dimension-level metrics.
 
-The app is **multi-domain**: a Step 0 picker decides which *domain* of data the workflow assesses. The historical Cost Estimate domain (ADR / ACCE / EPT) ships alongside a Quality domain (SQS, beta - schema wired against `CT_SQS_AT_INSPECTION` with 7 curated rules, SQ4-SQ10); other domains can be registered without touching the workflow UI - see §4.0 below.
+The app is **multi-domain**: a Step 0 picker decides which *domain* of data the workflow assesses. The historical Cost Estimate domain (ADR / ACCE / EPT) ships alongside a Quality domain (SQS - schema wired against `CT_SQS_AT_INSPECTION` with 2 curated rules, dq-inspection-12 / dq-inspection-13); other domains can be registered without touching the workflow UI - see §4.0 below.
 
 The app opens on a **mode picker** that branches into **⚡ One-click** (pick a domain + systems, then the app auto-builds everything and lands on the dashboard) and **🛠️ Step-by-step** (the manual workflow below). See §4.7 for the full contract; the rest of this document describes the Step-by-step flow, which One-click reuses end-to-end.
 
@@ -61,7 +61,7 @@ data-quality-app/
 │       ├── _ept_catalog.py   # EPT_RULES list (E1-E7)
 │       ├── _adr_catalog.py   # ADR_RULES list (A1-A8)
 │       ├── _acce_catalog.py  # ACCE_RULES list (AC1-AC8)
-│       └── _sqs_catalog.py   # SQS_RULES list (SQ4-SQ10, Quality domain)
+│       └── _sqs_catalog.py   # SQS_RULES list (dq-inspection-12/13, Quality domain)
 ├── src/                      # Core business logic
 │   ├── models.py
 │   ├── profiler.py
@@ -86,7 +86,7 @@ data-quality-app/
 │       ├── _ept_rules.py     # E1-E7 checks + constants + EPTE3/E6Params (TypedDicts)
 │       ├── _adr_rules.py     # A1-A8 checks + constants + ADRA3/A7/A8Params
 │       ├── _acce_rules.py    # AC1-AC8 checks + constants + ACCEAC3/AC7/AC8Params
-│       ├── _sqs_rules.py     # SQ4-SQ10 checks + constants (Quality domain)
+│       ├── _sqs_rules.py     # dq-inspection-12/13 checks + constants (Quality domain)
 │       └── _dispatcher.py    # evaluate_custom_rules(df, assignments, dp)
 ├── ui/                       # Streamlit UI (mode picker entry → One-click or Step-by-step Step 0 + steps with 4.x sub-steps + 🧪 lab)
 │   ├── _theme.py                             # inject_global_css() - one consolidated main-area stylesheet (H5)
@@ -179,7 +179,7 @@ Two domains ship out of the box:
 | Code | Name | Systems | Status |
 |------|------|---------|--------|
 | `cost_estimate` | Cost Estimate | ADR, ACCE, EPT | Production - 23 curated custom rules |
-| `quality` | Quality | SQS | Beta - `CT_SQS_AT_INSPECTION` (`INGESTION_DB.GP_QUALITY`); 7 curated rules (SQ4-SQ10) |
+| `quality` | Quality | SQS | Production - `CT_SQS_AT_INSPECTION` (`INGESTION_DB.GP_QUALITY`); 2 curated rules (dq-inspection-12 / dq-inspection-13) |
 
 `session_state["domain"]` carries the active code. `config.systems.get_system`, `config.custom_dqr_catalog.get_available_custom_dqr_rules` and the Step 0/1 UI all read through `config.domains.get_active_domain()` so swapping domain re-parameterises every downstream step automatically.
 

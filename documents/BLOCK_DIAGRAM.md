@@ -40,7 +40,7 @@ flowchart LR
         PROF["profiler.py"]
         ENG["dqr_engine.py<br/>(10 rule fns +<br/>evaluate_all_safe)"]
         VAL["dqr_validation.py<br/>(compatibility layer)"]
-        CENG["custom_dqr_engine.py (re-export shim)<br/>→ src/custom_dqr/_shared · _validators ·<br/>_ept_rules (E1-E7) · _adr_rules (A1-A8) ·<br/>_acce_rules (AC1-AC8) · _sqs_rules (SQ4-SQ10) ·<br/>_dispatcher + per-rule TypedDicts for params"]
+        CENG["custom_dqr_engine.py (re-export shim)<br/>→ src/custom_dqr/_shared · _validators ·<br/>_ept_rules (E1-E7) · _adr_rules (A1-A8) ·<br/>_acce_rules (AC1-AC8) · _sqs_rules (dq-inspection-12/13) ·<br/>_dispatcher + per-rule TypedDicts for params"]
         REF["reference_data.py<br/>(prefetch · cache ·<br/>VWS_GP_STANDARD_SHARE)"]
         DPB["data_product_builder.py"]
         SCR["scorecard.py<br/>(per-source scores +<br/>source-weighted combine)"]
@@ -195,8 +195,8 @@ callers don't change:
 
 | Public entry | Internal package | Per-file responsibility |
 |---|---|---|
-| `src/custom_dqr_engine.py` (re-exports) | [src/custom_dqr/](../src/custom_dqr/) | `_shared.py` (errors + reusable predicates), `_validators.py`, `_ept_rules.py` (E1-E7), `_adr_rules.py` (A1-A8), `_acce_rules.py` (AC1-AC8), `_sqs_rules.py` (SQ4-SQ10), `_dispatcher.py` |
-| `config/custom_dqr_catalog.py` (assembles `CUSTOM_DQR_RULES` for Cost Estimate) | [config/custom_dqr/](../config/custom_dqr/) | `_shared.py` (dataclasses + option-builder helpers), `_ept_catalog.py`, `_adr_catalog.py`, `_acce_catalog.py`, `_sqs_catalog.py` (SQ4-SQ10, wired into the Quality domain) |
+| `src/custom_dqr_engine.py` (re-exports) | [src/custom_dqr/](../src/custom_dqr/) | `_shared.py` (errors + reusable predicates), `_validators.py`, `_ept_rules.py` (E1-E7), `_adr_rules.py` (A1-A8), `_acce_rules.py` (AC1-AC8), `_sqs_rules.py` (dq-inspection-12/13), `_dispatcher.py` |
+| `config/custom_dqr_catalog.py` (assembles `CUSTOM_DQR_RULES` for Cost Estimate) | [config/custom_dqr/](../config/custom_dqr/) | `_shared.py` (dataclasses + option-builder helpers), `_ept_catalog.py`, `_adr_catalog.py`, `_acce_catalog.py`, `_sqs_catalog.py` (dq-inspection-12/13, wired into the Quality domain) |
 | `utils/session_state.py` (re-exports) | [utils/session/](../utils/session/) | `state.py` (STEPS + init + domain), `navigation.py` (next / prev / restart + visibility), `sidebar.py` (CSS + brand + filters) |
 | `ui/step_07_ml_lab.py` (orchestrator) | [ui/step_07/](../ui/step_07/) | One module per tab (`_row_anomalies.py`, `_rule_impact.py`, ..., `_row_explain.py`) + `_shared.py` (CSS + banner + `_ensure_scorecards`) |
 

@@ -31,15 +31,11 @@ The catalog is keyed by Data Product (`ADR`, `ACCE`, `EPT`, `SQS`).
 **EPT** ships seven rules out of the box (E1 – E7), **ADR** ships eight
 (A1, A2, A3, A4, A5, A6, A7, A8), **ACCE** ships its own per-rule
 catalog (AC1, …) that mirrors the ADR rules against the ACCE schema,
-and **SQS** (Quality domain) seeds its catalog with `SQ4` (Validity on
-`EXPECTED_SHIP_DATE`), `SQ5` (Business Rule comparing
-`EXPECTED_SHIP_DATE` to `PO_REQUIRED_SHIP_DATE`), `SQ6` (Validity on
-the `INSPECTION_TYPE` controlled vocabulary), `SQ7` (Validity on the
-`WORK_CRITICALITY` classification levels), `SQ8` (Completeness on
-`STATUS`), `SQ9` (Validity on the `STATUS` workflow vocabulary), and
-`SQ10` (Business Rule pinning Completed inspections to a non-future
-`EXPECTED_SHIP_DATE`). Data products without any rules in their
-catalog render an empty-state in Step 4.2.
+and **SQS** (Quality domain) ships the Quality team's two curated
+rules, `dq-inspection-12` (Completeness - `TOTAL_CONSUMED_HOURS` must
+be recorded on Completed inspections) and `dq-inspection-13`
+(Completeness - `ALLOTED_HOURS` must be populated). Data products
+without any rules in their catalog render an empty-state in Step 4.2.
 
 A user opts into a Custom rule from a card in **Step 4.2 - Custom DQR
 Cards**, weights it in **Step 5**, and the dashboard reports its row-level
@@ -205,13 +201,8 @@ for the field-level substitutions (e.g. `COMPLETE_WBC` → `COA`,
 
 | Rule | Name | Type | Blocking | Required columns | Reference data | Options |
 |------|------|------|----------|------------------|----------------|---------|
-| **SQ4** | Valid date (`EXPECTED_SHIP_DATE`) | Validity | No | `EXPECTED_SHIP_DATE` | - | - |
-| **SQ5** | Not after PO Required Ship Date | Business Rule | No | `EXPECTED_SHIP_DATE`, `PO_REQUIRED_SHIP_DATE` | - | - |
-| **SQ6** | Inspection Type value in allowed set | Validity | No | `INSPECTION_TYPE` | - (fixed list: `Source Inspection`, `Supplier Assessment`, `Expediting`, `Supplemental Inspection`) | - |
-| **SQ7** | Work Criticality value in allowed set | Validity | No | `WORK_CRITICALITY` | - (fixed list: `I - High Critical`, `II - Medium Critical`, `III - Low Critical`, `IV - Non Critical`) | - |
-| **SQ8** | Status required | Completeness | No | `STATUS` | - | - |
-| **SQ9** | Status value in allowed set | Validity | No | `STATUS` | - (11 canonical workflow statuses; see SQ9 section for the list) | - |
-| **SQ10** | Status / Expected Ship Date sequencing | Business Rule | No | `STATUS`, `EXPECTED_SHIP_DATE` | - | - |
+| **dq-inspection-12** | Mandatory on Completion | Completeness | No | `STATUS`, `TOTAL_CONSUMED_HOURS` | - | - |
+| **dq-inspection-13** | Mandatory Approved Hours | Completeness | No | `ALLOTED_HOURS` | - | - |
 
 ---
 
@@ -223,7 +214,7 @@ new rules reuse the structural checks every Custom rule needs:
 - **`validate_completeness_rule(df, required_columns)`**: every column
   must be non-null and (string-typed) non-blank for the row to pass; if
   any required column is absent from `df`, the rule fails for every row.
-  Used by E1, E4, and SQ8.
+  Used by E1, E4, and dq-inspection-13.
 - **`validate_referential_integrity_rule(source_df, source_column,
   reference_df, reference_column)`**, the source value is non-blank and
   its string-stripped form appears in the reference column. A missing
@@ -2757,389 +2748,117 @@ underlying categories are produced by
 
 ---
 
-## SQ4: Valid date (EXPECTED_SHIP_DATE) - SQS
-
-- **Type:** Validity · **Blocking:** No · **Data product:** SQS (Quality domain)
-- **Implementation:** `check_sqs_sq4` (uses `pd.to_datetime(..., errors="coerce")` directly).
-- **Reference dataset:** *(none)*
-
-A row passes when `EXPECTED_SHIP_DATE` is **non-null** **and** parses as
-a valid calendar date. The check mirrors the Snowflake spec's defensive
-round-trip
-(`TRY_TO_DATE(TO_VARCHAR(EXPECTED_SHIP_DATE, 'YYYY-MM-DD'), 'YYYY-MM-DD')`)
-via `pandas.to_datetime` with `errors="coerce"`: unparseable values land
-as `NaT` and fail alongside genuine NULLs. The schema-level missing
-column makes every row fail (same convention as the other custom rules).
-
-**Why it matters.** `EXPECTED_SHIP_DATE` drives shipment sequencing,
-logistics planning, and downstream reporting in the SQS inspection
-workflow. Missing or invalid dates break the downstream pipeline and
-distort throughput metrics.
-
-**Failure scenarios.**
-
-| Scenario | Example value | Result |
-|----------|---------------|--------|
-| Valid date | `2024-06-15 00:00:00` (TIMESTAMP_NTZ) | PASS |
-| NULL value | `NULL` | FAIL |
-| Invalid date (loaded via VARIANT/string) | `"2024-13-40"` | FAIL |
-
-**Inputs:**
-
-| Alias | Physical column |
-|-------|-----------------|
-| Expected Ship Date | `EXPECTED_SHIP_DATE` |
-
-**Implementation notes.** The column is a warehouse timestamp type
-(`TIMESTAMP_NTZ` in the original Snowflake spec), so
-well-formed datetime values are enforced at ingestion. In
-production the dominant failure mode is NULL; the round-trip parser is
-preserved for defensive coverage of values arriving via VARIANT / string
-paths.
-
----
-
-## SQ5: Not after PO Required Ship Date - SQS
-
-- **Type:** Business Rule · **Blocking:** No · **Data product:** SQS (Quality domain)
-- **Implementation:** `check_sqs_sq5` (uses `pd.to_datetime(..., errors="coerce")` for both columns then compares with `>`).
-- **Reference dataset:** *(none)*
-
-A row passes when **any** of the following holds:
-
-1. `EXPECTED_SHIP_DATE` is NULL or unparseable.
-2. `PO_REQUIRED_SHIP_DATE` is NULL or unparseable.
-3. `EXPECTED_SHIP_DATE <= PO_REQUIRED_SHIP_DATE`.
-
-A row fails only when **both** dates resolve to valid datetimes **and**
-the expected ship date is strictly **after** the PO required ship date.
-The comparison uses `>` so equal dates are compliant. NULL handling
-mirrors the Snowflake spec (`WHEN ... IS NULL THEN 'PASS'`) so SQ5
-never double-penalises the completeness gap SQ4 already covers. The
-schema-level missing column makes every row fail (same convention as
-the other custom rules).
-
-**Why it matters.** `EXPECTED_SHIP_DATE` is the supplier's projected
-ship date; `PO_REQUIRED_SHIP_DATE` is the contractual deadline on the
-purchase order. When the projected ship date slips past the PO required
-date, the project faces a likely delivery delay with downstream
-logistics and contractual fallout.
-
-**Failure scenarios.**
-
-| Scenario | `EXPECTED_SHIP_DATE` | `PO_REQUIRED_SHIP_DATE` | Result |
-|----------|----------------------|-------------------------|--------|
-| Expected before PO required | `2024-06-10` | `2024-06-15` | PASS |
-| Expected equals PO required | `2024-06-15` | `2024-06-15` | PASS |
-| Expected after PO required | `2024-06-20` | `2024-06-15` | **FAIL** |
-| `EXPECTED_SHIP_DATE` is NULL | `NULL` | `2024-06-15` | PASS |
-| `PO_REQUIRED_SHIP_DATE` is NULL | `2024-06-10` | `NULL` | PASS |
-| Both are NULL | `NULL` | `NULL` | PASS |
-
-**Inputs:**
-
-| Alias | Physical column |
-|-------|-----------------|
-| Expected Ship Date | `EXPECTED_SHIP_DATE` |
-| PO Required Ship Date | `PO_REQUIRED_SHIP_DATE` |
-
-**Implementation notes.** Both columns are timestamp-typed in the
-warehouse (`TIMESTAMP_NTZ` in the original Snowflake spec)
-so the comparison maps directly to `pandas` after
-`pd.to_datetime(..., errors="coerce")` is applied to each side -
-unparseable strings collapse to `NaT` and inherit the NULL-PASS branch.
-Equality is intentionally treated as compliant per spec
-(`EXPECTED_SHIP_DATE > PO_REQUIRED_SHIP_DATE` is the FAIL predicate).
-
----
-
-## SQ6: Inspection Type value in allowed set - SQS
-
-- **Type:** Validity · **Blocking:** No · **Data product:** SQS (Quality domain)
-- **Implementation:** `check_sqs_sq6` →
-  `df["INSPECTION_TYPE"].isin(SQS_SQ6_ALLOWED_VALUES)`.
-- **Reference dataset:** *(none - the allowed set is a module-level tuple)*
-
-A row passes when `INSPECTION_TYPE` matches one of the allowed values
-**verbatim**:
-
-| Allowed value |
-|---------------|
-| `Source Inspection` |
-| `Supplier Assessment` |
-| `Expediting` |
-| `Supplemental Inspection` |
-
-The match is **case-sensitive** per the original Snowflake spec's `IN`
-operator -
-`"source inspection"` is FAIL even though it represents the same
-logical category. NULL values FAIL (SQL `IN` does not match
-NULLs). Schema-level missing column makes every row fail (same
-convention as the other custom rules).
-
-**Why it matters.** `INSPECTION_TYPE` drives downstream reporting,
-resource allocation, and cost estimation. Off-list values break
-category-based aggregations and can misroute inspection assignments;
-keeping the vocabulary controlled preserves the integrity of those
-workflows.
-
-**Failure scenarios.**
-
-| Scenario | Example value | Result |
-|----------|---------------|--------|
-| Allowed value | `Source Inspection` | PASS |
-| Allowed value | `Supplier Assessment` | PASS |
-| NULL value | `NULL` | **FAIL** |
-| Unexpected value | `Audit` | **FAIL** |
-| Typo / case mismatch | `source inspection` | **FAIL** |
-| Variant / wrong form | `Expedite` | **FAIL** |
-
-**Inputs:**
-
-| Alias | Physical column |
-|-------|-----------------|
-| Inspection Type | `INSPECTION_TYPE` |
-
-**Implementation notes.** The allowed list is exposed as
-`SQS_SQ6_ALLOWED_VALUES` (immutable tuple) on
-[src/custom_dqr_engine.py](../src/custom_dqr_engine.py); rule callers
-or tests that need to assert against it should import from the engine
-shim rather than re-typing the strings. Review the allowed set
-periodically with business stakeholders so legitimate new categories
-are added instead of polluting the FAIL bucket.
-
----
-
-## SQ7: Work Criticality value in allowed set - SQS
-
-- **Type:** Validity · **Blocking:** No · **Data product:** SQS (Quality domain)
-- **Implementation:** `check_sqs_sq7` →
-  `df["WORK_CRITICALITY"].isin(SQS_SQ7_ALLOWED_VALUES)`.
-- **Reference dataset:** *(none - the allowed set is a module-level tuple)*
-
-A row passes when `WORK_CRITICALITY` matches one of the four
-classification levels **verbatim**:
-
-| Allowed value | Description |
-|---------------|-------------|
-| `I - High Critical` | Highest priority classification |
-| `II - Medium Critical` | Medium priority classification |
-| `III - Low Critical` | Low priority classification |
-| `IV - Non Critical` | Non-critical classification |
-
-The match is **case-sensitive** per the original Snowflake spec's `IN`
-operator -
-`"i - high critical"` and `"I - HIGH CRITICAL"` both FAIL. NULL values
-FAIL (SQL `IN` does not match NULLs). Empty strings likewise
-FAIL. Schema-level missing column makes every row fail (same
-convention as the other custom rules).
-
-**Why it matters.** `WORK_CRITICALITY` drives prioritization of
-resources, risk assessment, and downstream reporting. Non-standard
-values misclassify work priority and skew every analytic built on top.
-
-**Failure scenarios.**
-
-| Scenario | Example value | Result |
-|----------|---------------|--------|
-| Valid value – High | `I - High Critical` | PASS |
-| Valid value – Medium | `II - Medium Critical` | PASS |
-| Valid value – Low | `III - Low Critical` | PASS |
-| Valid value – Non Critical | `IV - Non Critical` | PASS |
-| NULL value | `NULL` | **FAIL** |
-| Typo or case variation | `I - High critical` | **FAIL** |
-| Unexpected value | `V - Unknown` | **FAIL** |
-| Empty string | `""` | **FAIL** |
-
-**Inputs:**
-
-| Alias | Physical column |
-|-------|-----------------|
-| Work Criticality | `WORK_CRITICALITY` |
-
-**Implementation notes.** The allowed list is exposed as
-`SQS_SQ7_ALLOWED_VALUES` (immutable tuple) on
-[src/custom_dqr_engine.py](../src/custom_dqr_engine.py); rule callers
-or tests should import from the engine shim rather than re-typing the
-roman-numeral strings. Adding a new classification level requires
-updating the tuple **and** a business-justification entry, not a
-per-row workaround.
-
----
-
-## SQ8: Status required - SQS
+## dq-inspection-12: Mandatory on Completion - SQS
 
 - **Type:** Completeness · **Blocking:** No · **Data product:** SQS (Quality domain)
-- **Implementation:** `check_sqs_sq8` →
-  `validate_completeness_rule(df, ["STATUS"])`.
+- **CDE:** `TOTAL_CONSUMED_HOURS` (trigger column `STATUS`)
+- **Implementation:** `check_sqs_dq_inspection_12` →
+  `~((df["STATUS"] == "Completed") & ~_is_filled(df["TOTAL_CONSUMED_HOURS"]))`.
 - **Reference dataset:** *(none)*
 
-A row passes when `STATUS` is non-null **and** contains at least one
-non-whitespace character. Mirrors the Snowflake spec predicate
-`STATUS IS NULL OR TRIM(STATUS) = ''` by delegating to
-`validate_completeness_rule`, which already applies `_is_filled`
-(`Series.notna()` plus trim-and-compare-to-empty for string-typed
-columns) - the same semantics every other Completeness rule
-(`E1`, `E4`, …) uses. Schema-level missing column makes every row fail.
+Total Consumed Hours must be recorded for completed inspections. A row
+passes when `STATUS` is anything other than the exact value `Completed`
+(the rule only applies to completed inspections) **or** when
+`TOTAL_CONSUMED_HOURS` is populated. A row fails only when
+`STATUS == "Completed"` **and** `TOTAL_CONSUMED_HOURS` is missing.
 
-**Why it matters.** `STATUS` tracks the lifecycle of each inspection
-record (e.g. `Pending`, `In Progress`, `Completed`). Missing or empty
-values create blind spots in workflow monitoring, break status-based
-filtering / routing, and skew progress reporting.
+**Technical validation:** *Inspection Status = 'Completed' -> Total
+Consumed Hours IS NOT NULL*. Source SQL:
+
+```sql
+SELECT *,
+CASE WHEN STATUS = 'Completed' AND TOTAL_CONSUMED_HOURS IS NOT NULL THEN 'PASS'
+     WHEN STATUS = 'Completed' AND TOTAL_CONSUMED_HOURS IS NULL     THEN 'FAIL'
+     ELSE 'PASS'
+END AS DQ_INSPECTION_12_STATUS
+FROM INGESTION_DB.GP_QUALITY.CT_SQS_AT_INSPECTION
+```
+
+**Purpose.** Required for utilization, cost and performance reporting:
+a completed inspection with no consumed hours cannot be costed or
+compared against its approved budget (`ALLOTED_HOURS`), so every
+downstream utilization / performance figure built on it is understated.
 
 **Failure scenarios.**
 
-| Scenario | Example value | Result |
-|----------|---------------|--------|
-| Populated status | `Completed` | PASS |
-| Populated status | `In Progress` | PASS |
-| NULL value | `NULL` | **FAIL** |
-| Empty string | `""` | **FAIL** |
-| Whitespace only | `"   "` (spaces / tabs / newlines) | **FAIL** |
+| `STATUS` | `TOTAL_CONSUMED_HOURS` | Result |
+|----------|------------------------|--------|
+| `Completed` | `40.0` | PASS |
+| `Completed` | `0.0` | PASS (populated zero is a value) |
+| `Completed` | `NULL` | **FAIL** |
+| `Completed` | `"   "` (string-typed blank) | **FAIL** |
+| `Completed (Short Closed)` | `NULL` | PASS (out of scope - not the exact trigger value) |
+| `completed` | `NULL` | PASS (out of scope - SQL `=` is case-sensitive) |
+| `Approved` / `Inspection In Progress` / `NULL` | `NULL` | PASS (out of scope) |
 
 **Inputs:**
 
 | Alias | Physical column |
 |-------|-----------------|
 | Status | `STATUS` |
+| Total Consumed Hours | `TOTAL_CONSUMED_HOURS` |
+
+**Implementation notes.** The trigger value is exported as
+`SQS_DQ_INSPECTION_12_COMPLETED_STATUS = "Completed"` on
+[src/custom_dqr/_sqs_rules.py](../src/custom_dqr/_sqs_rules.py) so
+tests and UI consumers read one constant. The "populated" test reuses
+`_is_filled` (`Series.notna()` plus trim-and-compare-to-empty for
+string-typed columns) so a numeric column behaves exactly like the SQL
+`IS NULL` predicate while a string-typed blank is still treated as
+missing. Schema-level missing `STATUS` *or* `TOTAL_CONSUMED_HOURS`
+makes every row fail.
+
+---
+
+## dq-inspection-13: Mandatory Approved Hours - SQS
+
+- **Type:** Completeness · **Blocking:** No · **Data product:** SQS (Quality domain)
+- **CDE:** `ALLOTED_HOURS`
+- **Implementation:** `check_sqs_dq_inspection_13` →
+  `validate_completeness_rule(df, ["ALLOTED_HOURS"])`.
+- **Reference dataset:** *(none)*
+
+Alloted Hours must be populated before an inspection assignment is
+issued. A row passes when `ALLOTED_HOURS` is non-null (and, for
+string-typed columns, not blank / whitespace-only); NULL fails.
+
+**Technical validation:** *Value IS NOT NULL*. Source SQL:
+
+```sql
+SELECT *,
+CASE WHEN ALLOTED_HOURS IS NOT NULL THEN 'PASS'
+     WHEN ALLOTED_HOURS IS NULL     THEN 'FAIL'
+     ELSE 'PASS'
+END AS DQ_INSPECTION_13_STATUS
+FROM INGESTION_DB.GP_QUALITY.CT_SQS_AT_INSPECTION
+```
+
+**Purpose.** Required for resource planning and budgeting: the approved
+hours budget is the baseline every utilization figure is measured
+against, and an assignment issued without one cannot be planned,
+staffed or reconciled.
+
+**Failure scenarios.**
+
+| `ALLOTED_HOURS` | Result |
+|-----------------|--------|
+| `120.0` | PASS |
+| `0.0` | PASS (populated zero is a value) |
+| `NULL` | **FAIL** |
+| `""` / `"   "` (string-typed blank) | **FAIL** |
+
+**Inputs:**
+
+| Alias | Physical column |
+|-------|-----------------|
+| Alloted Hours | `ALLOTED_HOURS` |
 
 **Implementation notes.** Reusing `validate_completeness_rule` keeps
-SQ8 in lockstep with the EPT / ADR / ACCE Completeness rules: same
-NULL handling, same string-trim convention, same all-FAIL response
-when the column is structurally absent from the data product.
-
----
-
-## SQ9: Status value in allowed set - SQS
-
-- **Type:** Validity · **Blocking:** No · **Data product:** SQS (Quality domain)
-- **Implementation:** `check_sqs_sq9` →
-  `df["STATUS"].isin(SQS_SQ9_ALLOWED_VALUES)`.
-- **Reference dataset:** *(none - the allowed set is a module-level tuple)*
-
-A row passes when `STATUS` matches one of the 11 canonical workflow
-statuses **verbatim**:
-
-| # | Allowed value |
-|---|---------------|
-| 1 | `Approved` |
-| 2 | `Inspection In Progress` |
-| 3 | `Completed` |
-| 4 | `Inspection Approved` |
-| 5 | `Pending SER Review` |
-| 6 | `Additional Funding Requested` |
-| 7 | `Deprecated` |
-| 8 | `Pending Review` |
-| 9 | `Completed (Short Closed)` |
-| 10 | `Inspection Rejected` |
-| 11 | `OAP Pending` |
-
-The match is **case-sensitive** per the original Snowflake spec's `IN`
-operator -
-`"approved"` and `"APPROVED"` both FAIL. Leading / trailing whitespace
-also FAIL (`" Approved "` is not in the allowed list because `isin`
-performs exact equality). NULL values FAIL (SQL `IN` does not
-match NULLs). Schema-level missing column makes every row fail.
-
-**Why it matters.** `STATUS` drives workflow logic, automated
-transitions, and reporting dashboards. Off-list values fall outside
-monitoring scope, break status-based routing, and skew KPIs.
-
-**Layering with SQ8.** SQ8 (Completeness) and SQ9 (Validity) cover the
-same column on purpose:
-
-| Row value | SQ8 (`STATUS` populated) | SQ9 (`STATUS` in allowed set) |
-|-----------|--------------------------|-------------------------------|
-| `Approved` | PASS | PASS |
-| `Cancelled` (off-list) | PASS | **FAIL** |
-| `NULL` | **FAIL** | **FAIL** |
-| `"   "` (whitespace) | **FAIL** | **FAIL** |
-
-SQ8 surfaces NULL / blank gaps; SQ9 surfaces typos, case variants and
-unauthorised categories. Enable both for full coverage on `STATUS`.
-
-**Failure scenarios.**
-
-| Scenario | Example value | Result |
-|----------|---------------|--------|
-| Valid status | `Approved` | PASS |
-| Valid status | `Inspection In Progress` | PASS |
-| NULL value | `NULL` | **FAIL** |
-| Unexpected status | `Cancelled` | **FAIL** |
-| Case mismatch | `approved` | **FAIL** |
-| Leading / trailing spaces | `" Approved "` | **FAIL** |
-
-**Inputs:**
-
-| Alias | Physical column |
-|-------|-----------------|
-| Status | `STATUS` |
-
-**Implementation notes.** The allowed list is exposed as
-`SQS_SQ9_ALLOWED_VALUES` (immutable tuple) on
-[src/custom_dqr_engine.py](../src/custom_dqr_engine.py); rule callers
-or tests should import from the engine shim rather than re-typing the
-11 strings. Adding a new legitimate status requires updating the tuple
-**and** a business-justification entry, not a per-row workaround.
-
----
-
-## SQ10: Status / Expected Ship Date sequencing - SQS
-
-- **Type:** Business Rule · **Blocking:** No · **Data product:** SQS (Quality domain)
-- **Implementation:** `check_sqs_sq10` (cross-column check; uses
-  `pd.Timestamp.now()` for the reference time and
-  `pd.to_datetime(..., errors="coerce")` for the ship date).
-- **Reference dataset:** *(none)*
-
-A row passes when **any** of the following holds:
-
-1. `STATUS` is anything other than `"Completed"` (the rule only applies
-   to completed assignments).
-2. `EXPECTED_SHIP_DATE` is NULL or unparseable (SQ4 owns the
-   date-validity gap).
-3. `EXPECTED_SHIP_DATE` is on or before `pd.Timestamp.now()`.
-
-A row fails only when `STATUS == "Completed"` **and**
-`EXPECTED_SHIP_DATE` resolves to a strictly future timestamp relative
-to the reference time. The check captures `pd.Timestamp.now()` once per
-call so a single batch evaluation is internally consistent across rows
-- the reference still drifts between runs, which mirrors the Snowflake
-spec's use of `CURRENT_TIMESTAMP()`. Schema-level missing columns make
-every row fail.
-
-**Why it matters.** `STATUS` and `EXPECTED_SHIP_DATE` together encode
-the inspection lifecycle. When an assignment is `"Completed"`,
-shipment has concluded; a future ship date on that record is a logical
-contradiction that signals premature status closure or a date-entry
-error and undermines audit reporting.
-
-**Failure scenarios.**
-
-| Scenario | `STATUS` | `EXPECTED_SHIP_DATE` | Result |
-|----------|----------|----------------------|--------|
-| Completed with past date | `Completed` | `2024-03-15` | PASS |
-| Completed with future date | `Completed` | `2027-12-01` | **FAIL** |
-| In-progress with future date | `Approved` | `2027-12-01` | PASS |
-| Completed with NULL date | `Completed` | `NULL` | PASS |
-| Non-completed status | `Pending Review` | `2024-01-01` | PASS |
-
-**Inputs:**
-
-| Alias | Physical column |
-|-------|-----------------|
-| Status | `STATUS` |
-| Expected Ship Date | `EXPECTED_SHIP_DATE` |
-
-**Implementation notes.** The trigger value is exposed as
-`SQS_SQ10_COMPLETED_STATUS = "Completed"` on
-[src/custom_dqr_engine.py](../src/custom_dqr_engine.py); the match is
-exact and case-sensitive, so `"completed"` / `"COMPLETED"` are out of
-scope (SQ9 separately catches the case-mismatch on `STATUS`). The
-reference-time semantics mean a Completed row whose ship date was
-future at ingestion can flip from FAIL to PASS purely with the passage
-of time - this is a deliberate echo of the Snowflake spec, and the
-intended audit signal is *current* sequencing integrity.
+dq-inspection-13 in lockstep with the EPT / ADR / ACCE Completeness
+rules: same NULL handling, same string-trim convention, same all-FAIL
+response when the column is structurally absent from the data product.
+Unlike dq-inspection-12 the rule is unconditional - `STATUS` plays no
+part in the verdict.
 
 ---
 

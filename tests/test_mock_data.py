@@ -74,13 +74,13 @@ def test_ept_onshore_cetdata_has_expected_key_columns():
 def test_quality_sqs_inspection_has_expected_key_columns():
     df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
     assert not df.empty
-    # EXPECTED_SHIP_DATE drives SQ4; PO_REQUIRED_SHIP_DATE drives SQ5;
-    # INSPECTION_ID / PLANVIEW_ID are the primary identifiers Step 2 /
-    # Step 3 build the data product around. PROJECT_CODE backs the
-    # Quality domain's sidebar Project filter.
+    # STATUS + TOTAL_CONSUMED_HOURS drive dq-inspection-12; ALLOTED_HOURS
+    # drives dq-inspection-13. INSPECTION_ID / PLANVIEW_ID are the
+    # primary identifiers Step 2 / Step 3 build the data product around.
+    # PROJECT_CODE backs the Quality domain's sidebar Project filter.
     for col in (
         "INSPECTION_ID", "PLANVIEW_ID", "PROJECT_CODE",
-        "EXPECTED_SHIP_DATE", "PO_REQUIRED_SHIP_DATE",
+        "STATUS", "TOTAL_CONSUMED_HOURS", "ALLOTED_HOURS",
     ):
         assert col in df.columns, col
 
@@ -99,95 +99,41 @@ def test_quality_sqs_inspection_project_code_format_and_alignment():
     assert (mapping == 1).all()
 
 
-def test_quality_sqs_inspection_includes_null_expected_ship_dates():
-    """SQ4 fails on NULL ``EXPECTED_SHIP_DATE``; the mock must inject at
-    least one NULL or the rule's demo-mode FAIL path is unreachable."""
-    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
-    assert df["EXPECTED_SHIP_DATE"].isna().any()
-
-
-def test_quality_sqs_inspection_includes_sq5_fail_cases():
-    """SQ5 fails when ``EXPECTED_SHIP_DATE > PO_REQUIRED_SHIP_DATE``; the
-    mock must inject at least one such case (and at least one NULL on the
-    PO side) so the demo-mode FAIL / NULL-PASS paths are reachable."""
-    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
-    assert df["PO_REQUIRED_SHIP_DATE"].isna().any()
-    expected = pd.to_datetime(df["EXPECTED_SHIP_DATE"], errors="coerce")
-    po_required = pd.to_datetime(df["PO_REQUIRED_SHIP_DATE"], errors="coerce")
-    after_po = expected.notna() & po_required.notna() & (expected > po_required)
-    assert after_po.any()
-
-
-def test_quality_sqs_inspection_includes_sq6_pass_and_fail_cases():
-    """SQ6 needs both PASS and FAIL demo coverage: at least one row with
-    a value from the allowed controlled-vocabulary set, and at least one
-    off-list / NULL row so the FAIL path is reachable in mock mode."""
-    from src.custom_dqr_engine import SQS_SQ6_ALLOWED_VALUES
-
-    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
-    allowed = set(SQS_SQ6_ALLOWED_VALUES)
-    in_allowed = df["INSPECTION_TYPE"].isin(allowed)
-    assert in_allowed.any(), "no INSPECTION_TYPE rows in the allowed set"
-    assert (~in_allowed).any(), "no INSPECTION_TYPE rows outside the allowed set"
-    # NULL must be present specifically (the off-list bucket also FAILs
-    # SQ6, but NULL is a distinct production failure mode worth seeding).
-    assert df["INSPECTION_TYPE"].isna().any()
-
-
-def test_quality_sqs_inspection_includes_sq7_pass_and_fail_cases():
-    """SQ7 (WORK_CRITICALITY in allowed set) needs the same coverage as
-    SQ6: PASS rows in the allowed vocabulary, off-list FAIL rows, and at
-    least one NULL so both FAIL paths are reachable in mock mode."""
-    from src.custom_dqr_engine import SQS_SQ7_ALLOWED_VALUES
-
-    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
-    assert "WORK_CRITICALITY" in df.columns
-    allowed = set(SQS_SQ7_ALLOWED_VALUES)
-    in_allowed = df["WORK_CRITICALITY"].isin(allowed)
-    assert in_allowed.any(), "no WORK_CRITICALITY rows in the allowed set"
-    assert (~in_allowed).any(), "no WORK_CRITICALITY rows outside the allowed set"
-    assert df["WORK_CRITICALITY"].isna().any()
-
-
-def test_quality_sqs_inspection_includes_sq8_null_and_blank_cases():
-    """SQ8 (Completeness on STATUS) needs both NULL and whitespace-only
-    rows in the mock so the demo-mode FAIL branches are reachable."""
-    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
-    assert df["STATUS"].isna().any(), "no NULL STATUS rows in mock"
-    blank = df["STATUS"].dropna().astype(str).str.strip() == ""
-    assert blank.any(), "no whitespace-only STATUS rows in mock"
-
-
-def test_quality_sqs_inspection_includes_sq9_pass_and_fail_cases():
-    """SQ9 (STATUS in allowed set) needs both PASS rows from the
-    canonical 11-value vocabulary and off-list FAIL rows so the
-    demo-mode covers both branches independently of SQ8's NULL gap."""
-    from src.custom_dqr_engine import SQS_SQ9_ALLOWED_VALUES
-
-    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
-    allowed = set(SQS_SQ9_ALLOWED_VALUES)
-    in_allowed = df["STATUS"].isin(allowed)
-    assert in_allowed.any(), "no STATUS rows in the SQ9 allowed set"
-    # Off-list is anything non-null that doesn't match the allowed set
-    # (NULL is a separate SQ8 concern).
-    offlist = df["STATUS"].notna() & ~in_allowed
-    assert offlist.any(), "no off-list STATUS rows for SQ9 FAIL coverage"
-
-
-def test_quality_sqs_inspection_includes_sq10_completed_future_fail():
-    """SQ10 fails only on ``STATUS == 'Completed'`` paired with a future
-    ``EXPECTED_SHIP_DATE``; the mock must seed at least one such row
-    (and at least one Completed PASS row) so both branches are
+def test_quality_sqs_inspection_includes_dq_inspection_12_pass_and_fail():
+    """dq-inspection-12 fails only on ``STATUS == 'Completed'`` paired with
+    a NULL ``TOTAL_CONSUMED_HOURS``; the mock must seed at least one such
+    row (and at least one Completed PASS row) so both branches are
     reachable in demo mode."""
     df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
     completed = df["STATUS"] == "Completed"
     assert completed.any(), "no Completed STATUS rows in mock"
-    ship = pd.to_datetime(df["EXPECTED_SHIP_DATE"], errors="coerce")
-    now = pd.Timestamp.now()
-    completed_future = completed & ship.notna() & (ship > now)
-    completed_past = completed & ship.notna() & (ship <= now)
-    assert completed_future.any(), "no Completed+future-ship-date FAIL row"
-    assert completed_past.any(), "no Completed+past-ship-date PASS row"
+    hours_null = df["TOTAL_CONSUMED_HOURS"].isna()
+    assert (completed & hours_null).any(), "no Completed+NULL-hours FAIL row"
+    assert (completed & ~hours_null).any(), "no Completed+hours PASS row"
+    # Out-of-scope rows with NULL hours must exist too (open inspections
+    # legitimately have no consumed hours yet) so the ELSE 'PASS' branch
+    # is exercised.
+    assert (~completed & hours_null).any()
+
+
+def test_quality_sqs_inspection_includes_dq_inspection_13_null_cases():
+    """dq-inspection-13 fails on NULL ``ALLOTED_HOURS``; the mock must
+    inject at least one NULL (and keep the majority populated) so both
+    branches are reachable in demo mode."""
+    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
+    assert df["ALLOTED_HOURS"].isna().any(), "no NULL ALLOTED_HOURS rows"
+    assert df["ALLOTED_HOURS"].notna().sum() > df["ALLOTED_HOURS"].isna().sum()
+
+
+def test_quality_sqs_inspection_status_has_null_blank_and_offlist_values():
+    """STATUS keeps its deliberate gaps (NULL, whitespace-only, off-list)
+    so the Standard Completeness / Validity rules stay meaningful on the
+    Quality data product."""
+    df = mock_data.fetch_mock_table("CT_SQS_AT_INSPECTION")
+    assert df["STATUS"].isna().any(), "no NULL STATUS rows in mock"
+    blank = df["STATUS"].dropna().astype(str).str.strip() == ""
+    assert blank.any(), "no whitespace-only STATUS rows in mock"
+    assert (df["STATUS"] == "Cancelled").any(), "no off-list STATUS rows"
 
 
 # ---------------------------------------------------------------------------

@@ -1043,16 +1043,16 @@ def _mock_vws_gp_standard_share() -> pd.DataFrame:
 # =============================================================================
 # The Quality domain ships a single curated inspection table; the mock
 # generator below mirrors that shape so the rest of the pipeline can run
-# in demo mode. CDEs and curated DQR rules are still being defined with
-# the Quality team - the deliberate gaps seeded here (nulls, duplicate
-# PKs, out-of-range scores) keep the Standard DQR catalog meaningful in
-# the meantime.
+# in demo mode. The curated rules (``dq-inspection-12`` / ``-13``) key on
+# ``STATUS``, ``TOTAL_CONSUMED_HOURS`` and ``ALLOTED_HOURS``; the other
+# columns carry the real table's controlled vocabularies plus deliberate
+# gaps (nulls, off-list values, duplicate PKs, out-of-range scores) so the
+# Standard DQR catalog stays meaningful in demo mode.
 
 _SQS_INSPECTION_RESULTS = ["PASS", "FAIL", "OBSERVATION"]
-# ``INSPECTION_TYPE`` drives SQ6 (Validity in allowed set). The pool
-# matches the controlled vocabulary verbatim, plus a handful of off-list
-# values (mis-cased, typos, unexpected categories) so SQ6 has FAIL cases
-# in mock mode.
+# ``INSPECTION_TYPE`` controlled vocabulary, plus a handful of off-list
+# values (mis-cased, typos, unexpected categories) so Validity-style
+# Standard rules have FAIL cases in mock mode.
 _SQS_INSPECTION_TYPES_ALLOWED = [
     "Source Inspection",
     "Supplier Assessment",
@@ -1060,13 +1060,13 @@ _SQS_INSPECTION_TYPES_ALLOWED = [
     "Supplemental Inspection",
 ]
 _SQS_INSPECTION_TYPES_OFFLIST = [
-    "source inspection",      # case mismatch → SQ6 FAIL
-    "Audit",                  # unexpected category → SQ6 FAIL
-    "Expedite",               # typo / variant → SQ6 FAIL
+    "source inspection",      # case mismatch
+    "Audit",                  # unexpected category
+    "Expedite",               # typo / variant
 ]
-# ``WORK_CRITICALITY`` drives SQ7 (Validity in allowed set). Same shape as
+# ``WORK_CRITICALITY`` classification levels. Same shape as
 # ``INSPECTION_TYPE``: an allowed-vocabulary pool plus a handful of off-list
-# values so the FAIL path is exercised in mock mode.
+# values.
 _SQS_WORK_CRITICALITY_ALLOWED = [
     "I - High Critical",
     "II - Medium Critical",
@@ -1074,14 +1074,15 @@ _SQS_WORK_CRITICALITY_ALLOWED = [
     "IV - Non Critical",
 ]
 _SQS_WORK_CRITICALITY_OFFLIST = [
-    "i - high critical",      # case mismatch → SQ7 FAIL
-    "V - Unknown",            # off-list classification → SQ7 FAIL
-    "",                       # empty string → SQ7 FAIL
+    "i - high critical",      # case mismatch
+    "V - Unknown",            # off-list classification
+    "",                       # empty string
 ]
-# ``STATUS`` drives SQ8 (Completeness) and SQ9 (Validity in allowed set).
-# Allowed pool mirrors the 11 canonical workflow statuses from the SQ9
-# spec; the off-list pool covers SQ9's documented FAIL scenarios (typo,
-# case mismatch, leading/trailing whitespace, off-list category).
+# ``STATUS`` is the trigger column for ``dq-inspection-12`` (only rows
+# with the exact value ``"Completed"`` are in scope). The allowed pool
+# mirrors the 11 canonical workflow statuses; the off-list pool covers
+# typos, case mismatch, leading/trailing whitespace and off-list
+# categories.
 _SQS_INSPECTION_STATUSES_ALLOWED = [
     "Approved",
     "Inspection In Progress",
@@ -1096,9 +1097,9 @@ _SQS_INSPECTION_STATUSES_ALLOWED = [
     "OAP Pending",
 ]
 _SQS_INSPECTION_STATUSES_OFFLIST = [
-    "Cancelled",       # unexpected category → SQ9 FAIL
-    "approved",        # case mismatch → SQ9 FAIL
-    " Approved ",      # surrounding whitespace → SQ9 FAIL (SQ8 PASS)
+    "Cancelled",       # unexpected category
+    "approved",        # case mismatch
+    " Approved ",      # surrounding whitespace
     "In Progress",     # off-list (canonical form is "Inspection In Progress")
 ]
 
@@ -1135,9 +1136,8 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
         _planview_to_project_code[pv] if pv is not None else None for pv in planview
     ]
 
-    # ~85% of rows pick from the allowed set (SQ6 PASS); ~10% pick an
-    # off-list value (SQ6 FAIL); ~4% NULL (also SQ6 FAIL, plus any
-    # completeness rule wired against the column).
+    # ~86% of rows pick from the allowed set; ~10% pick an off-list
+    # value; ~4% NULL.
     allowed_weight = 0.86
     offlist_weight = 0.10
     inspection_types: list = []
@@ -1150,15 +1150,14 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
         else:
             inspection_types.append(None)
     # Guarantee at least one each of off-list and NULL even on small N so
-    # demo-mode tests against SQ6 FAIL paths are deterministic.
+    # the demo stays deterministic.
     off_idx, null_idx_st = RNG.choice(n, size=2, replace=False)
     inspection_types[int(off_idx)] = "source inspection"
     inspection_types[int(null_idx_st)] = None
 
-    # WORK_CRITICALITY drives SQ7 (Validity in allowed set). Same mix as
-    # INSPECTION_TYPE: ~86% allowed (SQ7 PASS), ~10% off-list (SQ7 FAIL),
-    # ~4% NULL (also SQ7 FAIL). Guaranteed seeding for the off-list +
-    # NULL buckets keeps the demo deterministic at any N.
+    # WORK_CRITICALITY: same mix as INSPECTION_TYPE - ~86% allowed, ~10%
+    # off-list, ~4% NULL. Guaranteed seeding for the off-list + NULL
+    # buckets keeps the demo deterministic at any N.
     work_criticality: list = []
     for _ in range(n):
         roll = RNG.random()
@@ -1174,10 +1173,9 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
 
     results = RNG.choice(_SQS_INSPECTION_RESULTS, size=n,
                          p=[0.65, 0.20, 0.15]).astype(object).tolist()
-    # STATUS drives SQ8 (Completeness) and SQ9 (Validity in allowed set).
-    # ~83% allowed (SQ8 PASS, SQ9 PASS), ~9% off-list (SQ8 PASS, SQ9 FAIL),
-    # ~5% NULL (both FAIL), ~3% whitespace-only (both FAIL). Guaranteed
-    # seeding of each bucket keeps the demo deterministic at any N.
+    # STATUS: ~83% allowed, ~9% off-list, ~5% NULL, ~3% whitespace-only.
+    # Guaranteed seeding of each bucket keeps the demo deterministic at
+    # any N.
     statuses: list = []
     for _ in range(n):
         roll = RNG.random()
@@ -1193,8 +1191,8 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
     blank_pool = [i for i in range(n) if statuses[i] is not None]
     for i in RNG.choice(blank_pool, size=max(1, int(0.03 * n)), replace=False):
         statuses[int(i)] = "   "
-    # Force-seed at least one off-list status so SQ9's FAIL path is
-    # reachable even at small N (the random bucket can otherwise miss it).
+    # Force-seed at least one off-list status so the off-list bucket is
+    # populated even at small N (the random draw can otherwise miss it).
     forced_offlist = RNG.choice([
         i for i in range(n) if statuses[i] not in (None,) and (statuses[i] or "").strip() != ""
     ])
@@ -1217,11 +1215,9 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
     for i in RNG.choice(n, size=max(1, int(0.04 * n)), replace=False):
         inspector[i] = None
 
-    # EXPECTED_SHIP_DATE drives SQ4 (Validity). The real column is a
-    # TIMESTAMP (as in the source system), so ingestion enforces
-    # well-formed datetimes
-    # upstream - the dominant FAIL case is NULL. ~6% nulls give SQ4
-    # real failures to detect in mock mode.
+    # EXPECTED_SHIP_DATE is a TIMESTAMP in the source system, so ingestion
+    # enforces well-formed datetimes upstream - the realistic gap is NULL
+    # (~6%).
     expected_ship_date = [
         datetime(2024, 1, 1) + timedelta(days=int(RNG.integers(30, 900)))
         for _ in range(n)
@@ -1229,35 +1225,10 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
     for i in RNG.choice(n, size=max(1, int(0.06 * n)), replace=False):
         expected_ship_date[i] = None
 
-    # SQ10 (status / ship-date sequencing) needs at least one row with
-    # STATUS == "Completed" AND a future EXPECTED_SHIP_DATE so the
-    # demo-mode FAIL path is reachable. Pick two indices, mark both
-    # Completed; one gets a future ship date (FAIL), the other a past
-    # ship date (PASS). Avoids the NULL / blank / off-list seeds above
-    # to keep their SQ8 / SQ9 coverage intact.
-    sq10_pool = [
-        i for i in range(n)
-        if statuses[i] not in (None, "   ", "Cancelled")
-        and i != int(forced_offlist)
-    ]
-    if len(sq10_pool) >= 2:
-        sq10_fail_idx, sq10_pass_idx = RNG.choice(sq10_pool, size=2, replace=False)
-        statuses[int(sq10_fail_idx)] = "Completed"
-        statuses[int(sq10_pass_idx)] = "Completed"
-        expected_ship_date[int(sq10_fail_idx)] = (
-            _MOCK_NOW + timedelta(days=180)
-        )
-        expected_ship_date[int(sq10_pass_idx)] = (
-            _MOCK_NOW - timedelta(days=180)
-        )
-
-    # PO_REQUIRED_SHIP_DATE drives SQ5 (Business Rule). Most rows land 0-30
-    # days AFTER the expected ship date (contractual buffer ~> projected
-    # ship → PASS); ~10% land 1-20 days *before* the expected ship date
-    # so SQ5 has real FAIL cases (expected > PO required). ~5% nulls
-    # exercise the NULL-handling PASS branch. The base is the same
-    # ``expected_ship_date[i]`` whenever it's populated, otherwise an
-    # independent date so SQ5 can still be exercised when SQ4 fails.
+    # PO_REQUIRED_SHIP_DATE: most rows land 0-30 days AFTER the expected
+    # ship date (contractual buffer > projected ship); ~10% land 1-20 days
+    # *before* it; ~5% nulls. The base is the same ``expected_ship_date[i]``
+    # whenever it's populated, otherwise an independent date.
     po_required_ship_date: list = []
     fail_idx = set(RNG.choice(n, size=max(1, int(0.10 * n)), replace=False).tolist())
     null_idx = set(RNG.choice(n, size=max(1, int(0.05 * n)), replace=False).tolist())
@@ -1274,6 +1245,44 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
             offset = int(RNG.integers(0, 31))     # on/after expected → PASS
         po_required_ship_date.append(base + timedelta(days=offset))
 
+    # ALLOTED_HOURS drives dq-inspection-13 (Completeness): the approved
+    # hours budget must be populated on every record. ~7% NULL gives the
+    # rule real FAIL cases; a guaranteed NULL seed keeps the FAIL path
+    # reachable at any N.
+    alloted_hours = RNG.integers(8, 200, size=n).astype(float).tolist()
+    for i in RNG.choice(n, size=max(1, int(0.07 * n)), replace=False):
+        alloted_hours[int(i)] = None
+
+    # TOTAL_CONSUMED_HOURS drives dq-inspection-12 (Completeness on
+    # completion): only rows with STATUS == "Completed" are in scope, and
+    # those must carry consumed hours. ~15% NULL overall (open
+    # inspections legitimately have no consumed hours yet). Force-seed
+    # two Completed rows outside the NULL / blank / off-list STATUS seeds
+    # above: one with NULL hours (FAIL) and one populated (PASS) so both
+    # branches are reachable in demo mode at any N.
+    total_consumed_hours: list = []
+    for i in range(n):
+        if RNG.random() < 0.15:
+            total_consumed_hours.append(None)
+            continue
+        base_hours = alloted_hours[i] if alloted_hours[i] is not None else 80.0
+        total_consumed_hours.append(
+            round(float(base_hours) * float(RNG.uniform(0.6, 1.3)), 1)
+        )
+    completed_pool = [
+        i for i in range(n)
+        if statuses[i] not in (None, "   ", "Cancelled")
+        and i != int(forced_offlist)
+    ]
+    if len(completed_pool) >= 2:
+        dq12_fail_idx, dq12_pass_idx = RNG.choice(
+            completed_pool, size=2, replace=False
+        )
+        statuses[int(dq12_fail_idx)] = "Completed"
+        statuses[int(dq12_pass_idx)] = "Completed"
+        total_consumed_hours[int(dq12_fail_idx)] = None
+        total_consumed_hours[int(dq12_pass_idx)] = 96.5
+
     return pd.DataFrame({
         "INSPECTION_ID": inspection_ids,
         "PLANVIEW_ID": planview,
@@ -1287,6 +1296,8 @@ def _mock_ct_sqs_at_inspection() -> pd.DataFrame:
         "SCORE": scores,
         "EXPECTED_SHIP_DATE": expected_ship_date,
         "PO_REQUIRED_SHIP_DATE": po_required_ship_date,
+        "ALLOTED_HOURS": alloted_hours,
+        "TOTAL_CONSUMED_HOURS": total_consumed_hours,
     })
 
 

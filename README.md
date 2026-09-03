@@ -82,17 +82,11 @@ automates the same pipeline end-to-end).
      joining the first three characters of the 4-character `ACCE.COA`
      to the 3-character `ICARUS_COA` group in the master (the analog
      of ADR's `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation). The
-     Quality domain (SQS) seeds its catalog with `SQ4` (Validity on
-     `EXPECTED_SHIP_DATE`), `SQ5` (Business Rule pinning the supplier's
-     expected ship date to the PO's contractual deadline), `SQ6`
-     (Validity check enforcing the controlled `INSPECTION_TYPE`
-     vocabulary), `SQ7` (Validity check enforcing the
-     `WORK_CRITICALITY` classification levels), `SQ8` (Completeness
-     check pinning a populated `STATUS` on every inspection record),
-     `SQ9` (Validity check pinning `STATUS` to the 11 canonical
-     workflow statuses), and `SQ10` (Business Rule pinning Completed
-     inspections to a non-future expected ship date), and is growing
-     as new rules land.
+     Quality domain (SQS) ships the Quality team's two curated rules:
+     `dq-inspection-12` (Completeness - `TOTAL_CONSUMED_HOURS` must be
+     recorded on Completed inspections) and `dq-inspection-13`
+     (Completeness - `ALLOTED_HOURS` must be populated before an
+     inspection assignment is issued).
      Per-rule documentation:
      [documents/CUSTOM_RULES.md](documents/CUSTOM_RULES.md).
 
@@ -317,7 +311,7 @@ data_quality_app/
 │       ├── _ept_catalog.py      # EPT_RULES list (E1-E7)
 │       ├── _adr_catalog.py      # ADR_RULES list (A1-A8)
 │       ├── _acce_catalog.py     # ACCE_RULES list (AC1-AC8)
-│       └── _sqs_catalog.py      # SQS_RULES list (Quality domain - SQ*)
+│       └── _sqs_catalog.py      # SQS_RULES list (Quality domain - dq-inspection-*)
 ├── src/
 │   ├── models.py                # Dataclasses (CDE, DQRAssignment, Scorecard)
 │   ├── databricks_client.py     # Databricks SQL Warehouse data layer (headless auth)
@@ -341,7 +335,7 @@ data_quality_app/
 │       ├── _ept_rules.py        # E1-E7 checks + constants + EPTE3/E6Params
 │       ├── _adr_rules.py        # A1-A8 checks + constants + ADRA3/A7/A8Params
 │       ├── _acce_rules.py       # AC1-AC8 checks + constants + ACCEAC3/AC7/AC8Params
-│       ├── _sqs_rules.py        # SQ* checks + constants (Quality domain)
+│       ├── _sqs_rules.py        # dq-inspection-* checks + constants (Quality domain)
 │       └── _dispatcher.py       # evaluate_custom_rules(df, assignments, dp)
 ├── ui/
 │   ├── step_mode_selection.py            # Initial step - One-click vs Step-by-step picker
@@ -552,7 +546,7 @@ domain. A *domain* bundles:
 | Code | Name | Systems | Status |
 |------|------|---------|--------|
 | `cost_estimate` | Cost Estimate | ADR, ACCE, EPT | Production (23 custom rules) |
-| `quality` | Quality | SQS | Beta (SQ4 - Validity on `EXPECTED_SHIP_DATE`, SQ5 - Business Rule for PO ship-date alignment, SQ6 - Validity on `INSPECTION_TYPE`, SQ7 - Validity on `WORK_CRITICALITY`, SQ8 - Completeness on `STATUS`, SQ9 - Validity on the `STATUS` workflow vocabulary, SQ10 - Business Rule pinning Completed inspections to a non-future ship date) |
+| `quality` | Quality | SQS | Production (dq-inspection-12 - Completeness on `TOTAL_CONSUMED_HOURS` for Completed inspections, dq-inspection-13 - Completeness on `ALLOTED_HOURS`) |
 
 ### Adding a new domain
 
@@ -619,9 +613,10 @@ same single Unity Catalog namespace as every other application table
 (`DATABRICKS_CATALOG`.`DATABRICKS_SCHEMA` - see
 `config.domains.get_active_data_location`), so no per-domain override
 is needed. A synthetic generator in `src.mock_data` mirrors the
-inspection-table shape for demo mode. The Quality team is finalizing
-the broader catalog; the domain seeds it with `SQ4` (Validity on
-`EXPECTED_SHIP_DATE`) and grows from there.
+inspection-table shape for demo mode. The catalog carries the Quality
+team's curated rules, `dq-inspection-12` (Completeness on
+`TOTAL_CONSUMED_HOURS` for Completed inspections) and
+`dq-inspection-13` (Completeness on `ALLOTED_HOURS`).
 
 ## Configuring custom DQR rules
 
@@ -712,13 +707,8 @@ out of the box. Full per-rule documentation lives in
 | ACCE | AC6 | Construction hours present when quantity exists (`COST_MH`) | Consistency | No |
 | ACCE | AC7 | Within-discipline quantity / hour ratio outlier (`DESCRIPTION`; optional project-type segmentation) | Statistical Outlier | No |
 | ACCE | AC8 | Cross-discipline quantity ratios (`COMPONENT_SOURCE`; optional project-type segmentation) | Statistical Outlier | No |
-| SQS | SQ4 | Valid date (`EXPECTED_SHIP_DATE`)                          | Validity            | No |
-| SQS | SQ5 | Not after PO Required Ship Date (`EXPECTED_SHIP_DATE` vs `PO_REQUIRED_SHIP_DATE`) | Business Rule | No |
-| SQS | SQ6 | Inspection Type value in allowed set (`INSPECTION_TYPE`)   | Validity            | No |
-| SQS | SQ7 | Work Criticality value in allowed set (`WORK_CRITICALITY`) | Validity            | No |
-| SQS | SQ8 | Status required (`STATUS` populated, non-blank)            | Completeness        | No |
-| SQS | SQ9 | Status value in allowed set (`STATUS` in 11 canonical workflow statuses) | Validity | No |
-| SQS | SQ10 | Status / Expected Ship Date sequencing (Completed → ship date not future) | Business Rule | No |
+| SQS | dq-inspection-12 | Mandatory on Completion (`STATUS = 'Completed'` → `TOTAL_CONSUMED_HOURS` not NULL) | Completeness | No |
+| SQS | dq-inspection-13 | Mandatory Approved Hours (`ALLOTED_HOURS` not NULL)     | Completeness        | No |
 
 E2 / E7 / A2 / AC2 depend on the `VWS_GP_STANDARD_SHARE` reference
 table (loaded from the same Unity Catalog namespace as the
@@ -822,7 +812,7 @@ In addition to this README, see:
 - [documents/CUSTOM_RULES.md](documents/CUSTOM_RULES.md) - per-rule reference
   for the EPT custom catalog (E1–E7), the ADR custom catalog (A1, A2,
   A3, A4, A5, A6, A7, A8), the ACCE custom catalog (AC1, …), and the
-  SQS / Quality custom catalog (SQ4, SQ5, SQ6, SQ7, SQ8, SQ9, SQ10, …)
+  SQS / Quality custom catalog (dq-inspection-12, dq-inspection-13)
   - including required columns, reference data, options, and pass/fail
   conventions.
 - [documents/ML_LAB.md](documents/ML_LAB.md) - 🧪 **ML Lab (beta)** reference:

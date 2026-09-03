@@ -171,10 +171,10 @@ def test_quality_domain_has_single_sqs_system(monkeypatch):
     assert sqs.primary_table.join_key == "PLANVIEW_ID"
 
 
-def test_quality_domain_is_marked_placeholder():
-    """The Quality domain ships with no curated rules yet, so the
-    Step 0 card needs to set expectations - the flag must be true."""
-    assert DOMAINS[DOMAIN_QUALITY].placeholder is True
+def test_quality_domain_is_not_a_placeholder():
+    """The Quality domain ships with a real schema and curated rules, so
+    the Step 0 card must not carry the BETA · PLACEHOLDER pill."""
+    assert DOMAINS[DOMAIN_QUALITY].placeholder is False
 
 
 def test_quality_domain_data_product_builds(monkeypatch):
@@ -189,108 +189,43 @@ def test_quality_domain_data_product_builds(monkeypatch):
     assert "INSPECTION_ID" in dp.df.columns
 
 
-def test_quality_domain_exposes_sq4(monkeypatch):
-    """Quality ships its first curated rule (SQ4 - Validity on
-    ``EXPECTED_SHIP_DATE``). The list will grow as the Quality team
-    finalizes additional rules."""
+def test_quality_domain_exposes_dq_inspection_12(monkeypatch):
+    """dq-inspection-12 (Completeness) - Total Consumed Hours must be
+    recorded for completed inspections."""
     monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
     rules = get_available_custom_dqr_rules("SQS")
     by_id = {r.id: r for r in rules}
-    assert "SQ4" in by_id
-    sq4 = by_id["SQ4"]
-    assert sq4.type == "Validity"
-    assert sq4.blocking is False
-    assert sq4.required_columns == {
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
-    }
-
-
-def test_quality_domain_exposes_sq5(monkeypatch):
-    """SQ5 (Business Rule) compares ``EXPECTED_SHIP_DATE`` to
-    ``PO_REQUIRED_SHIP_DATE`` - the contractual deadline."""
-    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ5" in by_id
-    sq5 = by_id["SQ5"]
-    assert sq5.type == "Business Rule"
-    assert sq5.blocking is False
-    assert sq5.required_columns == {
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
-        "PO Required Ship Date": "PO_REQUIRED_SHIP_DATE",
-    }
-
-
-def test_quality_domain_exposes_sq6(monkeypatch):
-    """SQ6 (Validity) constrains ``INSPECTION_TYPE`` to the controlled
-    vocabulary; case-sensitive per the Snowflake ``IN`` operator."""
-    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ6" in by_id
-    sq6 = by_id["SQ6"]
-    assert sq6.type == "Validity"
-    assert sq6.blocking is False
-    assert sq6.required_columns == {
-        "Inspection Type": "INSPECTION_TYPE",
-    }
-
-
-def test_quality_domain_exposes_sq7(monkeypatch):
-    """SQ7 (Validity) constrains ``WORK_CRITICALITY`` to the four
-    roman-numeral classification levels."""
-    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ7" in by_id
-    sq7 = by_id["SQ7"]
-    assert sq7.type == "Validity"
-    assert sq7.blocking is False
-    assert sq7.required_columns == {
-        "Work Criticality": "WORK_CRITICALITY",
-    }
-
-
-def test_quality_domain_exposes_sq8(monkeypatch):
-    """SQ8 (Completeness) enforces a populated ``STATUS`` value -
-    NULL or whitespace-only FAILs."""
-    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ8" in by_id
-    sq8 = by_id["SQ8"]
-    assert sq8.type == "Completeness"
-    assert sq8.blocking is False
-    assert sq8.required_columns == {"Status": "STATUS"}
-
-
-def test_quality_domain_exposes_sq9(monkeypatch):
-    """SQ9 (Validity) constrains ``STATUS`` to the 11 canonical
-    workflow statuses (case-sensitive Snowflake ``IN`` semantics)."""
-    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ9" in by_id
-    sq9 = by_id["SQ9"]
-    assert sq9.type == "Validity"
-    assert sq9.blocking is False
-    assert sq9.required_columns == {"Status": "STATUS"}
-
-
-def test_quality_domain_exposes_sq10(monkeypatch):
-    """SQ10 (Business Rule) pins Completed inspections to a non-future
-    ``EXPECTED_SHIP_DATE`` - a cross-column sequencing constraint."""
-    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
-    rules = get_available_custom_dqr_rules("SQS")
-    by_id = {r.id: r for r in rules}
-    assert "SQ10" in by_id
-    sq10 = by_id["SQ10"]
-    assert sq10.type == "Business Rule"
-    assert sq10.blocking is False
-    assert sq10.required_columns == {
+    assert "dq-inspection-12" in by_id
+    rule = by_id["dq-inspection-12"]
+    assert rule.name == "Mandatory on Completion"
+    assert rule.type == "Completeness"
+    assert rule.blocking is False
+    assert rule.required_columns == {
         "Status": "STATUS",
-        "Expected Ship Date": "EXPECTED_SHIP_DATE",
+        "Total Consumed Hours": "TOTAL_CONSUMED_HOURS",
     }
+
+
+def test_quality_domain_exposes_dq_inspection_13(monkeypatch):
+    """dq-inspection-13 (Completeness) - Alloted Hours must be populated
+    before an inspection assignment is issued."""
+    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
+    rules = get_available_custom_dqr_rules("SQS")
+    by_id = {r.id: r for r in rules}
+    assert "dq-inspection-13" in by_id
+    rule = by_id["dq-inspection-13"]
+    assert rule.name == "Mandatory Approved Hours"
+    assert rule.type == "Completeness"
+    assert rule.blocking is False
+    assert rule.required_columns == {"Alloted Hours": "ALLOTED_HOURS"}
+
+
+def test_quality_domain_ships_exactly_the_two_curated_rules(monkeypatch):
+    """The legacy SQ4-SQ10 batch was retired; only the Quality team's
+    dq-inspection-12 / -13 remain."""
+    monkeypatch.setitem(_session_state_dict(monkeypatch), "domain", DOMAIN_QUALITY)
+    rule_ids = [r.id for r in get_available_custom_dqr_rules("SQS")]
+    assert rule_ids == ["dq-inspection-12", "dq-inspection-13"]
 
 
 # ---------------------------------------------------------------------------

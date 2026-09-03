@@ -162,9 +162,10 @@ def _build_quality_domain() -> DomainDef:
     same Unity Catalog namespace as every other table (see
     ``SETTINGS.dbx_catalog`` / ``SETTINGS.dbx_schema``).
 
-    Curated DQR rules are still being defined with the Quality team; the
-    catalog seeds the first batch of checks (``SQ4`` - Validity on
-    ``EXPECTED_SHIP_DATE``) and grows as new rules land. The mock
+    Curated DQR rules are defined with the Quality team and live in
+    ``config.custom_dqr._sqs_catalog`` (``dq-inspection-12`` - Completeness
+    on ``TOTAL_CONSUMED_HOURS`` for completed inspections,
+    ``dq-inspection-13`` - Completeness on ``ALLOTED_HOURS``). The mock
     generator in ``src.mock_data`` mirrors the inspection-table shape so
     the rest of the pipeline can be exercised end-to-end in demo mode.
     """
@@ -198,10 +199,9 @@ def _build_quality_domain() -> DomainDef:
         name="Quality",
         subtitle="SQS",
         description=(
-            "Quality domain (beta). Same seven-step DQ workflow as Cost "
-            "Estimate, applied to the curated SQS inspection table "
-            "``CT_SQS_AT_INSPECTION``. Curated DQR rules are still being "
-            "defined with the Quality team."
+            "Same seven-step DQ workflow as Cost Estimate, applied to "
+            "the curated SQS inspection table ``CT_SQS_AT_INSPECTION`` "
+            "with curated DQR rules defined with the Quality team."
         ),
         icon="✅",
         accent="#10b981",
@@ -213,7 +213,7 @@ def _build_quality_domain() -> DomainDef:
         system_icons={"SQS": "🛡️"},
         system_accents={"SQS": "#10b981"},
         reference_dataset_loaders={},
-        placeholder=True,
+        placeholder=False,
         project_filter=ProjectFilterDef(
             column="PROJECT_CODE",
             label="PROJECT_CODE(s)",

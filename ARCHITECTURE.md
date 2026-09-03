@@ -61,7 +61,7 @@ config/
     _ept_catalog.py            # EPT_RULES list
     _adr_catalog.py            # ADR_RULES list
     _acce_catalog.py           # ACCE_RULES list
-    _sqs_catalog.py            # SQS_RULES list (Quality domain)
+    _sqs_catalog.py            # SQS_RULES list (Quality domain - dq-inspection-*)
 src/
   models.py                    # ColumnProfile / DataProduct / DQRAssignment / ...
   profiler.py                  # column dtype classification + null/duplicate counts
@@ -93,7 +93,7 @@ src/
     _ept_rules.py              # E1-E7 checks + constants
     _adr_rules.py              # A1-A8 checks + constants
     _acce_rules.py             # AC1-AC8 checks + constants
-    _sqs_rules.py              # SQ* checks + constants (Quality domain)
+    _sqs_rules.py              # dq-inspection-* checks + constants (Quality domain)
     _dispatcher.py             # evaluate_custom_rules(df, assignments, dp)
 ui/
   _theme.py                    # inject_global_css() - one consolidated main-area
@@ -571,10 +571,10 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   at its start, draw from the module `RNG` (not a fresh generator or global
   `np.random`), and anchor any "recent" dates to `_MOCK_NOW`. The mock data
   itself is now fully deterministic. The ONE thing still wall-clock dependent is
-  *outside* the mock data: date-*relative* DQRs (Timeliness / Currency / SQ10)
-  compare against the **engine's** real `datetime.now()` (`src/dqr_engine.py`,
-  the SQ10 check), so their pass rates drift over calendar time regardless of
-  how deterministic the data is.
+  *outside* the mock data: date-*relative* Standard DQRs (Timeliness /
+  Currency) compare against the **engine's** real `datetime.now()`
+  (`src/dqr_engine.py`), so their pass rates drift over calendar time
+  regardless of how deterministic the data is.
 
 ## CI
 
