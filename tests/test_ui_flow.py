@@ -731,7 +731,7 @@ def test_dashboard_csv_and_json_helpers_produce_valid_payloads():
 
 
 def test_dashboard_gauge_and_bar_build_figures():
-    """Directly invoke _gauge and _threshold_bar helpers."""
+    """Directly invoke the _threshold_bar helper (the gauge was removed)."""
     import ui.step_06_dashboard as s6
     from src.scorecard import compute_scorecard
 
@@ -739,8 +739,6 @@ def test_dashboard_gauge_and_bar_build_figures():
     cfg = _config_with_ept_assignments()
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
 
-    fig = s6._gauge(75.0, "Test", 80, 60)
-    assert fig is not None
     fig2 = s6._threshold_bar(result)
     assert fig2 is not None
 
@@ -983,11 +981,10 @@ def test_step6_presentation_includes_source_weights_and_custom_rule_results():
     cfg.custom_assignments = [CustomDQRAssignment(rule_id="E1", weight=100.0)]
     at = _new_app(**state)
     markdowns = [m.value for m in at.markdown]
-    # Assert against the styled source-weights card (the .src-mini element) -
-    # after L6 removed the duplicate plain-markdown line, this is the only place
-    # the weights render, so the styled element must carry them.
+    # The source weights now live in the dashboard header strip
+    # ("Standard <score> · 70%" / "Custom <score> · 30%").
     assert any(
-        "src-mini" in m and "Source weights" in m and "70%" in m and "30%" in m
+        "Standard" in m and "70%" in m and "Custom" in m and "30%" in m
         for m in markdowns
     )
     # Custom rule pass rates surfaced on the result for the dashboard tab to
@@ -1118,7 +1115,7 @@ def test_step6_presentation_lists_e4_and_e7_in_custom_rules():
     assert "E7" in result.custom_rule_pass_rates
     markdowns = [m.value for m in at.markdown]
     body = "\n\n".join(markdowns)
-    assert "Source weights" in body
+    assert "Standard" in body and "Custom" in body
     assert "50%" in body
 
 

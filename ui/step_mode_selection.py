@@ -1,21 +1,9 @@
 """
-Initial step: Mode selection.
+Entry step: choose how to build (One-click / Step-by-step) or open a saved project.
 
-The new entry point of the app. Before anything else, the user chooses how
-they want to build their scorecards:
-
-- **One-click**: pick a domain + systems, then the app automates the rest
-  (CDEs, custom rules, default options, equal weights, scorecards, CSVs).
-- **Step-by-step**: the historical manual flow - full control over every step.
-
-This step only sets ``session_state.app_mode`` and routes onward; it owns
-no workflow data of its own. Visual identity mirrors Step 0 (domain
-selection) so the two early screens read as one coherent on-ramp.
-A third on-ramp - **Open a saved project** - appears below the two mode
-cards once at least one project exists: pick a project (and optionally an
-older version from its audit changelog), and the app rebuilds the data
-products fresh, applies the saved configuration and lands on the
-dashboard in Step-by-step mode, so every step remains editable.
+Test contracts kept (tests/test_step_mode_selection_ui.py): markdown contains
+"One-click mode" and "Step-by-step mode"; buttons ``mode_pick_one_click`` /
+``mode_pick_step_by_step``; the active mode's button label contains "Selected".
 """
 from __future__ import annotations
 
@@ -25,7 +13,6 @@ import pandas as pd
 import streamlit as st
 
 from src.projects import get_project, list_projects
-from utils.helpers import section_header
 from utils.session_state import (
     APP_MODE_ONE_CLICK,
     APP_MODE_STEP_BY_STEP,
@@ -35,90 +22,69 @@ from utils.session_state import (
     set_app_mode,
     set_domain,
 )
+from utils.ui_components import badge, callout, code_chip, page_header
 
-# Card content for the two modes. Order is the display order (One-click
-# first - it's the recommended fast path for most users).
 _MODE_CARDS = (
     {
         "mode": APP_MODE_ONE_CLICK,
-        "icon": "⚡",
         "title": "One-click mode",
-        "accent": "#f59e0b",
-        "tagline": "Fastest path to a scorecard",
+        "recommended": True,
+        "time": "~2 min",
+        "desc": "Pick a domain and systems. Everything else runs with curated defaults.",
+        "you": "Domain · Systems",
+        "auto": "Required CDEs · All Custom DQRs (defaults) · Equal weights · Exports",
+        "best": "Best for recurring monitoring runs.",
+        "cta": "Start One-click →",
         "next_step": "one_click",
-        "description": (
-            "Pick a domain and the systems to include - the app does the "
-            "rest automatically."
-        ),
-        "bullets": [
-            "Selects only the CDEs the custom rules need",
-            "Applies every Custom DQR with its default options",
-            "Distributes rule weights equally",
-            "Generates the scorecards and CSV exports",
-        ],
     },
     {
         "mode": APP_MODE_STEP_BY_STEP,
-        "icon": "🛠️",
         "title": "Step-by-step mode",
-        "accent": "#4f46e5",
-        "tagline": "Full manual control",
+        "recommended": False,
+        "time": "7 steps · 10–20 min",
+        "desc": "Configure every CDE, rule, option and weight yourself.",
+        "you": "Domain · Systems · CDEs · DQR sources · Rules & options · Weights",
+        "auto": "Scoring and exports only",
+        "best": "Best for new rule sets, audits and Standard DQRs.",
+        "cta": "Start Step-by-step →",
         "next_step": "domain_selection",
-        "description": (
-            "The original step-by-step workflow. Customise every choice "
-            "exactly as before."
-        ),
-        "bullets": [
-            "Choose Standard and/or Custom DQR sources",
-            "Hand-pick CDEs and tune every rule option",
-            "Set source and rule weights yourself",
-            "Review, then export from the dashboard",
-        ],
     },
 )
 
 
 def _mode_card(card: dict, is_active: bool) -> None:
-    """Render one mode card and wire its Select button."""
-    active_pill = (
-        '<span class="mode-active-pill">SELECTED</span>' if is_active else ""
-    )
-    bullets = "".join(
-        f"<li>{html.escape(b)}</li>" for b in card["bullets"]
-    )
-    st.markdown(
-        f"""
-        <div class="card-accent" style="background: {card['accent']};"></div>
-        <div class="mode-title-row">
-            <span class="mode-icon">{html.escape(card['icon'])}</span>
-            <span class="mode-title">{html.escape(card['title'])}{active_pill}</span>
-        </div>
-        <div class="mode-tagline">{html.escape(card['tagline'])}</div>
-        <div class="mode-desc">{html.escape(card['description'])}</div>
-        <ul class="mode-bullets">{bullets}</ul>
-        """,
-        unsafe_allow_html=True,
-    )
-    label = "✓ Selected" if is_active else f"Start {card['title'].split(' mode')[0]}"
-    if st.button(
-        label,
-        key=f"mode_pick_{card['mode']}",
-        type="primary" if is_active else "secondary",
-        use_container_width=True,
-    ):
-        set_app_mode(card["mode"])
-        goto(card["next_step"])
+    key = f"choice_mode_{card['mode']}"
+    if is_active or card["recommended"]:
+        st.markdown(
+            f"<style>.st-key-{key} div[data-testid='stVerticalBlockBorderWrapper']"
+            "{border-color:var(--dq-br)!important;box-shadow:0 0 0 3px var(--dq-br-soft);}</style>",
+            unsafe_allow_html=True,
+        )
+    with st.container(border=True, key=key):
+        rec = badge("Recommended", "brand") if card["recommended"] else ""
+        st.markdown(
+            f'<div class="dq-choice-title">{html.escape(card["title"])}{rec}'
+            f'<span style="margin-left:auto;font-size:12px;color:var(--dq-tx3);font-weight:400">{card["time"]}</span></div>'
+            f'<div class="dq-choice-desc">{html.escape(card["desc"])}</div>'
+            f'<div class="dq-choice-grid"><span class="k">You choose</span><span>{card["you"]}</span>'
+            f'<span class="k">Automated</span><span>{card["auto"]}</span></div>'
+            f'<div style="font-size:12.5px;color:var(--dq-tx3);margin-bottom:10px">{card["best"]}</div>',
+            unsafe_allow_html=True,
+        )
+        label = "Selected · continue →" if is_active else card["cta"]
+        if st.button(
+            label,
+            key=f"mode_pick_{card['mode']}",
+            type="primary" if (is_active or card["recommended"]) else "secondary",
+            use_container_width=True,
+        ):
+            set_app_mode(card["mode"])
+            goto(card["next_step"])
 
 
 def _open_project(record: dict) -> None:
-    """Load a saved project version: rebuild the data products fresh and
-    apply the stored configuration, then land on the dashboard.
-
-    Enters Step-by-step mode so every step stays editable - the user can
-    walk back, tweak, and save again as a new version.
-    """
-    # Imported lazily: data building pulls pandas/Databricks machinery this
-    # lightweight entry step doesn't otherwise need.
+    """Rebuild data fresh and apply the saved configuration, then land on the
+    Scorecard in Step-by-step mode so every step stays editable."""
     from config.domains import get_active_project_filter
     from src.data_product_builder import build_multiple
     from src.persistence import log_event
@@ -131,141 +97,119 @@ def _open_project(record: dict) -> None:
 
     domain_code, configs = deserialize_project(record.get("payload") or {})
     if not domain_code or not configs:
-        st.error("❌ This project version is empty or corrupt.")
+        st.error("This project version is empty or corrupt.")
         return
     set_app_mode(APP_MODE_STEP_BY_STEP)
     try:
         set_domain(domain_code)
     except KeyError:
-        st.error(f"❌ Unknown domain in saved project: {domain_code}")
+        st.error(f"Unknown domain in saved project: {domain_code}")
         return
     systems = sorted(configs)
-    with st.spinner(
-        f"📂 Rebuilding {', '.join(systems)} and applying the saved "
-        "configuration..."
-    ):
+    with st.status(f"Opening {record.get('project_name', 'project')}…", expanded=True) as status:
         try:
+            status.write(f"Building Data Products · {', '.join(systems)}")
             dps = build_multiple(
                 systems,
                 row_limit=get_row_limit(),
                 planview_ids=get_planview_filter() or None,
                 filter_column=get_active_project_filter().column,
             )
+            status.write("Profiling columns")
             for dp in dps.values():
                 dp.profiles = profile_dataframe(dp.df)
             ref_names = required_reference_datasets_for_systems(systems)
             if ref_names:
+                status.write(f"Loading reference datasets · {', '.join(ref_names)}")
                 prefetch_reference_datasets(ref_names)
+            status.update(label="Project opened", state="complete", expanded=False)
         except Exception as exc:
-            st.error(
-                f"❌ Could not rebuild the project's data products: {exc}"
-            )
+            status.update(label="Could not rebuild the project's Data Products", state="error")
+            st.error(str(exc))
             return
     st.session_state.selected_systems = systems
     st.session_state.data_products = dps
     st.session_state.configs = configs
     st.session_state.loaded_project_name = record.get("project_name", "")
-    log_event(
-        "project_loaded",
-        {"project": record.get("project_name", ""),
-         "version": record.get("version")},
-        domain_code,
-    )
+    log_event("project_loaded",
+              {"project": record.get("project_name", ""), "version": record.get("version")},
+              domain_code)
     goto("dashboard")
 
 
-def _render_saved_projects() -> None:
-    """Browser for saved projects: pick one (and optionally an older
-    version from the changelog) and open it. Renders nothing when no
-    project has been saved yet."""
-    projects = list_projects()
-    if not projects:
-        return
-    st.markdown("---")
-    st.markdown("### 📂 Open a saved project")
-    st.caption(
-        "Projects capture the whole configuration (domain, systems, CDEs, "
-        "rules, weights) with a versioned audit changelog. Data is rebuilt "
-        "fresh on open; every step stays editable."
-    )
-    names = [p["name"] for p in projects]
-    by_name = {p["name"]: p for p in projects}
-    c_proj, c_ver, c_open = st.columns([3, 2, 1])
-    with c_proj:
-        name = st.selectbox(
-            "Project", names, key="project_open_name",
-            format_func=lambda n: (
-                f"{n} · {by_name[n].get('domain_code', '?')} · "
-                f"v{by_name[n].get('versions', 0)} · last saved by "
-                f"{by_name[n].get('updated_by', '?')}"
-            ),
-        )
+def _render_saved_projects(projects: list) -> None:
     from src.persistence import list_project_versions
+
+    df = pd.DataFrame([
+        {
+            "Project": p["name"],
+            "Domain": p.get("domain_code", "?"),
+            "Version": f"v{p.get('versions', 0)}",
+            "Last saved": p.get("updated_at", ""),
+            "By": p.get("updated_by", "?"),
+        }
+        for p in projects
+    ])
+    event = st.dataframe(
+        df, use_container_width=True, hide_index=True,
+        on_select="rerun", selection_mode="single-row", key="project_table",
+        column_config={"Version": st.column_config.TextColumn(width="small")},
+    )
+    rows = (event.get("selection", {}) or {}).get("rows", []) if event else []
+    if not rows:
+        st.caption("Select a project to see its versions and open it.")
+        return
+    name = df.iloc[rows[0]]["Project"]
     versions = list_project_versions(name)
-    with c_ver:
-        options = [int(v.get("version", 0)) for v in versions]
+    latest = int(versions[-1].get("version", 0)) if versions else 0
+
+    c_v, c_open = st.columns([3, 1], vertical_alignment="bottom")
+    with c_v:
+        options = [int(v.get("version", 0)) for v in versions] or [latest]
         version = st.selectbox(
-            "Version", options,
-            index=len(options) - 1 if options else 0,
-            key="project_open_version",
-            format_func=lambda v: f"v{v}" + (
-                " (latest)" if options and v == options[-1] else ""
-            ),
+            "Version to open", options, index=len(options) - 1, key="project_open_version",
+            format_func=lambda v: f"v{v}" + (" · latest" if v == latest else ""),
         )
     with c_open:
-        st.markdown("<div style='height:1.7em'></div>", unsafe_allow_html=True)
-        open_clicked = st.button(
-            "📂 Open", key="project_open_btn", type="primary",
-            use_container_width=True,
-        )
-    with st.expander(f"📜 Changelog - {name}", expanded=False):
+        open_clicked = st.button("Open", key="project_open_btn", type="primary", use_container_width=True)
+
+    with st.expander(f"Versions · {name}", expanded=False):
         st.dataframe(
             pd.DataFrame([
-                {
-                    "Version": int(v.get("version", 0)),
-                    "When (UTC)": v.get("ts", ""),
-                    "Who": v.get("username", ""),
-                    "What changed": v.get("change_summary", ""),
-                }
+                {"Version": f"v{int(v.get('version', 0))}", "When (UTC)": v.get("ts", ""),
+                 "Who": v.get("username", ""), "What changed": v.get("change_summary", "")}
                 for v in versions
             ]).iloc[::-1],
             use_container_width=True, hide_index=True,
         )
+    st.caption("Opening rebuilds the data fresh and lands on the Scorecard in Step-by-step mode; every step stays editable.")
+
     if open_clicked:
         record = get_project(name, version)
         if record is None:
-            st.error("❌ Could not load that project version.")
+            st.error("Could not load that project version.")
             return
         _open_project(record)
 
 
 def render() -> None:
+    page_header("Start", "Build a Data Quality scorecard",
+                "Choose how to build, or reopen a saved configuration.")
 
-    st.markdown(
-        '<div class="step-pill">Start · Choose how to build</div>',
-        unsafe_allow_html=True,
-    )
-    section_header(
-        "How do you want to build your scorecards?",
-        "Pick **One-click** to go from domain + systems straight to finished "
-        "scorecards, or **Step-by-step** for the full step-by-step workflow with "
-        "manual control over every CDE, rule, option and weight. You can "
-        "restart and switch modes at any time.",
-    )
+    projects = list_projects()
+    tab_labels = ["New scorecard"] + ([f"Saved projects · {len(projects)}"] if projects else [])
+    if hasattr(st, "segmented_control") and len(tab_labels) > 1:
+        picked = st.segmented_control("Start", tab_labels, default=tab_labels[0],
+                                      key="home_tab", label_visibility="collapsed")
+    else:
+        picked = tab_labels[0]
 
-    active_mode = st.session_state.get("app_mode")
-    cols = st.columns(len(_MODE_CARDS), gap="large")
-    for card, col in zip(_MODE_CARDS, cols):
-        with col:
-            with st.container(border=True):
+    if picked == tab_labels[0]:
+        active_mode = st.session_state.get("app_mode")
+        cols = st.columns(len(_MODE_CARDS), gap="medium")
+        for card, col in zip(_MODE_CARDS, cols):
+            with col:
                 _mode_card(card, is_active=(card["mode"] == active_mode))
-
-    _render_saved_projects()
-
-    # Standalone admin page: usage/adoption metrics + audit trail. Kept as
-    # a discreet link - it's an admin concern, not part of the scoring flow.
-    st.markdown("---")
-    if st.button("📊 Usage & audit", key="open_adoption",
-                 help="Adoption metrics and the audit trail recorded by the "
-                      "app (who accessed, what was generated and exported)."):
-        goto("adoption")
+        st.caption("You can restart or switch modes at any point. Data is always rebuilt fresh from Databricks.")
+    else:
+        _render_saved_projects(projects)

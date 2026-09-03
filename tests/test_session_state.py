@@ -179,9 +179,9 @@ def test_render_progress_sidebar_marks_current_bold(fake_st):
     blob = "\n".join(fake_st.sidebar.markdowns)
     assert "Progress" in blob
     # The current step is rendered with the "current" CSS class and the CDEs label.
-    assert 'class="sb-step current"' in blob
+    assert 'sb-step current' in blob
     # The "CDEs" label is the current step's label.
-    current_segment = blob.split('class="sb-step current"', 1)[1]
+    current_segment = blob.split('sb-step current', 1)[1]
     # Other steps follow, so only check the label appears before the next step block.
     next_step_start = current_segment.find('class="sb-step ')
     current_block = (

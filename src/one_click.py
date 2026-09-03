@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from config.custom_dqr_catalog import (
     effective_required_columns,
@@ -199,6 +199,7 @@ def run_one_click(
     row_limit: Optional[int] = None,
     planview_filter: Optional[Iterable[str]] = None,
     filter_column: str = SHARED_KEY,
+    progress: Callable[[str, str], None] | None = None,
 ) -> OneClickResult:
     """Run the full One-click pipeline for ``systems`` in ``domain_code``.
 
@@ -225,7 +226,12 @@ def run_one_click(
 
     result = OneClickResult(domain_code=domain_code, requested_systems=system_list)
 
+    def _progress(phase: str, detail: str = "") -> None:
+        if progress is not None:
+            progress(phase, detail)
+
     # 1. Build + profile the data products for every selected system.
+    _progress("Loading tables", ", ".join(system_list))
     try:
         dps = build_multiple(
             system_list,
@@ -236,6 +242,8 @@ def run_one_click(
     except Exception as e:  # broad: surface build/Databricks errors to the UI
         logger.warning("One-click data-product build failed", exc_info=True)
         raise OneClickError(f"Failed to build data products: {e}") from e
+    _progress("Building Data Products", f"{len(dps)} systems")
+    _progress("Profiling columns", f"{sum(len(dp.df.columns) for dp in dps.values())} columns")
     for dp in dps.values():
         dp.profiles = profile_dataframe(dp.df)
 
@@ -246,6 +254,8 @@ def run_one_click(
         prefetch_reference_datasets(ref_names)
 
     # 3. Configure + score each system.
+    n_rules = sum(len(get_available_custom_dqr_rules(c)) for c in system_list)
+    _progress("Applying Custom DQRs", f"{n_rules} rules")
     for code in system_list:
         dp = dps[code]
         rules = get_available_custom_dqr_rules(code)
@@ -260,6 +270,7 @@ def run_one_click(
 
         cfg, warnings = build_one_click_config(code, dp, rules)
         result.warnings.extend(warnings)
+        _progress("Computing scores", code)
         try:
             scorecard = compute_scorecard(dp, cfg)
         except Exception as e:  # defensive: a rule bug must not abort the run

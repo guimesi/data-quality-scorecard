@@ -63,7 +63,7 @@ def _make_fake_st(
     def button(label, *, key=None, **kwargs):
         return button_returns.get(key, False)
 
-    def columns(spec):
+    def columns(spec, **_kwargs):
         # Return len(spec) columns; each column is also a no-op context
         n = spec if isinstance(spec, int) else len(spec)
         return [_fake_column() for _ in range(n)]

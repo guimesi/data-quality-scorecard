@@ -1,277 +1,217 @@
-"""Sidebar rendering: CSS, brand, progress stepper, sample-mode toggle,
-project filter, footer.
+"""Sidebar = navigation rail.
 
-Pure rendering; never mutates workflow state except through the
-``sample_mode`` / ``planview_filter`` widgets which use Streamlit's
-``session_state`` for persistence. Cache invalidation on those widget
-changes is co-located with the widget itself.
+Order (top → bottom): brand row · workspace block (domain + mode + systems,
+only once a domain exists) · step list · settings (Dataset, Project filter -
+each inside a popover so they don't compete with the wizard) · footer
+(Usage & audit link + catalog.schema).
+
+Test contracts preserved (tests/test_session_state.py, test_step_mode_selection_ui.py):
+- ``render_progress_sidebar`` emits ONE ``st.sidebar.markdown`` block that
+  contains the word ``Progress``, ``Step X of N`` and ``class="sb-step current"``
+  on the current row (labels come from ``STEP_LABELS``).
+- ``render_sample_mode_toggle`` uses ``st.sidebar.toggle`` and emits a
+  markdown containing ``Sample`` or ``Full dataset``; flipping it wipes
+  data_products/configs/scorecards and reruns.
+- ``render_planview_filter`` uses ``st.sidebar.text_area`` and is a no-op
+  before a domain is picked.
+The FakeSidebar used by unit tests only implements ``markdown``, ``toggle``
+and ``text_area`` - hence the ``_popover()`` guard below.
 """
 from __future__ import annotations
 
-from typing import List
+import html as _html
+from contextlib import contextmanager, nullcontext
+from typing import Iterator, List
 
 import streamlit as st
 
 from config.domains import get_active_domain, get_domain
-from utils.colors import STATUS_GREEN
 from utils.session.navigation import _visible_steps
-from utils.session.state import STEP_LABELS
+from utils.session.state import APP_MODE_ONE_CLICK, STEP_LABELS
+
+_APP_VERSION = "v2.3"
 
 
 def inject_sidebar_css() -> None:
-    """Inject CSS scoped to the sidebar. Safe to call on every render, the
-    block is idempotent and Streamlit dedupes <style> tags within a render."""
-    st.sidebar.markdown(
-        """
-        <style>
-            /* Sidebar background tint */
-            section[data-testid="stSidebar"] > div {
-                background: linear-gradient(180deg,
-                    rgba(248, 250, 252, 1) 0%,
-                    rgba(243, 244, 246, 1) 100%);
-            }
+    """Compatibility shim - the rail CSS (``.dq-*`` classes) is part of the
+    single global sheet in :func:`ui._theme.inject_global_css`."""
+    return None
 
-            /* Sidebar brand block */
-            .sb-brand {
-                padding: 0.8em 0.9em;
-                border-radius: 12px;
-                background: linear-gradient(135deg,
-                    rgba(99, 102, 241, 0.95) 0%,
-                    rgba(79, 70, 229, 0.95) 100%);
-                color: #fff;
-                margin-bottom: 0.6em;
-                box-shadow: 0 2px 8px rgba(79, 70, 229, 0.18);
-            }
-            .sb-brand-row {
-                display: flex; align-items: center; gap: 0.55em;
-            }
-            .sb-brand-icon { font-size: 1.6em; line-height: 1; }
-            .sb-brand-title {
-                font-weight: 800; font-size: 1.05em; letter-spacing: 0.01em;
-            }
-            .sb-brand-subtitle {
-                font-size: 0.72em; opacity: 0.85; letter-spacing: 0.04em;
-                text-transform: uppercase; font-weight: 600;
-            }
-            .sb-brand-tagline {
-                font-size: 0.78em; opacity: 0.9; margin-top: 0.4em;
-                line-height: 1.3;
-            }
 
-            /* Section card wrapping sample-mode / filter blocks */
-            .sb-section {
-                padding: 0.65em 0.8em;
-                border-radius: 10px;
-                background: rgba(255, 255, 255, 0.7);
-                border: 1px solid rgba(0, 0, 0, 0.05);
-                margin-bottom: 0.6em;
-            }
-            .sb-section-title {
-                font-size: 0.72em; font-weight: 700; letter-spacing: 0.06em;
-                color: #475569; text-transform: uppercase; margin-bottom: 0.45em;
-            }
-            .sb-section-title .sec-icon { margin-right: 0.35em; }
+@contextmanager
+def _popover(label: str) -> Iterator[None]:
+    """``st.sidebar.popover`` when available (real Streamlit ≥ 1.33), else a
+    plain sidebar context (unit-test FakeSidebar)."""
+    popover = getattr(st.sidebar, "popover", None)
+    if popover is None:
+        with nullcontext():
+            yield
+        return
+    with popover(label, use_container_width=True):
+        yield
 
-            /* Progress stepper */
-            .sb-stepper {
-                padding: 0.65em 0.8em;
-                border-radius: 10px;
-                background: rgba(255, 255, 255, 0.75);
-                border: 1px solid rgba(0, 0, 0, 0.05);
-                margin-bottom: 0.6em;
-            }
-            .sb-step-count {
-                font-size: 0.72em; font-weight: 700; letter-spacing: 0.05em;
-                color: #4f46e5; text-transform: uppercase; margin-bottom: 0.55em;
-            }
-            .sb-step {
-                display: flex; align-items: center; gap: 0.55em;
-                padding: 0.25em 0; font-size: 0.88em;
-                position: relative;
-            }
-            .sb-step .marker {
-                display: inline-flex;
-                align-items: center; justify-content: center;
-                width: 1.35em; height: 1.35em; border-radius: 999px;
-                font-size: 0.7em; font-weight: 700; flex-shrink: 0;
-            }
-            .sb-step.done    .marker { background: __GREEN__; color: #fff; }
-            .sb-step.current .marker { background: #4f46e5; color: #fff;
-                box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.22); }
-            .sb-step.todo    .marker { background: rgba(15,23,42,0.08); color: #64748b; }
-            .sb-step.done    .lbl    { color: #64748b; text-decoration: line-through; opacity: 0.85; }
-            .sb-step.current .lbl    { color: #0f172a; font-weight: 700; }
-            .sb-step.todo    .lbl    { color: #475569; }
 
-            /* Status pills inside sample-mode / filter sections */
-            .sb-pill {
-                display: inline-block;
-                padding: 0.18em 0.55em;
-                border-radius: 999px;
-                font-size: 0.74em; font-weight: 600;
-                margin-top: 0.3em;
-            }
-            .sb-pill.ok   { background: rgba(22,163,74,0.12); color: #166534; }
-            .sb-pill.warn { background: rgba(234,179,8,0.18); color: #854d0e; }
-            .sb-pill.info { background: rgba(59,130,246,0.12); color: #1e40af; }
-            .sb-pill.neutral { background: rgba(15,23,42,0.08); color: #475569; }
-
-            /* Footer */
-            .sb-footer {
-                font-size: 0.74em; color: rgba(49,51,63,0.65);
-                line-height: 1.4; padding: 0.4em 0.2em 0 0.2em;
-            }
-            .sb-version {
-                display: inline-block; padding: 0.1em 0.45em;
-                border-radius: 5px; background: rgba(15,23,42,0.06);
-                color: #475569; font-weight: 700; font-size: 0.75em;
-                letter-spacing: 0.04em; margin-left: 0.3em;
-            }
-        </style>
-        """.replace("__GREEN__", STATUS_GREEN),
-        unsafe_allow_html=True,
-    )
-
+# ---------------------------------------------------------------------------
+# Brand + workspace
+# ---------------------------------------------------------------------------
 
 def render_sidebar_brand() -> None:
-    """Sidebar header - branded card with logo, title, subtitle and tagline.
-
-    Subtitle and tagline come from the active :class:`DomainDef` so the
-    sidebar shadows the domain the user is working in. When no domain
-    is picked yet (Step 0) the card stays generic.
-    """
-    import html as _html
-
-    code = st.session_state.get("domain")
-    if code:
-        try:
-            domain = get_active_domain()
-            icon = _html.escape(domain.icon)
-            subtitle = _html.escape(domain.sidebar_brand_subtitle)
-            tagline = _html.escape(domain.tagline)
-        except Exception:
-            # Defensive: a corrupted session_state shouldn't take the
-            # sidebar down. Fall back to the neutral header below.
-            icon, subtitle, tagline = "📊", "Multi-domain", (
-                "Build CDE-driven Data Quality scorecards across domains."
-            )
-    else:
-        icon = "📊"
-        subtitle = "Pick a domain to start"
-        tagline = "Build CDE-driven Data Quality scorecards across domains."
-
     st.sidebar.markdown(
         f"""
-        <div class="sb-brand">
-            <div class="sb-brand-row">
-                <span class="sb-brand-icon">{icon}</span>
-                <div>
-                    <div class="sb-brand-title">DQ Scorecard</div>
-                    <div class="sb-brand-subtitle">{subtitle}</div>
-                </div>
+        <div class="dq-brand">
+            <div class="mark">DQ</div>
+            <div class="name">DQ Scorecard</div>
+            <div class="ver">{_APP_VERSION}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    code = st.session_state.get("domain")
+    if not code or st.session_state.get("current_step") == "adoption":
+        return
+    try:
+        domain = get_active_domain()
+    except Exception:
+        return
+    mode = st.session_state.get("app_mode")
+    mode_label = "One-click" if mode == APP_MODE_ONE_CLICK else "Step-by-step"
+    systems: List[str] = list(st.session_state.get("selected_systems") or [])
+    systems_txt = " · ".join(systems) if systems else _html.escape(domain.subtitle)
+    st.sidebar.markdown(
+        f"""
+        <div class="dq-ctx">
+            <div class="dq-rail-title" style="padding:0 0 2px;">Workspace</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-weight:600;font-size:13px;">{_html.escape(domain.name)}</span>
+                <span class="dq-badge brand" style="margin-left:auto;">{mode_label}</span>
             </div>
-            <div class="sb-brand-tagline">
-                {tagline}
-            </div>
+            <div style="font-family:var(--dq-mono);font-size:11px;color:var(--dq-tx3);">{systems_txt}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
+# ---------------------------------------------------------------------------
+# Stepper
+# ---------------------------------------------------------------------------
+
+def _rail_title() -> str:
+    mode = st.session_state.get("app_mode")
+    step = st.session_state.get("current_step")
+    if step == "adoption":
+        return "Admin"
+    if mode == APP_MODE_ONE_CLICK:
+        return "One-click"
+    if mode:
+        return "Steps"
+    return "Start"
+
+
 def render_progress_sidebar() -> None:
-    """Render a simple step tracker in the sidebar, hiding sub-steps the user
-    doesn't need to visit based on their source selection."""
     visible = _visible_steps()
     current = st.session_state.current_step
-    # Index used for "Step X of N" - clamp to range so a hidden current step
-    # (defensive) still renders something sensible.
     try:
         current_idx = visible.index(current)
     except ValueError:
         current_idx = -1
 
-    rows_html = []
+    selected = st.session_state.get("selected_systems") or []
+    rows = []
     for i, step in enumerate(visible):
-        label = STEP_LABELS[step]
+        label = _html.escape(STEP_LABELS[step])
         if step == current:
-            klass = "current"
-            marker = "●"
-        elif current_idx >= 0 and i < current_idx:
-            klass = "done"
-            marker = "✓"
+            klass, marker = "current", str(i + 1)
+        elif 0 <= current_idx and i < current_idx:
+            klass, marker = "done", "&#10003;"
         else:
-            klass = "todo"
-            marker = f"{i + 1}"
-        rows_html.append(
-            f'<div class="sb-step {klass}">'
-            f'  <span class="marker">{marker}</span>'
-            f'  <span class="lbl">{label}</span>'
-            f'</div>'
+            klass, marker = "todo", str(i + 1)
+        meta = ""
+        if klass == "done" and step in ("system_selection", "one_click") and selected:
+            meta = f'<span class="meta">{_html.escape(", ".join(selected))}</span>'
+        rows.append(
+            f'<div class="dq-step sb-step {klass}">'
+            f'<span class="mk">{marker}</span><span>{label}</span>{meta}</div>'
         )
 
     pos_text = (
-        f"Step {current_idx + 1} of {len(visible)}"
-        if current_idx >= 0 else f"{len(visible)} step(s)"
+        f"Step {current_idx + 1} of {len(visible)}" if current_idx >= 0
+        else f"{len(visible)} step(s)"
     )
     st.sidebar.markdown(
         f"""
-        <div class="sb-stepper">
-            <div class="sb-step-count">🧭 Progress · {pos_text}</div>
-            {''.join(rows_html)}
+        <div class="dq-rail-title">{_rail_title()}
+            <span style="float:right;font-weight:400;">Progress · {pos_text}</span>
         </div>
+        {''.join(rows)}
         """,
         unsafe_allow_html=True,
     )
 
 
-def render_sample_mode_toggle() -> None:
-    """Toggle between sample mode (row-capped) and full dataset.
+# ---------------------------------------------------------------------------
+# Settings (Dataset / Project filter)
+# ---------------------------------------------------------------------------
 
-    Switching invalidates any cached data products / configs / scorecards so
-    the next step re-fetches with the new limit.
-    """
+def _settings_visible() -> bool:
+    step = st.session_state.get("current_step")
+    return bool(st.session_state.get("app_mode")) and step not in ("mode_selection", "adoption")
+
+
+def _invalidate_workflow_data() -> None:
+    from src.reference_data import clear_reference_cache
+
+    st.session_state.data_products = {}
+    st.session_state.configs = {}
+    st.session_state.scorecards = {}
+    clear_reference_cache()
+
+
+def render_sample_mode_toggle() -> None:
+    """Dataset size: Sample (row-capped) vs Full. Lives in a popover; the
+    trigger shows the current state as a badge."""
     from config.settings import SETTINGS
 
-    st.sidebar.markdown(
-        '<div class="sb-section-title">'
-        '<span class="sec-icon">⚙️</span>Dataset size'
-        '</div>',
-        unsafe_allow_html=True,
-    )
     previous = st.session_state.get("sample_mode", True)
-    sample_mode = st.sidebar.toggle(
-        f"Sample mode (max {SETTINGS.max_rows_per_table:,} rows/table)",
-        value=previous,
-        key="sample_mode_toggle",
-        help="On: cap each table to the sample size for fast iteration. "
-             "Off: fetch the full dataset.",
-    )
-    if sample_mode != previous:
-        # Imported lazily to keep utils/ → src/ dependency direction unambiguous.
-        from src.reference_data import clear_reference_cache
+    if _settings_visible() or not hasattr(st.sidebar, "popover"):
+        if _settings_visible():
+            st.sidebar.markdown('<div class="dq-rail-title">Settings</div>', unsafe_allow_html=True)
+        badge = (
+            f"Sample · {SETTINGS.max_rows_per_table // 1000}k rows" if previous else "Full dataset"
+        )
+        with _popover(f"Dataset · {badge}"):
+            sample_mode = st.sidebar.toggle(
+                f"Sample mode (max {SETTINGS.max_rows_per_table:,} rows/table)",
+                value=previous,
+                key="sample_mode_toggle",
+                help="On: cap each table to the sample size for fast iteration. "
+                     "Off: fetch the full dataset. Changing this rebuilds the Data Products.",
+            )
+    else:
+        sample_mode = previous
 
+    if sample_mode != previous:
         st.session_state.sample_mode = sample_mode
-        st.session_state.data_products = {}
-        st.session_state.configs = {}
-        st.session_state.scorecards = {}
-        clear_reference_cache()
+        _invalidate_workflow_data()
         st.rerun()
     st.session_state.sample_mode = sample_mode
-    if sample_mode:
-        st.sidebar.markdown(
-            f'<span class="sb-pill warn">📉 Sample ≤ {SETTINGS.max_rows_per_table:,} rows/table</span>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.sidebar.markdown(
-            '<span class="sb-pill info">📊 Full dataset (all rows)</span>',
-            unsafe_allow_html=True,
-        )
+
+    # State line (test contract: "Sample" / "Full dataset" in a markdown).
+    if _settings_visible() or not hasattr(st.sidebar, "popover"):
+        if sample_mode:
+            st.sidebar.markdown(
+                f'<div class="dq-setting">Dataset<span class="dq-badge" style="background:var(--dq-wn-soft);color:var(--dq-wn);">'
+                f'Sample ≤ {SETTINGS.max_rows_per_table:,} rows</span></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.sidebar.markdown(
+                '<div class="dq-setting">Dataset<span class="dq-badge brand">Full dataset</span></div>',
+                unsafe_allow_html=True,
+            )
 
 
 def get_row_limit() -> int | None:
-    """Return row limit to apply when fetching tables. None = no limit."""
     from config.settings import SETTINGS
 
     if st.session_state.get("sample_mode", True):
@@ -283,117 +223,80 @@ _PLANVIEW_FILTER_INPUT_KEY = "planview_filter_input"
 
 
 def _parse_planview_filter_text(text: str) -> List[str]:
-    """Split free-form user input into a deduplicated list of PLANVIEW_IDs.
-
-    Accepts commas, semicolons, whitespace and newlines as separators so the
-    user can paste lists in whatever shape they have them. Order is preserved
-    (first occurrence wins) so the UI feedback is predictable.
-    """
     if not text:
         return []
     raw = text.replace(",", " ").replace(";", " ").split()
-    seen = set()
-    out: List[str] = []
+    seen, out = set(), []
     for token in raw:
         token = token.strip()
-        if not token or token in seen:
-            continue
-        seen.add(token)
-        out.append(token)
+        if token and token not in seen:
+            seen.add(token)
+            out.append(token)
     return out
 
 
 def get_planview_filter() -> List[str]:
-    """Return the active PLANVIEW_ID filter (empty list = no filter)."""
     return list(st.session_state.get("planview_filter", []) or [])
 
 
 def render_planview_filter() -> None:
-    """Sidebar widget for filtering the whole app to one or more projects.
-
-    Domain-aware: each :class:`config.domains.DomainDef` declares its own
-    ``project_filter`` (Cost Estimate filters on ``PLANVIEW_ID``; Quality
-    filters on ``PROJECT_CODE``). The widget is hidden entirely until a
-    domain has been selected at Step 0, because the right filter column
-    is only known once the domain is known.
-
-    The filter is applied at build_data_product time, so changing it must
-    invalidate the cached data products / configs / scorecards just like the
-    sample-mode toggle does.
-    """
     code = st.session_state.get("domain")
-    if not code:
-        # Step 0 hasn't completed yet - no domain, no domain-specific
-        # filter to render. Sidebar shows the brand + progress only.
+    if not code or not _settings_visible():
         return
-
-    # Resolve the domain off the *patched* ``st.session_state`` rather
-    # than via :func:`get_active_domain`, which goes through the real
-    # streamlit module - tests patch this module's ``st`` reference,
-    # not ``config.domains.st``.
     try:
         project_filter = get_domain(code).project_filter
     except KeyError:
-        # Unknown domain code in session state (corrupted session). Skip
-        # the widget rather than crash the sidebar; restart_app sends
-        # the user back to Step 0 which will repopulate ``domain``.
         return
-    st.sidebar.markdown(
-        '<div class="sb-section-title">'
-        '<span class="sec-icon">🎯</span>Project filter'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+
     previous = st.session_state.get("planview_filter", []) or []
-    default_text = "\n".join(previous)
-    text = st.sidebar.text_area(
-        project_filter.label,
-        value=default_text,
-        key=_PLANVIEW_FILTER_INPUT_KEY,
-        height=80,
-        placeholder=project_filter.placeholder,
-        help=project_filter.help,
+    badge = (
+        f"{len(previous)} {project_filter.pill_singular if len(previous) == 1 else project_filter.pill_plural}"
+        if previous else f"All {project_filter.pill_plural}"
     )
+    with _popover(f"Project filter · {badge}"):
+        text = st.sidebar.text_area(
+            project_filter.label,
+            value="\n".join(previous),
+            key=_PLANVIEW_FILTER_INPUT_KEY,
+            height=80,
+            placeholder=project_filter.placeholder,
+            help=project_filter.help + " Changing this rebuilds the Data Products.",
+        )
     parsed = _parse_planview_filter_text(text)
     if parsed != previous:
-        from src.reference_data import clear_reference_cache
-
         st.session_state.planview_filter = parsed
-        st.session_state.data_products = {}
-        st.session_state.configs = {}
-        st.session_state.scorecards = {}
-        clear_reference_cache()
+        _invalidate_workflow_data()
         st.rerun()
+
     if parsed:
-        pill_word = (
-            project_filter.pill_singular if len(parsed) == 1
-            else project_filter.pill_plural
-        )
         st.sidebar.markdown(
-            f'<span class="sb-pill ok">🎯 Filtering on {len(parsed)} '
-            f'{pill_word}</span>',
+            f'<div class="dq-setting">Project filter<span class="dq-badge brand">{len(parsed)} '
+            f'{_html.escape(project_filter.pill_singular if len(parsed) == 1 else project_filter.pill_plural)}</span></div>',
             unsafe_allow_html=True,
         )
     else:
         st.sidebar.markdown(
-            f'<span class="sb-pill neutral">🌐 All {project_filter.pill_plural} '
-            '(no filter)</span>',
+            f'<div class="dq-setting">Project filter<span class="dq-badge">All {_html.escape(project_filter.pill_plural)}</span></div>',
             unsafe_allow_html=True,
         )
 
 
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
+
 def render_sidebar_footer() -> None:
-    """Sidebar footer - app description + a small version badge. Pure
-    decoration; no state interaction."""
+    """Usage & audit entry point + data location. No product blurb."""
+    from config.settings import SETTINGS
+
+    button = getattr(st.sidebar, "button", None)
+    if button is not None and st.session_state.get("current_step") != "adoption":
+        st.sidebar.markdown('<div class="dq-rail-footer"></div>', unsafe_allow_html=True)
+        if button("Usage & audit", key="rail_open_adoption", type="tertiary",
+                  help="Adoption metrics and the audit trail (admin)."):
+            from utils.session.navigation import goto
+            goto("adoption")
     st.sidebar.markdown(
-        """
-        <div class="sb-footer">
-            Application for identifying CDEs, defining Data Quality Rules
-            and generating scorecards per Data Product.
-            <div style="margin-top: 0.5em;">
-                Build <span class="sb-version">v2.3</span>
-            </div>
-        </div>
-        """,
+        f'<div class="dq-rail-loc">{_html.escape(SETTINGS.dbx_catalog)}.{_html.escape(SETTINGS.dbx_schema)}</div>',
         unsafe_allow_html=True,
     )

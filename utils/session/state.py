@@ -55,18 +55,18 @@ STEPS: List[str] = [
 
 STEP_LABELS: Dict[str, str] = {
     "mode_selection": "Mode",
-    "one_click": "One-Click",
+    "one_click": "Domain & systems",
     "domain_selection": "Domain",
     "system_selection": "Systems",
     "data_product_review": "Data Products",
     "cde_selection": "CDEs",
-    "dqr_source_selection": "DQRs",
-    "dqr_assignment": "Standard",
-    "dqr_custom_rules": "Custom",
+    "dqr_source_selection": "DQR sources",
+    "dqr_assignment": "Standard DQRs",
+    "dqr_custom_rules": "Custom DQRs",
     "weight_assignment": "Weights",
-    "dashboard": "Dashboard",
-    "ml_lab": "🧪 ML Lab (beta)",
-    "adoption": "📊 Adoption",
+    "dashboard": "Scorecard",
+    "ml_lab": "ML Lab",
+    "adoption": "Usage & audit",
 }
 
 

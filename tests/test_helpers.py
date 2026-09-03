@@ -13,15 +13,15 @@ from utils.helpers import (
 
 
 def test_score_color_green():
-    assert score_color(95, green_threshold=80, yellow_threshold=60) == "#16a34a"
+    assert score_color(95, green_threshold=80, yellow_threshold=60) == "#1F7A4D"
 
 
 def test_score_color_yellow():
-    assert score_color(70, green_threshold=80, yellow_threshold=60) == "#eab308"
+    assert score_color(70, green_threshold=80, yellow_threshold=60) == "#A8650A"
 
 
 def test_score_color_red():
-    assert score_color(10, green_threshold=80, yellow_threshold=60) == "#dc2626"
+    assert score_color(10, green_threshold=80, yellow_threshold=60) == "#BF3A2F"
 
 
 def test_score_label_green():
@@ -41,12 +41,12 @@ def test_score_color_label_boundaries_are_inclusive():
     threshold is green, one exactly at the yellow threshold is yellow, and
     anything below the yellow threshold is red. The interior-value tests above
     never touch the exact 80 / 60 edges - pin them here."""
-    assert score_color(80, 80, 60) == "#16a34a"      # exactly green -> green
+    assert score_color(80, 80, 60) == "#1F7A4D"      # exactly green -> green
     assert "Green" in score_label(80, 80, 60)
-    assert score_color(60, 80, 60) == "#eab308"      # exactly yellow -> yellow
+    assert score_color(60, 80, 60) == "#A8650A"      # exactly yellow -> yellow
     assert "Yellow" in score_label(60, 80, 60)
-    assert score_color(79.999, 80, 60) == "#eab308"  # just below green -> yellow
-    assert score_color(59.999, 80, 60) == "#dc2626"  # just below yellow -> red
+    assert score_color(79.999, 80, 60) == "#A8650A"  # just below green -> yellow
+    assert score_color(59.999, 80, 60) == "#BF3A2F"  # just below yellow -> red
     assert "Red" in score_label(59.999, 80, 60)
 
 

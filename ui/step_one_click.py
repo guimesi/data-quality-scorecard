@@ -1,16 +1,8 @@
 """
-One-click flow: domain + systems, then full automation.
-
-The single working step of One-click mode. The user makes exactly two
-choices - the domain and the systems to include - and presses **Generate**.
-From there :func:`src.one_click.run_one_click` reproduces the whole Step-by-step
-workflow with default settings (custom rules only, required CDEs, default
-options, equal weights), computes the scorecards, validates the CSV export,
-stores everything in ``session_state`` and lands the user on the dashboard.
-
-No further interaction is required unless a blocking validation issue
-arises (no domain, no system, no applicable custom rules, or a generation
-failure), in which case the user stays here with a clear message.
+One-click: domain + systems on the left, a sticky "Run plan" with the single
+primary action on the right. Generation reports its real phases through
+``st.status`` (requires the optional ``progress`` callback on
+``src.one_click.run_one_click`` - see IMPLEMENTATION.md §6; pure addition).
 """
 from __future__ import annotations
 
@@ -24,7 +16,6 @@ from config.custom_dqr_catalog import get_available_custom_dqr_rules
 from config.domains import DOMAINS, get_active_project_filter, get_domain
 from src.one_click import ONE_CLICK_SUMMARY_KEY, OneClickError, run_one_click
 from ui.step_06._export import _build_rowscores_csv
-from utils.helpers import section_header
 from utils.session_state import (
     get_planview_filter,
     get_row_limit,
@@ -33,68 +24,35 @@ from utils.session_state import (
     restart_app,
     set_domain,
 )
-from utils.ui_components import render_choice_card, render_restart_button
+from utils.ui_components import (
+    badge,
+    callout,
+    code_chip,
+    page_header,
+    render_choice_card,
+    render_nav_footer,
+    section_title,
+)
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_ACCENT = "#6366f1"
-_OC_DESC_MIN_HEIGHT = 4.2  # em - One-click cards are more compact than Steps 0/1
 
+def _rule_counts_for(systems: List[str]) -> Dict[str, int]:
+    return {code: len(get_available_custom_dqr_rules(code)) for code in systems}
 
-def _inject_css() -> None:
-    """One-click-local override: the amber theme on top of the global sheet.
-
-    Shared chrome (cards, buttons, .sel-summary, .empty-notice, .card-accent)
-    now comes from :func:`ui._theme.inject_global_css`; only the amber
-    ``.step-pill`` / ``.sel-chip`` re-theme and the One-click-specific
-    ``.oc-*`` classes live here."""
-    st.markdown(
-        """
-        <style>
-            .step-pill { background: rgba(245, 158, 11, 0.14); color: #b45309; }
-            .sel-chip { background: rgba(22, 163, 74, 0.12); color: #14532d; }
-            .oc-rulecount {
-                display: inline-block; padding: 0.12em 0.55em; border-radius: 6px;
-                font-size: 0.76em; font-weight: 700;
-            }
-            .oc-rulecount.has { background: rgba(22, 163, 74, 0.12); color: #166534; }
-            .oc-rulecount.none { background: rgba(234, 179, 8, 0.18); color: #854d0e; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Domain picker
-# ---------------------------------------------------------------------------
 
 def _render_domain_picker() -> str | None:
-    """Render the domain cards and return the active domain code (or None).
-
-    Picking a (different) domain calls ``set_domain``, which resets the
-    downstream system selection so the system checkboxes start clean.
-    """
-    st.markdown("#### 1 · Domain")
+    section_title(1, "Domain")
     active = st.session_state.get("domain")
     cols = st.columns(len(DOMAINS), gap="medium")
     for (code, domain), col in zip(DOMAINS.items(), cols):
-        is_active = code == active
         with col:
-            # Shared renderer - same card chrome as the Step-by-step domain
-            # picker. One-click cards are more compact (smaller description
-            # min-height) and omit the systems-row.
             if render_choice_card(
-                accent=domain.accent,
-                icon=domain.icon,
-                title=domain.name,
-                code=domain.code.upper(),
-                subtitle=domain.subtitle,
+                accent=domain.accent, icon=domain.icon,
+                title=domain.name, code=" · ".join(domain.system_codes) or domain.code.upper(),
                 description=domain.description,
-                desc_min_height_em=_OC_DESC_MIN_HEIGHT,
                 placeholder=getattr(domain, "placeholder", False),
-                selected=is_active,
-                multi=False,
+                selected=(code == active), multi=False,
                 select_label=f"Select {domain.name}",
                 select_key=f"oneclick_domain_{code}",
             ):
@@ -103,246 +61,151 @@ def _render_domain_picker() -> str | None:
     return active
 
 
-# ---------------------------------------------------------------------------
-# System picker
-# ---------------------------------------------------------------------------
-
-def _rule_counts_for(systems: List[str]) -> Dict[str, int]:
-    """Return ``{system_code: number_of_custom_rules}`` for the active domain.
-
-    Used to flag systems that have no applicable Custom DQRs (One-click is
-    custom-only, so those systems can't be scored).
-    """
-    return {code: len(get_available_custom_dqr_rules(code)) for code in systems}
-
-
 def _render_system_picker(domain_code: str) -> List[str]:
-    """Render the system checkboxes for ``domain_code`` and return the
-    selected system codes."""
-    st.markdown("#### 2 · Systems")
+    section_title(2, "Systems", "One-click scores with Custom DQRs only")
     domain = get_domain(domain_code)
     systems = domain.systems
     if not systems:
-        st.markdown(
-            "<div class='empty-notice'>⚠️ This domain has no systems registered.</div>",
-            unsafe_allow_html=True,
-        )
+        callout("This domain has no systems registered.", "warn")
         return []
-
-    rule_counts = _rule_counts_for(list(systems.keys()))
+    rule_counts = _rule_counts_for(list(systems))
     selected: List[str] = []
     cols = st.columns(len(systems), gap="medium")
     for (code, system), col in zip(systems.items(), cols):
+        count = rule_counts.get(code, 0)
         with col:
-            count = rule_counts.get(code, 0)
-
-            # Rule-count badge - this screen's before-control slot. Flags
-            # systems with no applicable Custom DQRs (One-click is custom-only).
-            def _rule_count_badge(cnt=count) -> None:
-                badge_cls = "has" if cnt else "none"
-                badge = f"{cnt} custom rule(s)" if cnt else "no custom rules"
+            def _rule_badge(cnt=count) -> None:
                 st.markdown(
-                    f'<span class="oc-rulecount {badge_cls}">{badge}</span>',
+                    badge(f"{cnt} custom rules" if cnt else "No custom rules", "good" if cnt else "warn"),
                     unsafe_allow_html=True,
                 )
-
             if render_choice_card(
-                accent=domain.system_accents.get(code, _DEFAULT_ACCENT),
-                icon=domain.system_icons.get(code, "🧩"),
-                title=system.name,
-                code=code,
+                accent="", icon="", title=system.name, code=code,
                 description=system.description,
-                desc_min_height_em=_OC_DESC_MIN_HEIGHT,
                 selected=(code in st.session_state.get("selected_systems", [])),
-                multi=True,
-                select_label=f"Select {system.name}",
-                select_key=f"oneclick_sys_{code}",
-                before_control=_rule_count_badge,
+                multi=True, select_label=f"Include {code}",
+                select_key=f"oneclick_sys_{code}", before_control=_rule_badge,
+                disabled=(count == 0),
+                disabled_reason="Skipped in One-click: no Custom DQRs. Use Step-by-step to apply Standard DQRs.",
             ):
                 selected.append(code)
     return selected
 
 
-# ---------------------------------------------------------------------------
-# Generate / run
-# ---------------------------------------------------------------------------
-
 def _run_one_click(domain_code: str, systems: List[str]) -> None:
-    """Run the One-click pipeline and, on success, store the result in
-    session state and navigate to the dashboard. On a blocking failure the
-    user stays on this step with an error message."""
-    with st.spinner(
-        "⚙️ Building data products, applying default Custom DQRs, "
-        "distributing weights and scoring..."
-    ):
+    with st.status("Generating scorecards…", expanded=True) as status:
+        def progress(phase: str, detail: str = "") -> None:
+            status.update(label=f"Generating · {phase}")
+            status.write(f"{phase}" + (f" · {detail}" if detail else ""))
+
         try:
-            result = run_one_click(
-                domain_code,
-                systems,
-                row_limit=get_row_limit(),
-                planview_filter=get_planview_filter() or None,
-                filter_column=get_active_project_filter().column,
-            )
+            try:
+                result = run_one_click(
+                    domain_code, systems,
+                    row_limit=get_row_limit(),
+                    planview_filter=get_planview_filter() or None,
+                    filter_column=get_active_project_filter().column,
+                    progress=progress,
+                )
+            except TypeError:  # run_one_click without the progress kwarg yet
+                result = run_one_click(
+                    domain_code, systems,
+                    row_limit=get_row_limit(),
+                    planview_filter=get_planview_filter() or None,
+                    filter_column=get_active_project_filter().column,
+                )
         except OneClickError as exc:
-            st.error(f"❌ {exc}")
+            status.update(label="Generation failed", state="error")
+            st.error(str(exc))
             return
 
-    if not result.products:
-        reasons = "\n".join(
-            f"- **{code}**: {reason}" for code, reason in result.skipped.items()
-        )
-        st.error(
-            "❌ One-click could not score any of the selected systems:\n\n"
-            + (reasons or "- No scorable system.")
-            + "\n\nPick different systems, widen the project filter, or use "
-            "Step-by-step mode for full control."
-        )
-        return
+        if not result.products:
+            status.update(label="Nothing could be scored", state="error")
+            reasons = "\n".join(f"- **{c}**: {r}" for c, r in result.skipped.items())
+            st.error("None of the selected systems could be scored.\n\n" + (reasons or "- No scorable system.")
+                     + "\n\nPick different systems, widen the project filter, or use Step-by-step.")
+            return
 
-    # Validate the CSV export now (reuses the dashboard's builder) so a
-    # generation failure surfaces here rather than only on the download
-    # button. Failures are recorded but don't block the (already valid)
-    # scorecards from being shown.
-    csv_errors: Dict[str, str] = {}
-    for code, product in result.products.items():
-        try:
-            _build_rowscores_csv(
-                product.data_product, product.scorecard, product.config
-            )
-        except Exception as exc:  # defensive: never block on export issues
-            logger.warning("One-click CSV build failed for %s", code, exc_info=True)
-            csv_errors[code] = str(exc)
+        progress("Preparing exports", "CSV · JSON")
+        csv_errors: Dict[str, str] = {}
+        for code, product in result.products.items():
+            try:
+                _build_rowscores_csv(product.data_product, product.scorecard, product.config)
+            except Exception as exc:  # never block the (valid) scorecards on export issues
+                logger.warning("One-click CSV build failed for %s", code, exc_info=True)
+                csv_errors[code] = str(exc)
+        status.update(label="Scorecards ready", state="complete", expanded=False)
 
     st.session_state.selected_systems = result.scored_systems
     st.session_state.data_products = result.data_products
     st.session_state.configs = result.configs
     st.session_state.scorecards = result.scorecards
     st.session_state[ONE_CLICK_SUMMARY_KEY] = {
-        "scored": result.scored_systems,
-        "skipped": dict(result.skipped),
-        "warnings": list(result.warnings),
-        "csv_errors": csv_errors,
+        "scored": result.scored_systems, "skipped": dict(result.skipped),
+        "warnings": list(result.warnings), "csv_errors": csv_errors,
     }
     goto("dashboard")
 
 
-def _render_generate_section(domain_code: str | None, systems: List[str]) -> None:
-    """Render the selection summary + Generate button with pre-validation."""
-    st.markdown("---")
+def _render_run_plan(domain_code: str | None, systems: List[str]) -> None:
+    from config.settings import SETTINGS
 
-    if not domain_code:
+    with st.container(border=True):
+        st.markdown('<div style="font-weight:600;font-size:14px;margin-bottom:8px">Run plan</div>',
+                    unsafe_allow_html=True)
+        if not domain_code:
+            callout("Pick a domain to continue.", "info")
+            st.button("Generate scorecards", type="primary", disabled=True, use_container_width=True,
+                      key="oneclick_generate")
+            return
+        domain = get_domain(domain_code)
+        rule_counts = _rule_counts_for(systems)
+        with_rules = [c for c in systems if rule_counts.get(c, 0) > 0]
+        without_rules = [c for c in systems if rule_counts.get(c, 0) == 0]
+        n_rules = sum(rule_counts.get(c, 0) for c in with_rules)
+        row_limit = get_row_limit()
+        dataset = f"Sample ≤ {row_limit:,} rows/table" if row_limit else "Full dataset"
+        pv = get_planview_filter()
+        filt = f"{len(pv)} project filter(s)" if pv else "All projects"
+        chosen = " · ".join(code_chip(c) for c in systems) if systems else "<i>no system yet</i>"
         st.markdown(
-            "<div class='empty-notice'>⚠️ <b>Pick a domain</b> above to continue.</div>",
+            f'<div class="dq-choice-grid" style="margin-bottom:12px">'
+            f'<span class="k">You chose</span><span>{html.escape(domain.name)} · {chosen}</span>'
+            f'<span class="k">Automated</span><span>CDEs required by rules · {n_rules} Custom DQRs at defaults · Equal weights · CSV + JSON exports</span>'
+            f'<span class="k">Dataset</span><span>{dataset} · {filt}</span></div>',
             unsafe_allow_html=True,
         )
-        _generate_button(enabled=False)
-        return
-    if not systems:
-        st.markdown(
-            "<div class='empty-notice'>⚠️ <b>Select at least one system</b> "
-            "above to continue.</div>",
-            unsafe_allow_html=True,
-        )
-        _generate_button(enabled=False)
-        return
-
-    # Pre-validate that at least one selected system has custom rules
-    # (One-click is custom-only). All-empty selection is a blocking issue.
-    rule_counts = _rule_counts_for(systems)
-    with_rules = [c for c in systems if rule_counts.get(c, 0) > 0]
-    without_rules = [c for c in systems if rule_counts.get(c, 0) == 0]
-
-    chips = "".join(f'<span class="sel-chip">📦 {html.escape(c)}</span>' for c in systems)
-    st.markdown(
-        f"""
-        <div class="sel-summary">
-            <div class="sel-summary-title">✓ Ready to generate · {len(systems)} system(s)</div>
-            <div>{chips}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    if without_rules:
-        st.warning(
-            "⚠ No Custom DQRs are configured for: "
-            + ", ".join(f"`{c}`" for c in without_rules)
-            + ". One-click scores with custom rules only, so "
-            + ("these systems will be skipped." if with_rules
-               else "there is nothing to score.")
-        )
-
-    if not with_rules:
-        st.error(
-            "❌ None of the selected systems have applicable Custom DQRs. "
-            "Pick a system with custom rules, or switch to Step-by-step mode to "
-            "apply Standard DQRs manually."
-        )
-        _generate_button(enabled=False)
-        return
-
-    st.markdown(
-        "<div style='font-size:0.85em; color:rgba(49,51,63,0.7); margin:0.5em 0;'>"
-        "⚡ One click selects the required CDEs, applies every Custom DQR with "
-        "its default options, distributes weights equally, scores each Data "
-        "Product and prepares the CSV exports - then opens the dashboard."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-    if _generate_button(enabled=True):
-        _run_one_click(domain_code, [c for c in systems])
-
-
-def _generate_button(*, enabled: bool) -> bool:
-    """Render the primary Generate button. Returns True when clicked."""
-    c_l, c_mid, c_r = st.columns([1, 2, 2])
-    with c_r:
-        return st.button(
-            "⚡ Generate scorecards",
-            type="primary",
-            disabled=not enabled,
-            use_container_width=True,
-            key="oneclick_generate",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Navigation
-# ---------------------------------------------------------------------------
-
-def _nav() -> None:
-    """Back (to mode picker) / Restart row. No Next - Generate is the
-    forward action and it jumps straight to the dashboard."""
-    st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
-    c_back, c_restart, _ = st.columns([1, 1, 4])
-    with c_back:
-        if st.button("⬅ Back", use_container_width=True,
-                     help="Return to the mode picker."):
-            prev_step()
-    with c_restart:
-        render_restart_button(restart_app, key="restart_confirm_oneclick")
+        if without_rules:
+            callout(f"<b>{', '.join(without_rules)} will be skipped</b> — no Custom DQRs configured.", "warn")
+        if not systems:
+            callout("Select at least one system.", "info")
+        elif not with_rules:
+            callout("None of the selected systems has Custom DQRs. Pick another system or use Step-by-step.", "err")
+        enabled = bool(with_rules)
+        label = f"Generate scorecards for {len(with_rules)} system{'s' if len(with_rules) != 1 else ''}" if enabled else "Generate scorecards"
+        if st.button(label, type="primary", disabled=not enabled, use_container_width=True,
+                     key="oneclick_generate"):
+            _run_one_click(domain_code, list(systems))
 
 
 def render() -> None:
-    _inject_css()
-    st.markdown(
-        '<div class="step-pill">One-click · Domain &amp; Systems</div>',
-        unsafe_allow_html=True,
-    )
-    section_header(
-        "One-click scorecards",
-        "Pick a **domain** and the **systems** to include, then press "
-        "**Generate**. The app automatically selects the required CDEs, "
-        "applies every Custom DQR at its default settings, distributes "
-        "weights equally, scores each Data Product and prepares the CSV "
-        "exports - no further steps needed.",
-    )
-
-    domain_code = _render_domain_picker()
-    selected_systems: List[str] = []
-    if domain_code:
-        st.markdown("---")
-        selected_systems = _render_system_picker(domain_code)
-
-    _render_generate_section(domain_code, selected_systems)
+    page_header("One-click", "Pick a domain and systems",
+                "Everything else runs with curated defaults and lands on the Scorecard.")
+    left, right = st.columns([2.2, 1], gap="large")
+    with left:
+        domain_code = _render_domain_picker()
+        selected: List[str] = []
+        if domain_code:
+            selected = _render_system_picker(domain_code)
+    with right:
+        _render_run_plan(domain_code, selected)
     _nav()
+
+
+def _nav() -> None:
+    render_nav_footer(
+        show_next=False, next_message="", blocked_message=None,
+        on_back=prev_step, on_next=lambda: None, on_restart=restart_app,
+        next_button_label="Generate from the Run plan →",
+        restart_key="restart_confirm_oneclick",
+    )

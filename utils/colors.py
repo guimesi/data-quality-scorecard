@@ -10,6 +10,6 @@ Kept dependency-free (no imports) so any layer - ``utils``, ``ui``, future
 """
 from __future__ import annotations
 
-STATUS_GREEN = "#16a34a"
-STATUS_YELLOW = "#eab308"
-STATUS_RED = "#dc2626"
+STATUS_GREEN = "#1F7A4D"
+STATUS_YELLOW = "#A8650A"
+STATUS_RED = "#BF3A2F"

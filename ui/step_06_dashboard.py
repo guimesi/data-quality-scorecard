@@ -1,20 +1,8 @@
-"""Step 6: Scorecard dashboard - orchestration.
+"""Step 6: Scorecard - orchestration (redesigned).
 
-Runs the scorecard computation for each Data Product and renders the
-per-DP dashboard card (gauge + tab row + export buttons) on top of a
-cross-DP overview. The dashboard's pieces (CSS, exports, charts,
-breakdown helpers, per-DP card) live in :mod:`ui.step_06` so each piece
-stays small.
-
-This module owns:
-
-- the page header / overview row
-- the ``render()`` entry point that iterates the scorecards
-- the bottom navigation (Back / Restart / ML Lab)
-
-It re-exports the helper symbols that tests (and the ML Lab) reach for
-directly: ``_build_rowscores_csv``, ``_per_rule_score_columns``,
-``_status_class``, ``_render_source_breakdown``.
+Narrative: header actions → run summary → overview (score cards + Needs
+attention) → detail for the SELECTED Data Product only → footer.
+Re-exports the helper symbols tests reach for (unchanged list, minus ``_gauge``).
 """
 from __future__ import annotations
 
@@ -24,13 +12,14 @@ import streamlit as st
 
 from config.settings import SETTINGS
 from src.one_click import ONE_CLICK_SUMMARY_KEY
+from src.persistence import log_event
 from src.scorecard import compute_scorecard
 from ui.step_06._breakdown import (
     _render_custom_rules_table,
     _render_dp_card_header,
     _render_source_breakdown,
 )
-from ui.step_06._charts import _gauge, _threshold_bar
+from ui.step_06._charts import _threshold_bar
 from ui.step_06._dp_dashboard import _render_dashboard_for_dp, _render_overview_cards
 from ui.step_06._drilldown import (
     _render_cde_drilldown,
@@ -49,34 +38,52 @@ from ui.step_06._export import (
     _per_rule_score_columns,
     _reference_columns_for_export,
 )
-from ui.step_06._history import (
-    _record_runs,
-    _render_drop_alert,
-    _render_history_tab,
-)
+from ui.step_06._history import _record_runs, _render_drop_alert, _render_history_tab
+from ui.step_06._overview import render_overview
 from ui.step_06._projects import _render_project_save_panel
-from ui.step_06._shared import (
-    _DEFAULT_ACCENT,
-    _SYSTEM_ACCENTS,
-    _SYSTEM_ICONS,
-    _status_class,
-)
-from utils.helpers import section_header
-from utils.session_state import goto, prev_step, restart_app
-from utils.ui_components import render_restart_button
+from ui.step_06._shared import _DEFAULT_ACCENT, _SYSTEM_ACCENTS, _SYSTEM_ICONS, _status_class
+from utils.session_state import APP_MODE_ONE_CLICK, goto, prev_step, restart_app
+from utils.ui_components import badge, callout, code_chip, page_header, render_nav_footer, step_eyebrow
 
 logger = logging.getLogger(__name__)
 
 
-def _render_one_click_summary() -> None:
-    """Render the one-time banner produced by a One-click run, if present.
+def _render_header_actions(scorecards: dict) -> None:
+    """Save project · Export ▾ · ML Lab - one row, right-aligned under the title."""
+    _, c_save, c_export, c_lab = st.columns([5, 1.1, 1, 1.1])
+    with c_save:
+        if hasattr(st, "dialog"):
+            @st.dialog("Save as project")
+            def _save_dialog() -> None:
+                _render_project_save_panel()  # existing panel: name + Save version + changelog
+            if st.button("Save project", key="dash_save_project", use_container_width=True):
+                _save_dialog()
+        else:
+            _render_project_save_panel()
+    with c_export:
+        with st.popover("Export", use_container_width=True):
+            _render_executive_report_download(scorecards)
+            domain_code = str(st.session_state.get("domain", "") or "")
+            for code, result in scorecards.items():
+                dp = st.session_state.data_products[code]
+                cfg = st.session_state.configs[code]
+                st.markdown(f"**{code}**")
+                d1, d2 = st.columns(2)
+                if d1.download_button("CSV · row scores", data=_build_rowscores_csv(dp, result, cfg),
+                                      file_name=f"{code}_row_scores.csv", mime="text/csv",
+                                      use_container_width=True, key=f"dl_csv_{code}"):
+                    log_event("export", {"format": "csv", "dp": code}, domain_code)
+                if d2.download_button("JSON · config", data=_build_config_json(dp, result, cfg),
+                                      file_name=f"{code}_scorecard.json", mime="application/json",
+                                      use_container_width=True, key=f"dl_json_{code}"):
+                    log_event("export", {"format": "json", "dp": code}, domain_code)
+    with c_lab:
+        if st.button("ML Lab · beta", key="dashboard_open_ml_lab", use_container_width=True,
+                     help="Experimental, read-only analyses on top of this scorecard."):
+            goto("ml_lab")
 
-    One-click stashes a summary (systems scored / skipped / warnings / CSV
-    export errors) under ``ONE_CLICK_SUMMARY_KEY`` before landing here. It's
-    purely informational and only shows for One-click runs; the Step-by-step flow
-    never sets the key. The banner persists until Restart / domain switch
-    (which clears the key) so it survives the dashboard's frequent reruns.
-    """
+
+def _render_one_click_summary() -> None:
     summary = st.session_state.get(ONE_CLICK_SUMMARY_KEY)
     if not summary:
         return
@@ -84,167 +91,95 @@ def _render_one_click_summary() -> None:
     skipped = summary.get("skipped", {}) or {}
     warnings = summary.get("warnings", []) or []
     csv_errors = summary.get("csv_errors", {}) or {}
-
-    scored_txt = ", ".join(f"`{c}`" for c in scored) or "none"
-    st.success(
-        f"⚡ **Generated by One-click** - scored {len(scored)} system(s): "
-        f"{scored_txt}. All Custom DQRs applied at default settings with "
-        "weights distributed equally. Export each Data Product below."
+    skipped_txt = (
+        f' · <span style="color:var(--dq-wn);font-weight:500">{", ".join(skipped)} skipped</span>'
+        if skipped else ""
     )
-    if skipped:
-        lines = "\n".join(f"- **{c}**: {r}" for c, r in skipped.items())
-        st.warning("⚠ Some systems were skipped:\n\n" + lines)
-    if warnings:
-        with st.expander(f"ℹ️ {len(warnings)} One-click note(s)", expanded=False):
-            for w in warnings:
-                st.markdown(f"- {w}")
-    if csv_errors:
-        lines = "\n".join(f"- **{c}**: {e}" for c, e in csv_errors.items())
-        st.error("❌ CSV export could not be prepared for:\n\n" + lines)
+    c_msg, c_more = st.columns([6, 1], vertical_alignment="center")
+    with c_msg:
+        callout(
+            f'{badge("One-click", "brand")} {len(scored)} system{"s" if len(scored) != 1 else ""} scored '
+            f'with all Custom DQRs at defaults, equal weights{skipped_txt}', "info",
+        )
+    with c_more:
+        if skipped or warnings or csv_errors:
+            with st.popover("Run details", use_container_width=True):
+                for c, r in skipped.items():
+                    st.markdown(f"**{c}** skipped — {r}")
+                for w in warnings:
+                    st.markdown(f"- {w}")
+                for c, e in csv_errors.items():
+                    st.error(f"CSV export could not be prepared for **{c}**: {e}")
 
 
 def render() -> None:
-    st.markdown('<div class="step-pill">Final step · Scorecard Dashboard</div>',
-                unsafe_allow_html=True)
-    section_header(
-        "Step 6 - Scorecard Dashboard",
-        "Final result: score per Data Product, threshold distribution, CDE and "
-        "dimension breakdowns, pass rate for each DQR, and worst-row inspection.",
-    )
-
-    _render_one_click_summary()
-
     dps = st.session_state.data_products
     configs = st.session_state.configs
 
-    # Compute / recompute on render to reflect any upstream changes. Include
-    # DPs that selected only the Custom source (so cfg.assignments is empty)
-    # but have ≥ 1 custom_assignments - ``compute_scorecard`` handles both.
-    scorecards = {}
-    failed: dict = {}
-    with st.spinner("⚙️ Computing scorecards from the latest rules and weights..."):
+    scorecards, failed = {}, {}
+    with st.spinner("Computing scorecards…"):
         for code, dp in dps.items():
             cfg = configs[code]
             if not cfg.assignments and not cfg.custom_assignments:
                 continue
             try:
-                result = compute_scorecard(
-                    dp, cfg,
-                    threshold_green=SETTINGS.threshold_green,
+                scorecards[code] = compute_scorecard(
+                    dp, cfg, threshold_green=SETTINGS.threshold_green,
                     threshold_yellow=SETTINGS.threshold_yellow,
                 )
             except Exception as exc:
-                # One bad Data Product must not blank the whole dashboard. Record
-                # it, surface it below, and keep rendering the rest - mirroring the
-                # per-system isolation One-click already does.
-                logger.warning(
-                    "Scorecard computation failed for %s; leaving it out",
-                    code, exc_info=True,
-                )
+                logger.warning("Scorecard computation failed for %s", code, exc_info=True)
                 failed[code] = str(exc)
-                continue
-            scorecards[code] = result
     st.session_state.scorecards = scorecards
-
-    # Persist one run snapshot per DP (deduplicated inside) so the History
-    # tab, the drop alert and the ML Lab Run History survive Restart.
     _record_runs(scorecards)
 
-    if failed:
-        lines = "\n".join(f"- **{c}**: {e}" for c, e in failed.items())
-        st.error(
-            "⚠️ Some Data Products could not be scored and were left out of "
-            "the dashboard:\n\n" + lines
-        )
+    row_limit = st.session_state.get("sample_mode", True)
+    from utils.session_state import get_planview_filter, get_row_limit
+    rl = get_row_limit()
+    sub = (f"Sample ≤ {rl:,} rows/table" if rl else "Full dataset") + \
+          (f" · {len(get_planview_filter())} project filter(s)" if get_planview_filter() else " · All projects")
+    page_header(step_eyebrow(), "Scorecard", sub)
 
     if not scorecards:
-        if not failed:
-            st.error("🚫 No Data Product with defined rules. Go back to the previous step.")
+        if failed:
+            callout("Some Data Products could not be scored: " + "; ".join(f"<b>{c}</b> — {e}" for c, e in failed.items()), "err")
+        else:
+            callout("No Data Product has rules yet. Go back and configure DQRs.", "info")
         _nav()
         return
 
-    # Summary row across all DPs
-    with st.container(border=True):
-        st.markdown("### 🏁 Overview")
-        if failed:
-            n_failed = len(failed)
-            st.caption(
-                f"At-a-glance final scores across the {len(scorecards)} scored "
-                f"Data Product(s); {n_failed} could not be scored and "
-                f"{'is' if n_failed == 1 else 'are'} excluded (see the warning above)."
-            )
-        else:
-            st.caption("At-a-glance final scores across every Data Product.")
-        _render_overview_cards(scorecards)
+    _render_header_actions(scorecards)
+    _render_one_click_summary()
+    if failed:
+        callout("Left out (could not be scored): " + "; ".join(f"<b>{c}</b> — {e}" for c, e in failed.items()), "err")
 
-    exp_col, save_col = st.columns([1, 3])
-    with exp_col:
-        _render_executive_report_download(scorecards)
-    _render_project_save_panel()
+    skipped = (st.session_state.get(ONE_CLICK_SUMMARY_KEY) or {}).get("skipped", {}) or {}
+    sel = render_overview(scorecards, skipped=skipped)
 
-    st.markdown("---")
-
-    for code, result in scorecards.items():
-        _render_dashboard_for_dp(code, dps[code], result)
-
-    st.markdown("---")
+    _render_dashboard_for_dp(sel, dps[sel], scorecards[sel])
     _nav()
 
 
 def _nav() -> None:
-    c1, c2, c3, c_mid = st.columns([1, 1, 2, 4])
-    with c1:
-        if st.button("⬅ Back", use_container_width=True):
-            prev_step()
-    with c2:
-        render_restart_button(restart_app, key="restart_confirm_dashboard")
-    with c3:
-        if st.button(
-            "🧪 ML Lab (beta)", use_container_width=True,
-            key="dashboard_open_ml_lab",
-            help="Open the experimental ML Lab - anomaly detection, "
-                 "rule impact, CDE clustering, weight sensitivity. "
-                 "Read-only; does not change any score or rule.",
-        ):
-            goto("ml_lab")
-    with c_mid:
-        st.markdown(
-            "<div style='text-align: center; padding-top: 0.55em; "
-            "color: rgba(49,51,63,0.6); font-size: 0.85em;'>"
-            "✅ End of workflow - use the export buttons in each card to save "
-            "the results, or restart to evaluate another configuration."
-            "</div>",
-            unsafe_allow_html=True,
-        )
+    render_nav_footer(
+        show_next=False, next_message="",
+        blocked_message=None,
+        on_back=prev_step, on_next=lambda: None, on_restart=restart_app,
+        restart_key="restart_confirm_dashboard",
+    )
+    st.markdown(
+        '<div class="dq-nav-msg" style="text-align:left;margin-top:-6px">End of workflow — export from the header or save this configuration as a project.</div>',
+        unsafe_allow_html=True,
+    )
 
 
 __all__ = [
-    "render",
-    # Public-ish helpers reached by tests, the ML Lab and other UI steps.
-    "_build_config_json",
-    "_build_rowscores_csv",
-    "_per_rule_score_columns",
-    "_reference_columns_for_export",
-    "_status_class",
-    "_render_source_breakdown",
-    "_render_custom_rules_table",
-    "_render_dp_card_header",
-    "_render_dashboard_for_dp",
-    "_render_overview_cards",
-    "_render_cde_drilldown",
-    "_render_dimension_drilldown",
-    "_render_rule_drilldown",
-    "_render_custom_rule_drilldown",
-    "_render_failing_rows",
-    "_record_runs",
-    "_render_drop_alert",
-    "_render_history_tab",
-    "_render_project_save_panel",
-    "_build_executive_report_html",
-    "_render_executive_report_download",
-    "_gauge",
-    "_threshold_bar",
-    "_SYSTEM_ICONS",
-    "_SYSTEM_ACCENTS",
-    "_DEFAULT_ACCENT",
+    "render", "_build_config_json", "_build_rowscores_csv", "_per_rule_score_columns",
+    "_reference_columns_for_export", "_status_class", "_render_source_breakdown",
+    "_render_custom_rules_table", "_render_dp_card_header", "_render_dashboard_for_dp",
+    "_render_overview_cards", "_render_cde_drilldown", "_render_dimension_drilldown",
+    "_render_rule_drilldown", "_render_custom_rule_drilldown", "_render_failing_rows",
+    "_record_runs", "_render_drop_alert", "_render_history_tab", "_render_project_save_panel",
+    "_build_executive_report_html", "_render_executive_report_download", "_threshold_bar",
+    "_SYSTEM_ICONS", "_SYSTEM_ACCENTS", "_DEFAULT_ACCENT",
 ]
