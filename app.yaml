@@ -45,4 +45,4 @@ env:
   - name: AIRTABLE_TOKEN
     valueFrom: "airtable-token"
   - name: AIRTABLE_BASE_ID
-    value: "appgjMHJvvPRfGaM4"
+    value: "appgjMHJvvPRfGaM2"
