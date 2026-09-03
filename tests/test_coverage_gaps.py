@@ -79,6 +79,18 @@ def test_ml_lab_visibility_true_when_already_on_step():
         assert ss_mod._ml_lab_visible() is True
 
 
+def _visible_settings_session(session: dict) -> dict:
+    """The rail's Settings block (dataset + project filter) only renders once
+    a mode is picked and the user is past the entry step."""
+    return {"app_mode": "step_by_step", "current_step": "system_selection", **session}
+
+
+def _popover_yields_sidebar(fake_st) -> None:
+    """The project filter lives in ``st.sidebar.popover``; make the popover
+    context yield the sidebar so ``box.text_area`` hits the test fake."""
+    fake_st.sidebar.popover.return_value.__enter__.return_value = fake_st.sidebar
+
+
 def test_render_planview_filter_no_change_emits_neutral_pill():
     from utils import session_state as ss_mod
 
@@ -86,12 +98,15 @@ def test_render_planview_filter_no_change_emits_neutral_pill():
     # ``domain`` must be set; ``render_planview_filter`` no-ops on
     # Step 0 before a domain has been picked (the filter widget is
     # domain-aware - see config.domains.ProjectFilterDef).
-    fake_st.session_state = {"domain": "cost_estimate", "planview_filter": []}
+    fake_st.session_state = _visible_settings_session(
+        {"domain": "cost_estimate", "planview_filter": []}
+    )
     captured: list[str] = []
     fake_st.sidebar.markdown = MagicMock(
         side_effect=lambda t, **kw: captured.append(t)
     )
     fake_st.sidebar.text_area = MagicMock(return_value="")
+    _popover_yields_sidebar(fake_st)
 
     with _patch_session_st(fake_st):
         ss_mod.render_planview_filter()
@@ -114,15 +129,16 @@ def test_render_planview_filter_change_invalidates_caches_and_reruns():
     from utils import session_state as ss_mod
 
     fake_st = MagicMock()
-    fake_st.session_state = _AttrDict({
+    fake_st.session_state = _AttrDict(_visible_settings_session({
         "domain": "cost_estimate",
         "planview_filter": [],
         "data_products": {"A": object()},
         "configs": {"A": object()},
         "scorecards": {"A": object()},
-    })
+    }))
     fake_st.sidebar.markdown = MagicMock()
     fake_st.sidebar.text_area = MagicMock(return_value="PV-1, PV-2")
+    _popover_yields_sidebar(fake_st)
 
     class _RerunSignal(Exception):
         pass
@@ -144,17 +160,20 @@ def test_render_planview_filter_active_emits_ok_pill_with_count():
     from utils import session_state as ss_mod
 
     fake_st = MagicMock()
-    fake_st.session_state = {"domain": "cost_estimate", "planview_filter": ["PV-A"]}
+    fake_st.session_state = _visible_settings_session(
+        {"domain": "cost_estimate", "planview_filter": ["PV-A"]}
+    )
     captured: list[str] = []
     fake_st.sidebar.markdown = MagicMock(
         side_effect=lambda t, **kw: captured.append(t)
     )
     fake_st.sidebar.text_area = MagicMock(return_value="PV-A")
+    _popover_yields_sidebar(fake_st)
 
     with _patch_session_st(fake_st):
         ss_mod.render_planview_filter()
 
-    assert any("Filtering on 1 project" in m for m in captured)
+    assert any("Project filter" in m and "1 project<" in m for m in captured)
 
 
 def test_render_planview_filter_skipped_when_no_domain():
@@ -183,9 +202,12 @@ def test_render_planview_filter_uses_domain_filter_column_for_quality():
     from utils import session_state as ss_mod
 
     fake_st = MagicMock()
-    fake_st.session_state = {"domain": "quality", "planview_filter": []}
+    fake_st.session_state = _visible_settings_session(
+        {"domain": "quality", "planview_filter": []}
+    )
     fake_st.sidebar.markdown = MagicMock()
     fake_st.sidebar.text_area = MagicMock(return_value="")
+    _popover_yields_sidebar(fake_st)
 
     with _patch_session_st(fake_st):
         ss_mod.render_planview_filter()
@@ -199,20 +221,21 @@ def test_render_planview_filter_active_singular_vs_plural():
     from utils import session_state as ss_mod
 
     fake_st = MagicMock()
-    fake_st.session_state = {
+    fake_st.session_state = _visible_settings_session({
         "domain": "cost_estimate",
         "planview_filter": ["PV-A", "PV-B"],
-    }
+    })
     captured: list[str] = []
     fake_st.sidebar.markdown = MagicMock(
         side_effect=lambda t, **kw: captured.append(t)
     )
     fake_st.sidebar.text_area = MagicMock(return_value="PV-A\nPV-B")
+    _popover_yields_sidebar(fake_st)
 
     with _patch_session_st(fake_st):
         ss_mod.render_planview_filter()
 
-    assert any("Filtering on 2 projects" in m for m in captured)
+    assert any("Project filter" in m and "2 projects<" in m for m in captured)
 
 
 # ===========================================================================
@@ -855,8 +878,9 @@ def test_step_06_emits_warning_for_not_computed_standard_rules():
     at.session_state["configs"] = {"EPT": cfg}
     at.session_state["scorecards"] = {"EPT": result}
     at.run()
-    warning_values = [w.value for w in at.warning]
-    assert any("could not be computed" in w for w in warning_values)
+    # Not-computed Standard rules are listed as captions under the Rules table.
+    caption_values = [c.value for c in at.caption]
+    assert any("not computed" in c for c in caption_values)
 
 
 def test_step_06_ml_lab_button_navigates_to_ml_lab():

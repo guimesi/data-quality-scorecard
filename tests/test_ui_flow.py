@@ -49,6 +49,38 @@ def _new_app(**session_state) -> AppTest:
     return at
 
 
+class _SessionDict(dict):
+    """dict with attribute access, standing in for ``st.session_state``."""
+
+    def __getattr__(self, item):
+        try:
+            return self[item]
+        except KeyError as e:
+            raise AttributeError(item) from e
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+
+def _run_restart_app(session: dict) -> dict:
+    """Run ``restart_app`` against a fake ``st`` seeded with ``session``.
+
+    Restart is confirmed inside an ``st.dialog`` whose body AppTest never
+    renders, so UI tests assert the opener button and exercise the reset
+    itself here - the dialog is only a wrapper around the unchanged
+    ``restart_app``. Returns the session state after the reset."""
+    from unittest.mock import patch
+
+    from utils.session.navigation import restart_app
+
+    fake = MagicMock()
+    fake.session_state = _SessionDict(session)
+    with patch("utils.session.navigation.st", fake), \
+         patch("utils.session.state.st", fake):
+        restart_app()
+    return fake.session_state
+
+
 def _click_last(at: AppTest, label_fragment: str) -> AppTest:
     """Click the LAST enabled button whose label contains label_fragment."""
     matches = [b for b in at.button if label_fragment in b.label and not b.disabled]
@@ -301,8 +333,8 @@ def _preloaded_step3_state(system: str = "EPT") -> dict:
 
 def test_step3_no_data_products_shows_error():
     at = _new_app(current_step="cde_selection", data_products={})
-    errors = [e.value for e in at.error]
-    assert any("Data products not built" in e for e in errors)
+    markdowns = [m.value for m in at.markdown]
+    assert any("not built" in m for m in markdowns)
 
 
 def test_step3_initial_state_has_no_cdes_and_disabled_next():
@@ -323,13 +355,12 @@ def test_step3_preselected_cdes_appear_as_badges_and_enable_next():
     at = _new_app(**state)
     # The cdes survived the render unchanged.
     assert at.session_state["configs"]["EPT"].cdes == ["PLANVIEW_ID"]
-    # Selected-CDEs chip-strip header is rendered.
+    # Selected-CDEs chip-strip renders exactly one chip, for the CDE.
     markdowns = [m.value for m in at.markdown]
-    assert any("Selected CDEs (1)" in m for m in markdowns)
+    assert sum(m.count('class="dq-code brand"') for m in markdowns) == 1
+    assert any("PLANVIEW_ID" in m and 'class="dq-code brand"' in m for m in markdowns)
     # Next is enabled.
     assert any("Next" in b.label and not b.disabled for b in at.button)
-    # Success banner reflects the selection (rendered as HTML markdown callout).
-    assert any("PLANVIEW_ID" in m and "cde-success" in m for m in markdowns)
 
 
 def test_step3_grid_renders_one_row_per_source_column():
@@ -339,10 +370,10 @@ def test_step3_grid_renders_one_row_per_source_column():
     import ui.step_03_cde_selection as s3
     state = _preloaded_step3_state("EPT")
     dp = state["data_products"]["EPT"]
-    grid = s3._build_profile_grid(dp, current_cdes=[], required_by_rule={})
+    grid = s3._build_profile_grid(dp, current_cdes=[], required={})
     assert list(grid["Column"]) == list(dp.df.columns)
     # All checkboxes start unticked when the config has no CDEs.
-    assert grid["Pick as CDE"].sum() == 0
+    assert grid["CDE"].sum() == 0
 
 
 def test_step3_grid_marks_preselected_cdes_as_ticked():
@@ -352,11 +383,11 @@ def test_step3_grid_marks_preselected_cdes_as_ticked():
     state = _preloaded_step3_state("EPT")
     dp = state["data_products"]["EPT"]
     grid = s3._build_profile_grid(
-        dp, current_cdes=["PLANVIEW_ID"], required_by_rule={},
+        dp, current_cdes=["PLANVIEW_ID"], required={},
     )
-    pick_for_planview = grid.loc[grid["Column"] == "PLANVIEW_ID", "Pick as CDE"].iloc[0]
+    pick_for_planview = grid.loc[grid["Column"] == "PLANVIEW_ID", "CDE"].iloc[0]
     assert bool(pick_for_planview) is True
-    other_picks = grid.loc[grid["Column"] != "PLANVIEW_ID", "Pick as CDE"]
+    other_picks = grid.loc[grid["Column"] != "PLANVIEW_ID", "CDE"]
     assert (~other_picks).all()
 
 
@@ -585,9 +616,10 @@ def test_step6_dashboard_renders_with_all_tabs():
     assert "EPT" in at.session_state["scorecards"]
     result = at.session_state["scorecards"]["EPT"]
     assert 0.0 <= result.overall_score <= 100.0
-    # Overview section rendered; tabs rendered (By CDE, By Dimension, Rules, Worst rows)
+    # One overview score card per scored Data Product.
     markdowns = [m.value for m in at.markdown]
-    assert any("Overview" in m for m in markdowns)
+    n_cards = sum(m.count('class="dq-scorecard"') for m in markdowns)
+    assert n_cards == len(at.session_state["scorecards"])
 
 
 def test_step6_no_configs_shows_error():
@@ -597,7 +629,7 @@ def test_step6_no_configs_shows_error():
         data_products={},
         configs={},
     )
-    assert any("No Data Product" in e.value for e in at.error)
+    assert any("No Data Product" in m.value for m in at.markdown)
 
 
 def test_step6_isolates_a_failing_data_product(monkeypatch):
@@ -638,13 +670,10 @@ def test_step6_isolates_a_failing_data_product(monkeypatch):
     # The healthy DP scored; the failing one was left out, not crashed on.
     assert "EPT" in at.session_state["scorecards"]
     assert "ADR" not in at.session_state["scorecards"]
-    # The failure is surfaced to the user, not silently swallowed.
-    assert any("could not be scored" in e.value for e in at.error)
-    # The Overview caption reflects the exclusion instead of claiming "every"
-    # Data Product was scored.
+    # The failure is surfaced to the user (error callout naming the DP),
+    # not silently swallowed.
     assert any(
-        "scored Data Product" in c.value and "excluded" in c.value
-        for c in at.caption
+        "could not be scored" in m.value and "ADR" in m.value for m in at.markdown
     )
 
 
@@ -665,21 +694,24 @@ def test_step6_ml_lab_button_navigates_to_lab():
 
 def test_step6_restart_clears_everything():
     at = _new_app(**_preloaded_step6_state())
-    # Restart is a two-click confirmation: click the "Yes, restart" button
-    # inside the popover (the popover body always renders in AppTest).
-    confirm = [b for b in at.button if "Yes, restart" in b.label]
-    assert confirm, "Dashboard should ship a Restart confirmation button"
-    confirm[0].click().run()
-    # Restart now returns to the entry step (mode picker) and clears both
-    # the active domain and the chosen mode so the user re-picks both. The
-    # data-clearing contract is unchanged; only the landing step moved from
-    # domain_selection to mode_selection.
-    assert at.session_state["current_step"] == "mode_selection"
-    assert at.session_state["domain"] is None
-    assert at.session_state["app_mode"] is None
-    assert at.session_state["selected_systems"] == []
-    assert at.session_state["data_products"] == {}
-    assert at.session_state["configs"] == {}
+    # Restart is a two-click confirmation behind ``st.dialog``: the opener
+    # renders in the nav footer; the dialog body does not render in AppTest.
+    assert any(b.key == "restart_confirm_dashboard_open" for b in at.button), \
+        "Dashboard should ship a Restart opener button"
+    # Restart returns to the entry step (mode picker) and clears both the
+    # active domain and the chosen mode so the user re-picks both.
+    session = _run_restart_app({
+        "current_step": "dashboard", "domain": "cost_estimate",
+        "app_mode": "step_by_step", "selected_systems": ["EPT"],
+        "data_products": {"EPT": object()}, "configs": {"EPT": object()},
+        "scorecards": {"EPT": object()}, "planview_filter": [],
+    })
+    assert session["current_step"] == "mode_selection"
+    assert session["domain"] is None
+    assert session["app_mode"] is None
+    assert session["selected_systems"] == []
+    assert session["data_products"] == {}
+    assert session["configs"] == {}
 
 
 def test_step6_skips_dp_without_assignments():
@@ -700,7 +732,7 @@ def test_step6_skips_dp_without_assignments():
         configs={"EPT": cfg_empty},
     )
     # No scorecards => error shown
-    assert any("No Data Product" in e.value for e in at.error)
+    assert any("No Data Product" in m.value for m in at.markdown)
 
 
 # ---------------------------------------------------------------------------

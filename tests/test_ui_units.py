@@ -76,6 +76,10 @@ def _make_fake_st(
     fake.button = button
     fake.columns = columns
     fake.rerun = MagicMock()
+    # ``render_restart_button`` wraps its confirm body in ``st.dialog``;
+    # a no-op decorator runs that body inline so the confirm click reaches
+    # ``on_restart`` in unit tests.
+    fake.dialog = lambda *a, **k: (lambda fn: fn)
     return fake
 
 
@@ -657,135 +661,6 @@ def test_step3_nav_restart_click_calls_restart_app():
     mock_restart.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# step_03 hover legend - Feature 1 (profile tooltips above the D&D widget)
-# ---------------------------------------------------------------------------
-
-def test_step3_format_profile_tooltip_includes_all_fields():
-    """Tooltip text must surface every relevant profile field so the user
-    can decide whether the column is a CDE without leaving the D&D tab."""
-    from src.models import ColumnProfile
-    from ui.step_03_cde_selection import _format_profile_tooltip
-
-    profile = ColumnProfile(
-        name="PLANVIEW_ID",
-        dtype="object",
-        column_type_group="id",
-        total_rows=120,
-        null_count=4,
-        null_pct=3.33,
-        distinct_count=110,
-        duplicate_count=6,
-        sample_values=["PV-001", "PV-002", "PV-003"],
-        min_value=None,
-        max_value=None,
-    )
-    text = _format_profile_tooltip(profile)
-    assert "PLANVIEW_ID" in text
-    assert "object" in text
-    assert "Rows: 120" in text
-    assert "3.33%" in text
-    assert "Distinct: 110" in text
-    assert "Duplicates: 6" in text
-    assert "PV-001" in text
-    # No min/max for IDs → range line is omitted.
-    assert "Range:" not in text
-
-
-def test_step3_format_profile_tooltip_shows_range_when_min_max_set():
-    """For numeric/date columns with min/max set, the tooltip surfaces
-    the value range alongside the rest of the profile."""
-    from src.models import ColumnProfile
-    from ui.step_03_cde_selection import _format_profile_tooltip
-
-    profile = ColumnProfile(
-        name="AMOUNT", dtype="float64", column_type_group="float",
-        total_rows=10, null_count=0, null_pct=0.0,
-        distinct_count=10, duplicate_count=0,
-        sample_values=[1.0, 2.0],
-        min_value=1.0, max_value=99.5,
-    )
-    text = _format_profile_tooltip(profile)
-    assert "Range: 1.0 → 99.5" in text
-
-
-def test_step3_selected_cde_legend_empty_emits_caption():
-    """No CDEs selected → an HTML empty-state callout is emitted (no chip block)."""
-    import ui.step_03_cde_selection as s3
-
-    fake_st = _make_fake_st()
-    captured_captions: list[str] = []
-    captured_markdowns: list[str] = []
-    fake_st.caption = MagicMock(side_effect=lambda t: captured_captions.append(t))
-    fake_st.markdown = MagicMock(
-        side_effect=lambda t, **kw: captured_markdowns.append(t)
-    )
-
-    with patch.object(s3, "st", fake_st):
-        s3._render_selected_cde_legend(columns=[], profiles={}, required_by_rule={})
-
-    # The empty state is now rendered as a styled HTML markdown callout,
-    # not via st.caption. Exactly one markdown is emitted (the cde-empty block).
-    assert captured_captions == []
-    assert len(captured_markdowns) == 1
-    assert "No CDE selected yet" in captured_markdowns[0]
-    assert "cde-empty" in captured_markdowns[0]
-
-
-def test_step3_selected_cde_legend_renders_chips_with_tooltips():
-    """When CDEs are present, each renders as a chip with the full profile
-    embedded in its title attribute and the count surfaced in the header."""
-    import ui.step_03_cde_selection as s3
-    from src.models import ColumnProfile
-
-    profile = ColumnProfile(
-        name="PLANVIEW_ID", dtype="object", column_type_group="id",
-        total_rows=10, null_count=0, null_pct=0.0,
-        distinct_count=10, duplicate_count=0, sample_values=["PV-001"],
-    )
-    fake_st = _make_fake_st()
-    captured: list[tuple[str, dict]] = []
-    fake_st.markdown = MagicMock(
-        side_effect=lambda t, **kw: captured.append((t, kw))
-    )
-
-    with patch.object(s3, "st", fake_st):
-        s3._render_selected_cde_legend(
-            columns=["PLANVIEW_ID"],
-            profiles={"PLANVIEW_ID": profile},
-            required_by_rule={},
-        )
-
-    assert len(captured) == 1
-    body, kwargs = captured[0]
-    assert kwargs.get("unsafe_allow_html") is True
-    assert "Selected CDEs (1)" in body
-    assert 'title=' in body
-    assert "PLANVIEW_ID</span>" in body
-
-
-def test_step3_selected_cde_legend_falls_back_when_profile_missing():
-    """If the profile is unavailable, the chip's tooltip uses a placeholder
-    string so we never crash and the column still renders."""
-    import ui.step_03_cde_selection as s3
-
-    fake_st = _make_fake_st()
-    captured: list[str] = []
-    fake_st.markdown = MagicMock(
-        side_effect=lambda t, **kw: captured.append(t)
-    )
-
-    with patch.object(s3, "st", fake_st):
-        s3._render_selected_cde_legend(
-            columns=["MYSTERY"],
-            profiles={},
-            required_by_rule={},
-        )
-
-    assert any("no profile available" in t for t in captured)
-    assert any("MYSTERY</span>" in t for t in captured)
-
-
 def test_step3_build_profile_grid_preserves_column_order():
     """The grid's row order mirrors ``dp.df.columns`` so ``cfg.cdes`` ends
     up in source order - essential for the deterministic downstream
@@ -807,9 +682,9 @@ def test_step3_build_profile_grid_preserves_column_order():
     dp = DataProduct(
         system_code="X", name="X_DP", df=df, source_tables=["t"], profiles=profiles,
     )
-    grid = s3._build_profile_grid(dp, current_cdes=["B"], required_by_rule={})
+    grid = s3._build_profile_grid(dp, current_cdes=["B"], required={})
     assert list(grid["Column"]) == ["A", "B", "C"]
-    assert list(grid["Pick as CDE"]) == [False, True, False]
+    assert list(grid["CDE"]) == [False, True, False]
 
 
 def test_step3_render_dp_block_caches_base_grid_across_reruns():
@@ -855,7 +730,7 @@ def test_step3_render_dp_block_caches_base_grid_across_reruns():
         # renders return the same picks because Streamlit's stored edits
         # would still be applied to the cached base.
         out = df_in.copy()
-        out["Pick as CDE"] = [False, True]
+        out["CDE"] = [False, True]
         return out
 
     fake_st.data_editor = fake_data_editor
@@ -990,7 +865,7 @@ def test_step3_render_dp_block_chips_reflect_post_edit_selection():
     # function under test should derive ``cfg.cdes = ["B"]`` *and* drive
     # both the chip-strip and the success banner from that value.
     edited_df = pd.DataFrame({
-        "Pick as CDE": [False, True],
+        "CDE": [False, True],
         "Column": ["A", "B"],
         "Type": ["integer", "integer"],
         "Dtype": ["int64", "int64"],
@@ -1029,13 +904,11 @@ def test_step3_render_dp_block_chips_reflect_post_edit_selection():
     # empty input list.
     assert fake_st.session_state["configs"]["X"].cdes == ["B"]
 
-    # Chip-strip header reflects the *new* selection (one chip).
-    assert any("Selected CDEs (1)" in m for m in captured_markdowns)
-    # And so does the success banner, now rendered as an HTML callout.
-    assert any(
-        "1 CDE(s)" in m and "B" in m and "cde-success" in m
-        for m in captured_markdowns
-    )
+    # Chip-strip reflects the *new* selection: exactly one chip, for B.
+    chips = [m for m in captured_markdowns if 'class="dq-code brand"' in m]
+    assert len(chips) == 1
+    assert chips[0].count('class="dq-code brand"') == 1
+    assert ">B" in chips[0]
     # Success widget is no longer used for the per-DP banner.
     assert captured_successes == []
 
@@ -1070,7 +943,7 @@ def test_step3_build_profile_grid_sample_uses_distinct_values():
         system_code="X", name="X_DP", df=df, source_tables=["t"],
         profiles=profiles,
     )
-    grid = s3._build_profile_grid(dp, current_cdes=[], required_by_rule={})
+    grid = s3._build_profile_grid(dp, current_cdes=[], required={})
 
     a_sample = grid.loc[grid["Column"] == "A", "Sample"].iloc[0]
     assert a_sample == "X, Y, Z"
@@ -1106,7 +979,7 @@ def test_step3_build_profile_grid_handles_missing_profile_gracefully():
     dp = DataProduct(
         system_code="X", name="X_DP", df=df, source_tables=["t"], profiles={},
     )
-    grid = s3._build_profile_grid(dp, current_cdes=[], required_by_rule={})
+    grid = s3._build_profile_grid(dp, current_cdes=[], required={})
     assert list(grid["Column"]) == ["A", "B"]
     assert list(grid["Type"]) == ["-", "-"]
     assert list(grid["Sample"]) == ["", ""]
@@ -1529,7 +1402,7 @@ def test_step3_select_all_required_button_rebuilds_base_and_clears_editor():
     _step3_render_harness(df, dp, cfg, fake_st)
     # Pre-seed an editor-state entry to confirm the click handler clears it.
     editor_key = f"cde_grid_EPT_{id(dp)}"
-    fake_st.session_state[editor_key] = {"edited_rows": {0: {"Pick as CDE": True}}}
+    fake_st.session_state[editor_key] = {"edited_rows": {0: {"CDE": True}}}
     select_all_key = f"cde_select_all_required_EPT_{id(dp)}"
     fake_st.button = MagicMock(
         side_effect=lambda *a, **kw: kw.get("key") == select_all_key
@@ -1544,7 +1417,7 @@ def test_step3_select_all_required_button_rebuilds_base_and_clears_editor():
     # The rebuilt base DataFrame ticks the required columns.
     base_key = f"cde_grid_base_EPT_{id(dp)}"
     base = fake_st.session_state[base_key]
-    picked = list(base.loc[base["Pick as CDE"], "Column"])
+    picked = list(base.loc[base["CDE"], "Column"])
     assert "CODE_OF_RESOURCE" in picked
     assert "STANDARD_ACTIVITY_BREAKDOWN" in picked
 

@@ -40,7 +40,7 @@ def page_header(eyebrow: str, title: str, subtitle: str = "") -> None:
     sub = f'<div class="dq-sub">{subtitle}</div>' if subtitle else ""
     st.markdown(
         f'<div class="dq-eyebrow">{html.escape(eyebrow)}</div>'
-        f'<h1 class="dq-title">{html.escape(title)}</h1>{sub}',
+        f'<div class="dq-title">{html.escape(title)}</div>{sub}',
         unsafe_allow_html=True,
     )
 

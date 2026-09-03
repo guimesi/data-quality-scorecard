@@ -16,6 +16,7 @@ os.environ.setdefault("DATA_SOURCE", "mock")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 from config.domains import DOMAIN_COST_ESTIMATE, DOMAIN_QUALITY  # noqa: E402
+from tests.test_ui_flow import _run_restart_app  # noqa: E402
 
 APP_PATH = str(Path(__file__).resolve().parent.parent / "app.py")
 
@@ -121,14 +122,19 @@ def test_step0_restart_returns_to_mode_picker_and_clears_state():
         if "Cost Estimate" in b.label and "Selected" not in b.label
     ]
     pick[0].click().run()
-    # Restart is now a two-click confirmation: the popover trigger opens it,
-    # the "Yes, restart" button inside performs the reset.
-    restart = [b for b in at.button if "Yes, restart" in b.label]
-    assert restart, "Step 0 should ship a Restart confirmation button"
-    restart[0].click().run()
-    assert at.session_state["current_step"] == "mode_selection"
-    assert at.session_state["app_mode"] is None
-    assert at.session_state["domain"] is None
+    # Restart is a two-click confirmation behind ``st.dialog``: the opener
+    # renders in the nav row; the dialog body does not render in AppTest, so
+    # the reset itself is exercised directly.
+    assert any(b.key == "restart_confirm_domain_open" for b in at.button), \
+        "Step 0 should ship a Restart opener button"
+    session = _run_restart_app({
+        "current_step": "domain_selection", "app_mode": "step_by_step",
+        "domain": DOMAIN_COST_ESTIMATE, "selected_systems": [],
+        "data_products": {}, "configs": {}, "scorecards": {}, "planview_filter": [],
+    })
+    assert session["current_step"] == "mode_selection"
+    assert session["app_mode"] is None
+    assert session["domain"] is None
 
 
 def test_step0_switching_domain_resets_downstream_state():

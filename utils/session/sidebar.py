@@ -20,8 +20,8 @@ and ``text_area`` - hence the ``_popover()`` guard below.
 from __future__ import annotations
 
 import html as _html
-from contextlib import contextmanager, nullcontext
-from typing import Iterator, List
+from contextlib import contextmanager
+from typing import List
 
 import streamlit as st
 
@@ -39,16 +39,18 @@ def inject_sidebar_css() -> None:
 
 
 @contextmanager
-def _popover(label: str) -> Iterator[None]:
-    """``st.sidebar.popover`` when available (real Streamlit ≥ 1.33), else a
-    plain sidebar context (unit-test FakeSidebar)."""
+def _popover(label: str):
+    """Yields the container that must own the widgets: the popover body when
+    ``st.sidebar.popover`` exists (real Streamlit), else ``st.sidebar`` itself
+    (unit-test FakeSidebar). Callers MUST call ``box.toggle(...)`` /
+    ``box.text_area(...)`` on the yielded object - ``st.sidebar.toggle`` inside
+    the ``with`` would render outside the popover."""
     popover = getattr(st.sidebar, "popover", None)
     if popover is None:
-        with nullcontext():
-            yield
+        yield st.sidebar
         return
-    with popover(label, use_container_width=True):
-        yield
+    with popover(label, use_container_width=True) as box:
+        yield box if box is not None else st
 
 
 # ---------------------------------------------------------------------------
@@ -179,8 +181,8 @@ def render_sample_mode_toggle() -> None:
         badge = (
             f"Sample · {SETTINGS.max_rows_per_table // 1000}k rows" if previous else "Full dataset"
         )
-        with _popover(f"Dataset · {badge}"):
-            sample_mode = st.sidebar.toggle(
+        with _popover(f"Dataset · {badge}") as box:
+            sample_mode = box.toggle(
                 f"Sample mode (max {SETTINGS.max_rows_per_table:,} rows/table)",
                 value=previous,
                 key="sample_mode_toggle",
@@ -253,8 +255,8 @@ def render_planview_filter() -> None:
         f"{len(previous)} {project_filter.pill_singular if len(previous) == 1 else project_filter.pill_plural}"
         if previous else f"All {project_filter.pill_plural}"
     )
-    with _popover(f"Project filter · {badge}"):
-        text = st.sidebar.text_area(
+    with _popover(f"Project filter · {badge}") as box:
+        text = box.text_area(
             project_filter.label,
             value="\n".join(previous),
             key=_PLANVIEW_FILTER_INPUT_KEY,

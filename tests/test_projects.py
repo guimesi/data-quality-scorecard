@@ -251,8 +251,9 @@ def test_save_panel_reports_persistence_failure(monkeypatch):
 
 def test_saved_projects_browser_hidden_when_empty(monkeypatch):
     fake = _fake_st(_FakeSessionState())
+    fake.dataframe.return_value = {"selection": {"rows": []}}
     monkeypatch.setattr(smode, "st", fake)
-    smode._render_saved_projects()
+    smode._render_saved_projects(proj.list_projects())
     fake.selectbox.assert_not_called()
 
 
@@ -261,16 +262,18 @@ def test_saved_projects_browser_lists_and_opens(monkeypatch):
     fake = _fake_st(_FakeSessionState())
 
     def _select(label, options, **kwargs):
-        return options[-1] if label == "Version" else options[0]
+        return options[-1] if label == "Version to open" else options[0]
     fake.selectbox.side_effect = _select
     fake.button.return_value = True
+    # The project list is a selectable dataframe; select its first row.
+    fake.dataframe.return_value = {"selection": {"rows": [0]}}
     opened = {}
     monkeypatch.setattr(smode, "st", fake)
     monkeypatch.setattr(smode, "_open_project", lambda rec: opened.update(rec))
-    smode._render_saved_projects()
+    smode._render_saved_projects(proj.list_projects())
     assert opened["project_name"] == "abrir"
     assert opened["version"] == 1
-    fake.dataframe.assert_called_once()   # changelog table
+    assert fake.dataframe.call_count == 2   # project list + versions table
 
 
 # ================================================================== loader
@@ -324,11 +327,12 @@ def test_saved_projects_browser_missing_version_shows_error(monkeypatch):
         options[0] if options else None
     )
     fake.button.return_value = True
+    fake.dataframe.return_value = {"selection": {"rows": [0]}}
     monkeypatch.setattr(smode, "st", fake)
     monkeypatch.setattr(smode, "get_project", lambda *a, **k: None)
     opened = MagicMock()
     monkeypatch.setattr(smode, "_open_project", opened)
-    smode._render_saved_projects()
+    smode._render_saved_projects(proj.list_projects())
     fake.error.assert_called_once()
     opened.assert_not_called()
 

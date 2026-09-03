@@ -40,9 +40,17 @@ hr { margin:.9rem 0; border-color:var(--dq-bd); }
 h1, h2, h3 { letter-spacing:-.01em; }
 code { font-family:var(--dq-mono); font-size:.92em; background:var(--dq-fill); border-radius:4px; padding:.05em .3em; }
 
+/* ---- Element spacing: tighter vertical rhythm than Streamlit's 1rem ---- */
+div[data-testid="stVerticalBlock"] { gap:.55rem; }
+div[data-testid="stVerticalBlockBorderWrapper"] > div > div[data-testid="stVerticalBlock"] { gap:.5rem; }
+div[data-testid="stMarkdownContainer"] p { margin-bottom:0; }
+div[data-testid="stElementContainer"]:has(> div > style:only-child) { display:none; } /* hide empty style-only markdown blocks */
+section[data-testid="stSidebar"] { width:272px!important; min-width:272px!important; }
+section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] { gap:.35rem; }
+
 /* ---- Page header / sections ---- */
 .dq-eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--dq-tx3); font-weight:500; margin-bottom:4px; }
-h1.dq-title { font-size:22px; font-weight:600; letter-spacing:-.015em; line-height:1.2; color:var(--dq-tx); margin:0; padding:0; }
+.dq-title { font-size:22px; font-weight:600; letter-spacing:-.015em; line-height:1.2; color:var(--dq-tx); margin:0; padding:0; }
 .dq-sub { font-size:13.5px; color:var(--dq-tx2); margin:4px 0 14px; max-width:680px; }
 .dq-section { display:flex; align-items:baseline; gap:10px; font-weight:600; font-size:14px; margin:.4rem 0 .5rem; }
 .dq-section .n { font-family:var(--dq-mono); font-size:12px; color:var(--dq-tx3); font-weight:400; }
@@ -135,6 +143,37 @@ section[data-testid="stSidebar"] div[data-testid="stPopover"] > button { width:1
 .st-key-nav_footer { position:sticky; bottom:0; z-index:5; background:var(--dq-sf); border-top:1px solid var(--dq-bd); padding:8px 0 4px; margin-top:1rem; }
 .dq-nav-msg { font-size:12.5px; color:var(--dq-tx3); text-align:right; }
 .dq-nav-msg.blocked { color:var(--dq-wn); font-weight:500; }
+
+/* ---- Legacy shims: classes still emitted by steps not yet converted (Phase 2).
+   Keeps those screens readable; delete this block when every step uses ui_components. ---- */
+.step-pill, .lab-pill { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--dq-tx3); font-weight:500; margin-bottom:4px; }
+.lab-beta-tag { font-size:10px; padding:0 5px; border-radius:4px; background:var(--dq-lab-soft); color:var(--dq-lab); font-weight:600; margin-left:6px; }
+.card-accent, .dp-card-accent, .score-card .accent-bar { display:none; }
+.card-icon, .dp-icon, .mode-icon, .lab-icon, .sys-icon, .sec-icon { display:none; }
+.card-title-row, .dp-card-title, .dp-card-title-row, .mode-title-row, .lab-card-title, .sec-head { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+.card-title, .dp-name, .mode-title, .lab-title, .sec-title, .rule-name, .cde-name { font-weight:600; font-size:15px; color:var(--dq-tx); }
+.card-code, .dp-code, .lab-tag, .cde-chip, .rule-id, .filter-chip, .domain-systems code, .dp-source code, .dp-meta code { display:inline-block; font-family:var(--dq-mono); font-size:11.5px; padding:1px 7px; border-radius:5px; background:var(--dq-fill); color:var(--dq-tx2); margin-left:auto; }
+.rule-id, .cde-chip, .filter-chip, .domain-systems code, .dp-source code, .dp-meta code { margin-left:0; margin-right:4px; }
+.card-subtitle, .mode-tagline, .sel-summary-title, .filter-title, .src-summary-title, .src-mini-title, .export-title, .cde-success-title, .w-col-head { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dq-tx3); font-weight:500; margin-bottom:6px; }
+.card-state-badge, .mode-active-pill, .primary-badge, .sec-badge, .oc-rulecount, .rule-tag, .status-pill, .sb-pill, .dp-status-pill { display:inline-block; font-size:11.5px; padding:1px 8px; border-radius:999px; background:var(--dq-fill); color:var(--dq-tx2); font-weight:500; margin-left:6px; }
+.card-state-badge, .mode-active-pill, .sec-badge.std { background:var(--dq-br-soft); color:var(--dq-br-tx); }
+.pill-ok, .dp-status-pill.s-green { background:var(--dq-ok-soft); color:var(--dq-ok); }
+.pill-warn, .dp-status-pill.s-yellow, .domain-placeholder-pill, .primary-badge, .sec-badge.cus { background:var(--dq-wn-soft); color:var(--dq-wn); }
+.pill-err, .dp-status-pill.s-red, .tag-block { background:var(--dq-er-soft); color:var(--dq-er); }
+.sel-summary, .filter-banner, .ui-tip, .cde-success, .src-summary, .src-mini, .cde-header, .dp-status, .lab-banner, .lab-explain { padding:9px 14px; border-radius:var(--dq-r); background:var(--dq-sf2); border:1px solid var(--dq-bd); font-size:12.5px; color:var(--dq-tx2); margin:4px 0 8px; }
+.empty-notice, .empty-callout, .cde-empty { padding:9px 14px; border-radius:var(--dq-r); background:var(--dq-wn-soft); color:var(--dq-wn); font-size:12.5px; margin:4px 0 8px; }
+.worst-banner { padding:9px 14px; border-radius:var(--dq-r); background:var(--dq-er-soft); color:var(--dq-er); font-size:12.5px; margin:4px 0 8px; }
+.sel-chip, .cde-chip-inline, .empty-chip { display:inline-block; font-family:var(--dq-mono); font-size:11.5px; padding:2px 8px; border-radius:999px; background:var(--dq-br-soft)!important; color:var(--dq-br-tx)!important; margin:0 6px 4px 0; }
+.mode-desc, .dp-source, .dp-meta, .domain-systems, .filter-hint, .cde-sample, .weight-legend, .src-legend, .pct-label, .table-row { font-size:12.5px; color:var(--dq-tx2); }
+.mode-bullets { list-style:none; padding:0; margin:0 0 8px; font-size:12.5px; color:var(--dq-tx2); }
+.mode-bullets li { padding:2px 0; }
+.weight-bar, .src-bar, .pct-track { display:flex; height:6px; border-radius:3px; overflow:hidden; background:var(--dq-fill); margin:6px 0; }
+.weight-bar .seg-std, .src-bar .seg-std, .pct-fill.ok { background:var(--dq-br); } .weight-bar .seg-cus, .src-bar .seg-cus { background:var(--dq-lab); }
+.pct-fill { height:100%; } .pct-fill.warn { background:var(--dq-wn); } .pct-fill.over { background:var(--dq-er); }
+.lbl-std { color:var(--dq-br-tx); font-weight:500; } .lbl-cus { color:var(--dq-lab); font-weight:500; }
+.score-card { padding:14px 16px; border:1px solid var(--dq-bd); border-radius:10px; background:var(--dq-sf); }
+.score-card .score-val { font-family:var(--dq-mono); font-size:30px; font-weight:500; }
+.lab-empty { padding:24px; text-align:center; color:var(--dq-tx3); border:1px dashed var(--dq-bd2); border-radius:10px; }
 
 /* ---- Tables (HTML helpers) ---- */
 .dq-table { border-collapse:collapse; width:100%; font-size:12.5px; }
