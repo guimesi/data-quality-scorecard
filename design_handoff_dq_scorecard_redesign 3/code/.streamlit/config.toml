@@ -1,0 +1,17 @@
+# Streamlit theme — replaces the default red primary that today competes with the indigo CSS.
+# Fonts: Streamlit ships its own; keep "sans serif" so Databricks Apps needs no external asset.
+# (Optional: enable static serving and add IBM Plex via @font-face from ./static — see IMPLEMENTATION.md §7.)
+
+[theme]
+base = "light"
+primaryColor = "#2F52D1"
+backgroundColor = "#F4F5F7"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#15181E"
+font = "sans serif"
+
+[server]
+enableStaticServing = false
+
+[browser]
+gatherUsageStats = false

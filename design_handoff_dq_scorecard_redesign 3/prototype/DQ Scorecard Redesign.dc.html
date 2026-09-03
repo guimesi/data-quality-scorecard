@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+  a { color: var(--br-tx); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  [data-dq-root] {
+    --bg: #f4f5f7; --sf: #ffffff; --sf2: #f7f8fa; --bd: #e2e5ea; --bd2: #c9ced7;
+    --tx: #15181e; --tx2: #4a5262; --tx3: #6f7787;
+    --br: #2f52d1; --br-h: #2745b3; --br-soft: #e8edfb; --br-tx: #2745b3;
+    --ok: #1f7a4d; --ok-soft: #e1f3e8; --wn: #a8650a; --wn-soft: #fdf0d8; --er: #bf3a2f; --er-soft: #fbe6e3;
+    --lab: #6b47c9; --lab-soft: #eee8fb;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sh: 0 1px 2px rgba(15,18,25,0.05);
+    --neutral-fill: #e7e9ee;
+  }
+  [data-dq-root][data-theme="dark"] {
+    --bg: #0f1116; --sf: #161921; --sf2: #1c2029; --bd: #262b36; --bd2: #363d4b;
+    --tx: #e8eaef; --tx2: #a6adba; --tx3: #767e8e;
+    --br: #7b93f0; --br-h: #92a6f4; --br-soft: #1f2846; --br-tx: #9fb2f6;
+    --ok: #5fc78e; --ok-soft: #14301f; --wn: #e0a53d; --wn-soft: #332810; --er: #ef7a6d; --er-soft: #3a1c19;
+    --lab: #b39cf1; --lab-soft: #2a2140;
+    --sh: none; --neutral-fill: #2a303c;
+  }
+  ::selection { background: var(--br-soft); }
+  [data-dq-grid="oc"] { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 24px; align-items: start; }
+  [data-dq-grid="oc"] > * { min-width: 0; }
+  [data-dq-grid="dash"] { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)) minmax(280px,340px); gap: 14px; align-items: stretch; }
+  [data-dq-grid="dash"] > * { min-width: 0; }
+  [data-dq-grid="sys3"] { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+  [data-dq-grid="sys3"] > * { min-width: 0; }
+  @media (max-width: 1240px) {
+    [data-dq-grid="oc"] { grid-template-columns: minmax(0,1fr); }
+    [data-dq-grid="oc"] > aside { position: static !important; }
+    [data-dq-grid="dash"] { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    [data-dq-grid="dash"] > [data-dq-attention] { grid-column: 1 / -1; }
+  }
+  [data-dq-grid="rule"] { display: grid; grid-template-columns: 34px 60px minmax(0,1fr) auto auto minmax(140px,1.2fr) 20px; gap: 12px; align-items: center; }
+  [data-dq-grid="rule"] > * { min-width: 0; }
+  [data-dq-grid="detail"] { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+  [data-dq-grid="detail"] > * { min-width: 0; }
+  @media (max-width: 1100px) {
+    [data-dq-grid="sys3"] { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    [data-dq-grid="rule"] { grid-template-columns: 34px 60px minmax(0,1fr) 20px; row-gap: 6px; }
+    [data-dq-grid="rule"] > [data-dq-rule-tag] { grid-column: 3; }
+    [data-dq-grid="detail"] { grid-template-columns: minmax(0,1fr); }
+    [data-dq-grid="detail"] > :first-child { border-right: none !important; border-bottom: 1px solid var(--bd); }
+  }
+</style>
+</helmet>
+
+<div data-dq-root="true" data-theme="{{ theme }}" style="width:100%;min-height:100vh;background:var(--bg);color:var(--tx);display:flex;flex-direction:column">
+
+  <!-- prototype navigator (not part of the product) -->
+  <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:#1b1e26;color:#b7bcc8;font-size:11.5px;flex-wrap:wrap;border-bottom:1px solid #2a2f3a">
+    <span style="font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;color:#7d8494;margin-right:6px">Protótipo · telas</span>
+    <sc-for list="{{ protoLinks }}" as="l" hint-placeholder-count="11">
+      <button onClick="{{ l.go }}" style="border:1px solid {{ l.bd }};background:{{ l.bg }};color:{{ l.fg }};border-radius:5px;padding:3px 9px;font:inherit;font-size:11.5px;cursor:pointer">{{ l.label }}</button>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;flex:1;min-height:0">
+
+    <!-- ============ RAIL (Streamlit sidebar) ============ -->
+    <aside style="width:232px;flex:none;background:var(--sf);border-right:1px solid var(--bd);display:flex;flex-direction:column;padding:14px 12px 12px;gap:18px;position:sticky;top:0;height:calc(100vh - 32px);box-sizing:border-box">
+      <div style="display:flex;align-items:center;gap:9px;padding:2px 4px">
+        <div style="width:22px;height:22px;border-radius:6px;background:var(--br);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;letter-spacing:.02em">DQ</div>
+        <div style="font-weight:600;font-size:13.5px;letter-spacing:-.01em">DQ Scorecard</div>
+        <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--tx3)">v2.3</span>
+      </div>
+
+      <sc-if value="{{ hasContext }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--sf2)">
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)">Workspace</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:600;font-size:13px">{{ ctxDomain }}</span>
+            <span style="margin-left:auto;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--br-soft);color:var(--br-tx);font-weight:500">{{ ctxMode }}</span>
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--tx3)">{{ ctxSystems }}</div>
+        </div>
+      </sc-if>
+
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);padding:0 4px 6px">{{ railTitle }}</div>
+        <sc-for list="{{ railSteps }}" as="s" hint-placeholder-count="6">
+          <div onClick="{{ s.go }}" style="display:flex;align-items:center;gap:10px;padding:6px 6px;border-radius:6px;cursor:pointer;background:{{ s.rowBg }}" style-hover="background:var(--sf2)">
+            <span style="width:20px;height:20px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:none;background:{{ s.mkBg }};color:{{ s.mkFg }};border:1px solid {{ s.mkBd }}">{{ s.marker }}</span>
+            <span style="font-size:13px;color:{{ s.fg }};font-weight:{{ s.wt }}">{{ s.label }}</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--tx3)">{{ s.meta }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="flex:1"></div>
+
+      <sc-if value="{{ hasContext }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);padding:0 4px 6px">Settings</div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;cursor:pointer" style-hover="background:var(--sf2)">
+            <span style="font-size:12.5px;color:var(--tx2)">Dataset</span>
+            <span style="margin-left:auto;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--wn-soft);color:var(--wn);font-weight:500">Sample · 50k rows</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;cursor:pointer" style-hover="background:var(--sf2)">
+            <span style="font-size:12.5px;color:var(--tx2)">Project filter</span>
+            <span style="margin-left:auto;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--neutral-fill);color:var(--tx2);font-weight:500">All projects</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display:flex;flex-direction:column;gap:6px;padding:0 4px;border-top:1px solid var(--bd);padding-top:12px">
+        <a href="#" onClick="{{ goAdoption }}" style="font-size:12px;color:var(--tx3)">Usage &amp; audit</a>
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">entai_sandbox_catalog.data_quality_scorecards</div>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main style="flex:1;min-width:0;display:flex;flex-direction:column;position:relative">
+
+      <!-- page header -->
+      <div style="padding:26px 36px 0;display:flex;align-items:flex-start;gap:16px;max-width:1280px;width:100%;box-sizing:border-box;margin:0 auto">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);font-weight:500;margin-bottom:6px">{{ eyebrow }}</div>
+          <h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-.015em;line-height:1.2">{{ title }}</h1>
+          <div style="color:var(--tx2);font-size:13.5px;margin-top:6px;max-width:680px;text-wrap:pretty">{{ subtitle }}</div>
+        </div>
+        <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:8px;align-items:center;padding-top:22px">
+            <button style="font:inherit;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer" style-hover="background:var(--sf2)">Save project</button>
+            <div style="position:relative">
+              <button onClick="{{ toggleExport }}" style="font:inherit;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--bd2);background:{{ exportBg }};color:var(--tx);cursor:pointer" style-hover="background:var(--sf2)">Export ▾</button>
+              <sc-if value="{{ exportOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;right:0;top:calc(100% + 6px);width:320px;background:var(--sf);border:1px solid var(--bd);border-radius:10px;box-shadow:0 8px 24px rgba(15,18,25,.10);padding:6px;z-index:20;display:flex;flex-direction:column;gap:2px">
+                  <sc-for list="{{ exportItems }}" as="e" hint-placeholder-count="5">
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer" style-hover="background:var(--sf2)"><span style="color:var(--tx3);font-size:12px">↓</span><span>{{ e.label }}</span><span style="margin-left:auto;font-size:11.5px;color:var(--tx3)">{{ e.meta }}</span></div>
+                  </sc-for>
+                  <div style="border-top:1px solid var(--bd);margin:4px 0"></div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer" style-hover="background:var(--sf2)"><span style="color:var(--tx3);font-size:12px">↗</span><div><div>Send to Airtable</div><div style="font-size:11.5px;color:var(--tx3)">Upserts this domain's records and attaches the executive report</div></div></div>
+                  <div style="padding:6px 10px 4px;font-size:11px;color:var(--tx3)">Airtable appears only when AIRTABLE_TOKEN and AIRTABLE_BASE_ID are configured.</div>
+                </div>
+              </sc-if>
+            </div>
+            <button onClick="{{ goMlLab }}" style="font:inherit;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer;display:flex;gap:6px;align-items:center" style-hover="background:var(--sf2)">ML Lab <span style="font-size:10px;padding:0 5px;border-radius:4px;background:var(--lab-soft);color:var(--lab);font-weight:600;letter-spacing:.04em">BETA</span></button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isMlLab }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:8px;align-items:center;padding-top:22px">
+            <button style="font:inherit;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer">Engine · numpy ▾</button>
+            <button onClick="{{ goDashboard }}" style="font:inherit;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer">← Dashboard</button>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="padding:22px 36px 110px;max-width:1280px;width:100%;box-sizing:border-box;margin:0 auto;display:flex;flex-direction:column;gap:20px">
+
+        <!-- ============ HOME ============ -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+          <div style="display:inline-flex;border:1px solid var(--bd);border-radius:7px;padding:3px;background:var(--sf);width:fit-content;gap:2px">
+            <button onClick="{{ setHomeNew }}" style="font:inherit;font-size:13px;padding:5px 12px;border-radius:5px;border:none;cursor:pointer;background:{{ homeNewBg }};color:{{ homeNewFg }};font-weight:500">New scorecard</button>
+            <button onClick="{{ setHomeSaved }}" style="font:inherit;font-size:13px;padding:5px 12px;border-radius:5px;border:none;cursor:pointer;background:{{ homeSavedBg }};color:{{ homeSavedFg }};font-weight:500">Saved projects · 3</button>
+          </div>
+
+          <sc-if value="{{ homeIsNew }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:920px">
+              <div style="background:var(--sf);border:1px solid var(--br);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 0 0 3px var(--br-soft)">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="font-size:17px;font-weight:600;letter-spacing:-.01em">One-click</div>
+                  <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:var(--br-soft);color:var(--br-tx);font-weight:600">Recommended</span>
+                  <span style="margin-left:auto;font-size:12px;color:var(--tx3)">~2 min</span>
+                </div>
+                <div style="color:var(--tx2);font-size:13.5px">Pick a domain and systems. Everything else runs with curated defaults.</div>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;padding:12px 14px;border-radius:8px;background:var(--sf2);border:1px solid var(--bd)">
+                  <span style="color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px">You choose</span><span>Domain · Systems</span>
+                  <span style="color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px">Automated</span><span>Required CDEs · All Custom DQRs (defaults) · Equal weights · Exports</span>
+                </div>
+                <div style="font-size:12.5px;color:var(--tx3)">Best for recurring monitoring runs.</div>
+                <button onClick="{{ startOneClick }}" style="margin-top:auto;font:inherit;font-size:13.5px;font-weight:500;padding:9px 14px;border-radius:7px;border:none;background:var(--br);color:#fff;cursor:pointer" style-hover="background:var(--br-h)">Start One-click →</button>
+              </div>
+              <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--sh)">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="font-size:17px;font-weight:600;letter-spacing:-.01em">Step-by-step</div>
+                  <span style="margin-left:auto;font-size:12px;color:var(--tx3)">7 steps · 10–20 min</span>
+                </div>
+                <div style="color:var(--tx2);font-size:13.5px">Configure every CDE, rule, option and weight yourself.</div>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;padding:12px 14px;border-radius:8px;background:var(--sf2);border:1px solid var(--bd)">
+                  <span style="color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px">You choose</span><span>Domain · Systems · CDEs · DQR sources · Rules &amp; options · Weights</span>
+                  <span style="color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px">Automated</span><span style="color:var(--tx3)">Scoring and exports only</span>
+                </div>
+                <div style="font-size:12.5px;color:var(--tx3)">Best for new rule sets, audits and Standard DQRs.</div>
+                <button onClick="{{ startStepByStep }}" style="margin-top:auto;font:inherit;font-size:13.5px;font-weight:500;padding:9px 14px;border-radius:7px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer" style-hover="background:var(--sf2)">Start Step-by-step →</button>
+              </div>
+            </div>
+            <div style="font-size:12.5px;color:var(--tx3)">You can restart or switch modes at any point. Data is always rebuilt fresh from Databricks.</div>
+          </sc-if>
+
+          <sc-if value="{{ homeIsSaved }}" hint-placeholder-val="{{ false }}">
+            <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden;max-width:1000px">
+              <div style="display:grid;grid-template-columns:2fr 1fr 70px 1.2fr 1.2fr 110px;gap:12px;padding:9px 18px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);border-bottom:1px solid var(--bd);background:var(--sf2)">
+                <span>Project</span><span>Domain</span><span>Version</span><span>Last saved</span><span>By</span><span></span>
+              </div>
+              <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
+                <div style="border-bottom:1px solid var(--bd)">
+                  <div style="display:grid;grid-template-columns:2fr 1fr 70px 1.2fr 1.2fr 110px;gap:12px;padding:13px 18px;align-items:center;font-size:13px">
+                    <div style="min-width:0"><div style="font-weight:500">{{ p.name }}</div><div style="color:var(--tx3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.summary }}</div></div>
+                    <span style="font-size:12px;padding:1px 8px;border-radius:999px;background:var(--neutral-fill);color:var(--tx2);width:fit-content">{{ p.domain }}</span>
+                    <span style="font-family:var(--mono);font-size:12.5px">{{ p.version }}</span>
+                    <span style="color:var(--tx2)">{{ p.updated }}</span>
+                    <span style="color:var(--tx2)">{{ p.by }}</span>
+                    <div style="display:flex;gap:6px;justify-content:flex-end"><button onClick="{{ p.toggle }}" style="font:inherit;font-size:12px;padding:5px 9px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx2);cursor:pointer">Versions</button><button onClick="{{ openProject }}" style="font:inherit;font-size:12px;padding:5px 10px;border-radius:6px;border:none;background:var(--br);color:#fff;cursor:pointer;font-weight:500">Open</button></div>
+                  </div>
+                  <sc-if value="{{ p.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:4px 18px 14px 18px;background:var(--sf2);border-top:1px dashed var(--bd)">
+                      <sc-for list="{{ p.versions }}" as="v" hint-placeholder-count="3">
+                        <div style="display:grid;grid-template-columns:60px 1.3fr 1fr 3fr 120px;gap:12px;padding:8px 0;font-size:12.5px;border-bottom:1px solid var(--bd);align-items:center">
+                          <span style="font-family:var(--mono)">{{ v.v }}</span><span style="color:var(--tx2)">{{ v.when }}</span><span style="color:var(--tx2)">{{ v.who }}</span><span>{{ v.what }}</span>
+                          <a href="#" style="font-size:12px;text-align:right">Open this version</a>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:12.5px;color:var(--tx3)">Opening a project rebuilds the data fresh and lands on the Dashboard in Step-by-step mode, so every step stays editable.</div>
+          </sc-if>
+        </sc-if>
+
+        <!-- ============ ONE-CLICK ============ -->
+        <sc-if value="{{ isOneClick }}" hint-placeholder-val="{{ false }}">
+          <div data-dq-grid="oc">
+            <div style="display:flex;flex-direction:column;gap:22px;min-width:0">
+              <section style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:baseline;gap:10px"><span style="font-family:var(--mono);font-size:12px;color:var(--tx3)">1</span><span style="font-weight:600;font-size:14px">Domain</span></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                  <sc-for list="{{ domains }}" as="d" hint-placeholder-count="2">
+                    <div style="background:var(--sf);border:1px solid {{ d.bd }};border-radius:9px;padding:14px 16px;display:flex;gap:12px;cursor:pointer;box-shadow:{{ d.ring }}">
+                      <span style="width:18px;height:18px;border-radius:999px;border:1.5px solid {{ d.mkBd }};background:{{ d.mkBg }};flex:none;margin-top:2px;display:flex;align-items:center;justify-content:center"><span style="width:7px;height:7px;border-radius:999px;background:{{ d.dot }}"></span></span>
+                      <div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600">{{ d.name }}</span><span style="font-family:var(--mono);font-size:11px;color:var(--tx3)">{{ d.systems }}</span></div><div style="color:var(--tx2);font-size:12.5px;margin-top:3px">{{ d.desc }}</div></div>
+                    </div>
+                  </sc-for>
+                </div>
+              </section>
+              <section style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:baseline;gap:10px"><span style="font-family:var(--mono);font-size:12px;color:var(--tx3)">2</span><span style="font-weight:600;font-size:14px">Systems</span><span style="color:var(--tx3);font-size:12.5px">One-click scores with Custom DQRs only</span></div>
+                <div data-dq-grid="sys3">
+                  <sc-for list="{{ systems }}" as="s" hint-placeholder-count="3">
+                    <div style="background:var(--sf);border:1px solid {{ s.bd }};border-radius:9px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;box-shadow:{{ s.ring }};opacity:{{ s.op }};min-width:0">
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <span style="width:16px;height:16px;border-radius:4px;border:1.5px solid {{ s.mkBd }};background:{{ s.mkBg }};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex:none">{{ s.check }}</span>
+                        <span style="font-family:var(--mono);font-size:12.5px;font-weight:500">{{ s.code }}</span>
+                      </div>
+                      <div style="font-weight:500;font-size:13px">{{ s.name }}</div>
+                      <span style="font-size:11px;padding:1px 7px;border-radius:999px;background:{{ s.ruleBg }};color:{{ s.ruleFg }};font-weight:500;width:fit-content">{{ s.rules }}</span>
+                      <div style="color:var(--tx2);font-size:12.5px">{{ s.desc }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </section>
+            </div>
+
+            <aside style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;position:sticky;top:16px">
+              <div style="font-weight:600;font-size:14px">Run plan</div>
+              <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;font-size:12.5px">
+                <span style="color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px">You chose</span><span>Cost Estimate · <span style="font-family:var(--mono)">ADR, ACCE</span></span>
+                <span style="color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px">Automated</span><span>CDEs required by rules · 41 Custom DQRs at defaults · Equal weights · CSV + JSON exports</span>
+                <span style="color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px">Dataset</span><span>Sample ≤ 50,000 rows/table · All projects</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:7px;background:var(--wn-soft);color:var(--wn);font-size:12.5px"><span style="font-weight:700">▲</span><span><b>EPT will be skipped</b> — no Custom DQRs configured. Use Step-by-step to apply Standard DQRs.</span></div>
+              <sc-if value="{{ ocIdle }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ runOneClick }}" style="font:inherit;font-size:13.5px;font-weight:500;padding:10px 14px;border-radius:7px;border:none;background:var(--br);color:#fff;cursor:pointer" style-hover="background:var(--br-h)">Generate scorecards for 2 systems</button>
+              </sc-if>
+              <sc-if value="{{ ocRunning }}" hint-placeholder-val="{{ false }}">
+                <div style="border:1px solid var(--bd);border-radius:8px;overflow:hidden">
+                  <div style="padding:9px 12px;background:var(--sf2);font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:var(--br)"></span>Generating · phase 3 of 6</div>
+                  <sc-for list="{{ ocPhases }}" as="ph" hint-placeholder-count="6">
+                    <div style="display:flex;align-items:center;gap:10px;padding:7px 12px;font-size:12.5px;border-top:1px solid var(--bd);color:{{ ph.fg }}"><span style="width:14px;text-align:center;font-weight:600">{{ ph.mark }}</span><span>{{ ph.label }}</span><span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--tx3)">{{ ph.meta }}</span></div>
+                  </sc-for>
+                </div>
+                <button onClick="{{ finishOneClick }}" style="font:inherit;font-size:12px;padding:6px 10px;border-radius:6px;border:1px dashed var(--bd2);background:transparent;color:var(--tx3);cursor:pointer">(protótipo) concluir → Dashboard</button>
+              </sc-if>
+            </aside>
+          </div>
+        </sc-if>
+
+        <!-- ============ DOMAIN ============ -->
+        <sc-if value="{{ isDomain }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:900px">
+            <sc-for list="{{ domains }}" as="d" hint-placeholder-count="2">
+              <div style="background:var(--sf);border:1px solid {{ d.bd }};border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:12px;cursor:pointer;box-shadow:{{ d.ring }}">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="width:18px;height:18px;border-radius:999px;border:1.5px solid {{ d.mkBd }};background:{{ d.mkBg }};flex:none;display:flex;align-items:center;justify-content:center"><span style="width:7px;height:7px;border-radius:999px;background:{{ d.dot }}"></span></span>
+                  <span style="font-weight:600;font-size:16px">{{ d.name }}</span>
+                </div>
+                <div style="color:var(--tx2);font-size:13px">{{ d.longDesc }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto"><sc-for list="{{ d.chips }}" as="c" hint-placeholder-count="3"><span style="font-family:var(--mono);font-size:11.5px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">{{ c }}</span></sc-for></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:12.5px;color:var(--tx3)">The domain sets the tables, CDE catalog, Standard and Custom DQRs and the project-filter column used throughout.</div>
+        </sc-if>
+
+        <!-- ============ SYSTEMS ============ -->
+        <sc-if value="{{ isSystems }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tx2)"><span style="width:8px;height:8px;border-radius:999px;background:var(--ok)"></span>Connected to <span style="font-family:var(--mono)">entai_sandbox_catalog.data_quality_scorecards</span></div>
+          <div data-dq-grid="sys3" style="gap:14px">
+            <sc-for list="{{ systemsFull }}" as="s" hint-placeholder-count="3">
+              <div style="background:var(--sf);border:1px solid {{ s.bd }};border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:{{ s.ring }}">
+                <div style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                  <span style="width:16px;height:16px;border-radius:4px;border:1.5px solid {{ s.mkBd }};background:{{ s.mkBg }};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700">{{ s.check }}</span>
+                  <span style="font-weight:600;font-size:15px">{{ s.name }}</span>
+                  <span style="margin-left:auto;font-family:var(--mono);font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">{{ s.code }}</span>
+                </div>
+                <div style="color:var(--tx2);font-size:13px">{{ s.desc }}</div>
+                <div style="border-top:1px solid var(--bd);padding-top:10px;margin-top:auto">
+                  <div onClick="{{ s.toggleTables }}" style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--tx2);cursor:pointer"><span style="font-size:10px">{{ s.chev }}</span>{{ s.tablesLabel }}</div>
+                  <sc-if value="{{ s.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+                      <sc-for list="{{ s.tables }}" as="t" hint-placeholder-count="4">
+                        <div style="display:flex;flex-direction:column;gap:2px;padding-left:10px;border-left:2px solid var(--bd)"><div style="display:flex;gap:8px;align-items:center"><span style="font-family:var(--mono);font-size:12px">{{ t.name }}</span><sc-if value="{{ t.primary }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;padding:0 5px;border-radius:4px;background:var(--br-soft);color:var(--br-tx);font-weight:600;letter-spacing:.04em">PRIMARY</span></sc-if></div><div style="font-size:12px;color:var(--tx3)">{{ t.desc }}</div></div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ============ DP REVIEW ============ -->
+        <sc-if value="{{ isDpReview }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;background:var(--ok-soft);color:var(--ok);font-size:12.5px;width:fit-content"><span style="font-weight:700">✓</span>Built 2 Data Products from 8 tables in 14 s · Reference datasets loaded (2)</div>
+          <sc-for list="{{ dpList }}" as="dp" hint-placeholder-count="2">
+            <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:12px;padding:14px 18px">
+                <span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">{{ dp.code }}</span>
+                <span style="font-weight:600;font-size:14px">{{ dp.name }}</span>
+                <div style="margin-left:auto;display:flex;gap:26px">
+                  <div><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)">Rows</div><div style="font-family:var(--mono);font-size:15px;font-weight:500">{{ dp.rows }}</div></div>
+                  <div><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)">Columns</div><div style="font-family:var(--mono);font-size:15px;font-weight:500">{{ dp.cols }}</div></div>
+                  <div><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)">Tables</div><div style="font-family:var(--mono);font-size:15px;font-weight:500">{{ dp.ntables }}</div></div>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;padding:0 18px 14px"><span style="font-size:12px;color:var(--tx3);margin-right:2px">Sources</span><sc-for list="{{ dp.tables }}" as="t" hint-placeholder-count="4"><span style="font-family:var(--mono);font-size:11.5px;padding:1px 7px;border-radius:5px;border:1px solid var(--bd);color:var(--tx2)">{{ t }}</span></sc-for></div>
+              <div onClick="{{ dp.togglePrev }}" style="display:flex;align-items:center;gap:6px;padding:10px 18px;border-top:1px solid var(--bd);font-size:12.5px;color:var(--tx2);cursor:pointer;background:var(--sf2)"><span style="font-size:10px">{{ dp.chev }}</span>Preview first 10 rows</div>
+              <sc-if value="{{ dp.prevOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="overflow:auto;border-top:1px solid var(--bd)">
+                  <table style="border-collapse:collapse;font-size:12px;font-family:var(--mono);width:100%">
+                    <thead><tr><sc-for list="{{ previewCols }}" as="c" hint-placeholder-count="6"><th style="text-align:left;padding:7px 12px;background:var(--sf2);color:var(--tx3);font-weight:500;border-bottom:1px solid var(--bd);white-space:nowrap">{{ c }}</th></sc-for></tr></thead>
+                    <tbody><sc-for list="{{ previewRows }}" as="r" hint-placeholder-count="4"><tr><sc-for list="{{ r }}" as="cell" hint-placeholder-count="6"><td style="padding:6px 12px;border-bottom:1px solid var(--bd);white-space:nowrap;color:var(--tx2)">{{ cell }}</td></sc-for></tr></sc-for></tbody>
+                  </table>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </sc-if>
+
+        <!-- ============ CDE ============ -->
+        <sc-if value="{{ isCde }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ cdeBlocks }}" as="b" hint-placeholder-count="2">
+            <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+              <div onClick="{{ b.toggle }}" style="display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer">
+                <span style="font-size:10px;color:var(--tx3);width:10px">{{ b.chev }}</span>
+                <span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">{{ b.code }}</span>
+                <span style="font-weight:600;font-size:14px">{{ b.name }}</span>
+                <span style="font-size:12.5px;padding:2px 9px;border-radius:999px;background:{{ b.stBg }};color:{{ b.stFg }};font-weight:500;display:inline-flex;gap:5px;align-items:center"><span>{{ b.stGlyph }}</span>{{ b.status }}</span>
+                <span style="margin-left:auto;font-size:12.5px;color:var(--tx3)">{{ b.meta }}</span>
+              </div>
+              <sc-if value="{{ b.open }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:0 18px 14px;display:flex;flex-direction:column;gap:12px">
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    <span style="font-size:12px;color:var(--tx3);margin-right:4px">Selected</span>
+                    <sc-for list="{{ b.selected }}" as="c" hint-placeholder-count="5"><span style="font-family:var(--mono);font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--br-soft);color:var(--br-tx);display:inline-flex;gap:6px;align-items:center">{{ c.name }}<sc-if value="{{ c.req }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;opacity:.75">{{ c.req }}</span></sc-if></span></sc-for>
+                    <div style="margin-left:auto;display:flex;gap:8px">
+                      <input placeholder="Filter columns…" style="font:inherit;font-size:12.5px;padding:6px 10px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);width:180px">
+                      <button style="font:inherit;font-size:12.5px;padding:6px 10px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer">Select required by Custom DQRs · 6</button>
+                    </div>
+                  </div>
+                  <div style="border:1px solid var(--bd);border-radius:8px;overflow:hidden">
+                    <table style="border-collapse:collapse;width:100%;font-size:12.5px">
+                      <thead><tr style="background:var(--sf2)">
+                        <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd);width:40px">CDE</th>
+                        <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd)">Column</th>
+                        <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd)">Required by</th>
+                        <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd)">Type</th>
+                        <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd);width:150px">Null %</th>
+                        <th style="text-align:right;padding:8px 12px;font-weight:500;color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd)">Distinct</th>
+                        <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd)">Sample</th>
+                      </tr></thead>
+                      <tbody>
+                        <sc-for list="{{ cdeRows }}" as="r" hint-placeholder-count="7">
+                          <tr style="background:{{ r.rowBg }}">
+                            <td style="padding:7px 12px;border-bottom:1px solid var(--bd)"><span style="width:15px;height:15px;border-radius:4px;border:1.5px solid {{ r.mkBd }};background:{{ r.mkBg }};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700">{{ r.check }}</span></td>
+                            <td style="padding:7px 12px;border-bottom:1px solid var(--bd);font-family:var(--mono);font-size:12px">{{ r.col }}</td>
+                            <td style="padding:7px 12px;border-bottom:1px solid var(--bd);font-family:var(--mono);font-size:11.5px;color:var(--lab)">{{ r.req }}</td>
+                            <td style="padding:7px 12px;border-bottom:1px solid var(--bd);color:var(--tx2)">{{ r.type }}</td>
+                            <td style="padding:7px 12px;border-bottom:1px solid var(--bd)"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;border-radius:3px;background:var(--neutral-fill);overflow:hidden"><div style="height:100%;width:{{ r.nullW }};background:{{ r.nullC }}"></div></div><span style="font-family:var(--mono);font-size:11.5px;width:42px;text-align:right">{{ r.null }}</span></div></td>
+                            <td style="padding:7px 12px;border-bottom:1px solid var(--bd);font-family:var(--mono);font-size:12px;text-align:right">{{ r.distinct }}</td>
+                            <td style="padding:7px 12px;border-bottom:1px solid var(--bd);color:var(--tx3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">{{ r.sample }}</td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style="font-size:12px;color:var(--tx3)">Showing 7 of 62 columns · Required-by lists the Custom DQRs (Step 6) that need the column.</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </sc-if>
+
+        <!-- ============ SOURCES ============ -->
+        <sc-if value="{{ isSources }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ sourceBlocks }}" as="b" hint-placeholder-count="2">
+            <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">{{ b.code }}</span><span style="font-weight:600">{{ b.name }}</span><span style="margin-left:auto;font-size:12.5px;color:var(--tx3)">{{ b.cdes }}</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div style="border:1px solid {{ b.stdBd }};border-radius:8px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;background:{{ b.stdBg }}">
+                  <span style="width:30px;height:18px;border-radius:999px;background:{{ b.stdTg }};position:relative;flex:none;margin-top:2px"><span style="position:absolute;top:2px;left:{{ b.stdKnob }};width:14px;height:14px;border-radius:999px;background:#fff"></span></span>
+                  <div><div style="font-weight:500">Standard DQRs</div><div style="font-size:12.5px;color:var(--tx2)">10 dimensions applied to every CDE — completeness, uniqueness, validity…</div></div>
+                </div>
+                <div style="border:1px solid {{ b.cusBd }};border-radius:8px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;background:{{ b.cusBg }}">
+                  <span style="width:30px;height:18px;border-radius:999px;background:{{ b.cusTg }};position:relative;flex:none;margin-top:2px"><span style="position:absolute;top:2px;left:{{ b.cusKnob }};width:14px;height:14px;border-radius:999px;background:#fff"></span></span>
+                  <div><div style="font-weight:500">Custom DQRs</div><div style="font-size:12.5px;color:var(--tx2)">{{ b.cusDesc }}</div></div>
+                </div>
+              </div>
+              <sc-if value="{{ b.both }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Score split</span><span style="color:var(--tx3)">drag to adjust</span></div>
+                  <div style="display:flex;height:10px;border-radius:5px;overflow:hidden"><div style="width:70%;background:var(--br)"></div><div style="flex:1;background:var(--lab)"></div></div>
+                  <div style="display:flex;justify-content:space-between;font-size:12.5px"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--br);margin-right:6px"></span>Standard <b style="font-family:var(--mono)">70%</b></span><span>Custom <b style="font-family:var(--mono)">30%</b><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--lab);margin-left:6px"></span></span></div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ b.onlyCustom }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12.5px;color:var(--tx2)">Only Custom selected — it carries <b style="font-family:var(--mono)">100%</b> of the score.</div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </sc-if>
+
+        <!-- ============ STANDARD DQRs (4.1) ============ -->
+        <sc-if value="{{ isStandard }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bd);flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">ADR</span><span style="font-weight:600">ADR Cost Estimate</span>
+              <span style="font-size:12.5px;color:var(--tx3)">5 CDEs · 8 rules applied</span>
+              <span style="font-size:12.5px;padding:2px 9px;border-radius:999px;background:var(--er-soft);color:var(--er);font-weight:500;display:inline-flex;gap:5px;align-items:center"><span>✕</span>1 incompatible</span>
+              <div style="margin-left:auto;display:flex;gap:8px"><button style="font:inherit;font-size:12.5px;padding:6px 10px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer">Apply all suggested · 4</button></div>
+            </div>
+            <sc-for list="{{ stdCdes }}" as="c" hint-placeholder-count="5">
+              <div style="border-bottom:1px solid var(--bd)">
+                <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:12px;padding:11px 18px;cursor:pointer;font-size:13px;flex-wrap:wrap">
+                  <span style="font-size:10px;color:var(--tx3);width:10px">{{ c.chev }}</span>
+                  <span style="font-family:var(--mono);font-size:12.5px;font-weight:500">{{ c.cde }}</span>
+                  <span style="font-size:12px;color:var(--tx3)">{{ c.type }} · nulls {{ c.nulls }} · {{ c.distinct }} distinct</span>
+                  <span style="font-size:12.5px;padding:2px 9px;border-radius:999px;background:{{ c.stBg }};color:{{ c.stFg }};font-weight:500;display:inline-flex;gap:5px;align-items:center;margin-left:auto"><span>{{ c.stGlyph }}</span>{{ c.stText }}</span>
+                  <span style="font-size:12px;color:var(--br-tx);width:90px;text-align:right">{{ c.pending }}</span>
+                  <span style="font-family:var(--mono);font-size:11.5px;color:var(--tx3);width:56px;text-align:right">{{ c.count }}</span>
+                </div>
+                <sc-if value="{{ c.open }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:4px 18px 14px 40px;background:var(--sf2);border-top:1px dashed var(--bd);display:flex;flex-direction:column;gap:4px">
+                    <sc-for list="{{ c.dims }}" as="d" hint-placeholder-count="10">
+                      <div style="display:grid;grid-template-columns:34px 140px minmax(0,1fr) minmax(0,1.4fr);gap:12px;align-items:center;padding:6px 0;font-size:12.5px;border-bottom:1px solid var(--bd)">
+                        <span style="width:30px;height:18px;border-radius:999px;background:{{ d.tg }};position:relative;cursor:pointer"><span style="position:absolute;top:2px;left:{{ d.knob }};width:14px;height:14px;border-radius:999px;background:#fff"></span></span>
+                        <span style="display:flex;align-items:center;gap:6px;color:{{ d.fg }};font-weight:500">{{ d.name }}<sc-if value="{{ d.sug }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;padding:0 5px;border-radius:4px;background:var(--br-soft);color:var(--br-tx);font-weight:600;letter-spacing:.04em">SUGGESTED</span></sc-if></span>
+                        <span style="color:var(--tx2);font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.param }}</span>
+                        <span style="display:flex;gap:6px;align-items:center;color:{{ d.vFg }};min-width:0"><span style="font-weight:700">{{ d.vGlyph }}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)">{{ d.vText }}</span></span>
+                      </div>
+                    </sc-for>
+                    <div style="font-size:12px;color:var(--tx3);padding-top:6px">Parameters are edited inline when a dimension is on (min/max, regex, allowed values…). Validation runs against the column's data type before you continue.</div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;cursor:pointer"><span style="font-size:10px;color:var(--tx3)">▸</span><span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">ACCE</span><span style="font-weight:600">ACCE Cost Estimate</span><span style="font-size:12.5px;color:var(--tx3)">Standard source not selected — nothing to configure</span></div>
+        </sc-if>
+
+        <!-- ============ CUSTOM DQRs ============ -->
+        <sc-if value="{{ isCustom }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bd)">
+              <span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">ADR</span><span style="font-weight:600">ADR Cost Estimate</span>
+              <span style="font-size:12.5px;color:var(--tx3)">5 of 7 applied</span>
+              <div style="margin-left:auto;display:flex;gap:8px"><button style="font:inherit;font-size:12.5px;padding:6px 10px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer">Apply all · 7</button></div>
+            </div>
+            <sc-for list="{{ rules }}" as="r" hint-placeholder-count="5">
+              <div style="border-bottom:1px solid var(--bd)">
+                <div data-dq-grid="rule" style="padding:11px 18px;font-size:13px">
+                  <span onClick="{{ r.toggle }}" style="width:30px;height:18px;border-radius:999px;background:{{ r.tg }};position:relative;cursor:pointer"><span style="position:absolute;top:2px;left:{{ r.knob }};width:14px;height:14px;border-radius:999px;background:#fff"></span></span>
+                  <span style="font-family:var(--mono);font-size:12px;color:var(--tx2)">{{ r.id }}</span>
+                  <div style="min-width:0"><div style="font-weight:500;color:{{ r.nameFg }}">{{ r.name }}</div><div style="font-size:12px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.desc }}</div></div>
+                  <span data-dq-rule-tag="true" style="font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2);width:fit-content;white-space:nowrap">{{ r.type }}</span>
+                  <span data-dq-rule-tag="true" style="font-size:11.5px;color:{{ r.blkFg }};display:flex;gap:5px;align-items:center;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:{{ r.blkFg }};flex:none"></span>{{ r.blocking }}</span>
+                  <span data-dq-rule-tag="true" style="font-size:12px;color:{{ r.covFg }};display:flex;gap:6px;align-items:center;font-weight:500"><span>{{ r.covGlyph }}</span>{{ r.cov }}</span>
+                  <span onClick="{{ r.expand }}" style="font-size:10px;color:var(--tx3);cursor:pointer;text-align:right">{{ r.chev }}</span>
+                </div>
+                <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:6px 18px 16px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;background:var(--sf2);border-top:1px dashed var(--bd)">
+                    <div style="display:flex;flex-direction:column;gap:10px">
+                      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);padding-top:8px">Options</div>
+                      <label style="display:flex;flex-direction:column;gap:4px;font-size:12.5px"><span>Baseline for percentile</span><select style="font:inherit;font-size:12.5px;padding:6px 8px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);width:240px"><option>Global (all projects)</option><option>Per project (PLANVIEW_ID)</option></select></label>
+                      <div style="display:flex;gap:10px;align-items:center;font-size:12.5px"><span style="width:30px;height:18px;border-radius:999px;background:var(--bd2);position:relative"><span style="position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:999px;background:#fff"></span></span>Ignore items without a cost result <span style="color:var(--tx3)">(default off)</span></div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;padding-top:8px">
+                      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)">Required source fields</div>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font-family:var(--mono);font-size:11.5px;padding:2px 7px;border-radius:5px;background:var(--ok-soft);color:var(--ok)">✓ COST_TOTAL_COST</span><span style="font-family:var(--mono);font-size:11.5px;padding:2px 7px;border-radius:5px;background:var(--ok-soft);color:var(--ok)">✓ QTY_QUANTITY</span><span style="font-family:var(--mono);font-size:11.5px;padding:2px 7px;border-radius:5px;background:var(--wn-soft);color:var(--wn)">▲ PLANVIEW_ID — not a CDE</span></div>
+                      <div style="color:var(--tx2)">Rule fails when the unit cost falls outside the 1st–99th percentile of its baseline. <a href="#">Notes &amp; mapping</a></div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;cursor:pointer"><span style="font-size:10px;color:var(--tx3)">▸</span><span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">ACCE</span><span style="font-weight:600">ACCE Cost Estimate</span><span style="font-size:12.5px;color:var(--tx3)">6 of 6 applied</span><span style="margin-left:auto;font-size:12.5px;color:var(--ok);font-weight:500;display:flex;gap:6px;align-items:center"><span>✓</span>All required CDEs covered</span></div>
+        </sc-if>
+
+        <!-- ============ WEIGHTS ============ -->
+        <sc-if value="{{ isWeights }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;cursor:pointer"><span style="font-size:10px;color:var(--tx3)">▸</span><span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">ADR</span><span style="font-weight:600">ADR Cost Estimate</span><span style="font-size:12.5px;color:var(--tx3)">Standard 70% · Custom 30%</span><span style="margin-left:auto;font-size:12.5px;color:var(--ok);font-weight:500;display:flex;gap:6px;align-items:center"><span>✓</span>Standard 100% · Custom 100%</span></div>
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bd)"><span style="font-size:10px;color:var(--tx3)">▾</span><span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">ACCE</span><span style="font-weight:600">ACCE Cost Estimate</span><span style="font-size:12.5px;color:var(--tx3)">Standard 70% · Custom 30% <span style="color:var(--tx3)">(set in DQR sources)</span></span><span style="margin-left:auto;font-size:12.5px;color:var(--wn);font-weight:500;display:flex;gap:6px;align-items:center"><span>▲</span>Custom needs 15% more</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+              <sc-for list="{{ weightGroups }}" as="g" hint-placeholder-count="2">
+                <div style="padding:14px 18px;border-right:1px solid var(--bd);display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:{{ g.color }}"></span><span style="font-weight:600;font-size:13px">{{ g.title }}</span><span style="font-size:12px;color:var(--tx3)">{{ g.count }}</span><button style="margin-left:auto;font:inherit;font-size:12px;padding:4px 9px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx2);cursor:pointer">Distribute equally</button></div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr 90px;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);padding:0 2px"><span>{{ g.colA }}</span><span>{{ g.colB }}</span><span style="text-align:right">Weight %</span></div>
+                  <sc-for list="{{ g.rows }}" as="w" hint-placeholder-count="4">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 90px;gap:8px;align-items:center;font-size:12.5px"><span style="font-family:var(--mono);font-size:12px">{{ w.a }}</span><span style="color:var(--tx2)">{{ w.b }}</span><input value="{{ w.w }}" style="font:inherit;font-family:var(--mono);font-size:12.5px;padding:5px 8px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);text-align:right;width:100%;box-sizing:border-box"></div>
+                  </sc-for>
+                  <div style="display:flex;flex-direction:column;gap:5px;margin-top:4px">
+                    <div style="height:6px;border-radius:3px;background:var(--neutral-fill);overflow:hidden"><div style="height:100%;width:{{ g.totalW }};background:{{ g.totalC }}"></div></div>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;color:{{ g.totalC }};font-weight:500"><span>{{ g.totalMsg }}</span><span style="font-family:var(--mono)">{{ g.total }} / 100%</span></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ============ DASHBOARD ============ -->
+        <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;background:var(--sf);border:1px solid var(--bd);font-size:12.5px;color:var(--tx2)"><span style="font-size:11px;padding:1px 7px;border-radius:999px;background:var(--br-soft);color:var(--br-tx);font-weight:600">One-click</span>2 systems scored with 41 Custom DQRs at defaults, equal weights · <span style="color:var(--wn);font-weight:500">EPT skipped (no custom rules)</span><a href="#" style="margin-left:auto">Run details</a></div>
+
+          <div data-dq-grid="dash">
+            <sc-for list="{{ dpScores }}" as="d" hint-placeholder-count="3">
+              <div onClick="{{ d.pick }}" style="background:var(--sf);border:1px solid {{ d.bd }};border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;cursor:pointer;box-shadow:{{ d.ring }};min-width:0">
+                <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:12px;font-weight:500">{{ d.code }}</span><span style="font-size:12.5px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.name }}</span></div>
+                <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-family:var(--mono);font-size:34px;font-weight:500;letter-spacing:-.02em;line-height:1;color:{{ d.fg }}">{{ d.score }}</span><span style="font-size:12.5px;padding:2px 9px;border-radius:999px;background:{{ d.bg }};color:{{ d.fg }};font-weight:500;display:inline-flex;gap:5px;align-items:center;white-space:nowrap"><span>{{ d.glyph }}</span>{{ d.status }}</span></div>
+                <div style="display:flex;height:6px;border-radius:3px;overflow:hidden"><div style="width:{{ d.g }};background:var(--ok)"></div><div style="width:{{ d.y }};background:var(--wn)"></div><div style="flex:1;background:var(--er)"></div></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--tx3)"><span>{{ d.rows }} rows</span><span style="color:{{ d.deltaFg }};font-family:var(--mono)">{{ d.delta }}</span></div>
+              </div>
+            </sc-for>
+            <div data-dq-attention="true" style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:13px">Needs attention</span><span style="font-size:11.5px;color:var(--tx3)">worst rules across products</span></div>
+              <sc-for list="{{ attention }}" as="a" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:44px 1fr 46px;gap:10px;align-items:center;font-size:12.5px"><span style="font-family:var(--mono);font-size:11.5px;color:var(--tx3)">{{ a.dp }}</span><div style="min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.rule }}</div><div style="height:4px;border-radius:2px;background:var(--neutral-fill);margin-top:4px;overflow:hidden"><div style="height:100%;width:{{ a.w }};background:{{ a.c }}"></div></div></div><span style="font-family:var(--mono);font-size:12px;text-align:right;color:{{ a.c }}">{{ a.pct }}</span></div>
+              </sc-for>
+              <a href="#" style="font-size:12px;margin-top:auto">Open ACCE rules →</a>
+            </div>
+          </div>
+
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--bd);flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:5px;background:var(--neutral-fill);color:var(--tx2)">{{ selDp.code }}</span>
+              <span style="font-weight:600;font-size:15px">{{ selDp.name }}</span>
+              <span style="font-size:12.5px;padding:2px 9px;border-radius:999px;background:{{ selDp.bg }};color:{{ selDp.fg }};font-weight:500;display:inline-flex;gap:5px;align-items:center"><span>{{ selDp.glyph }}</span>{{ selDp.status }} · {{ selDp.score }}</span>
+              <span style="font-size:12px;color:var(--tx3)">Thresholds · Good ≥ 80 · Warning ≥ 60</span>
+              <div style="margin-left:auto;display:flex;gap:18px;font-size:12.5px">
+                <span><span style="color:var(--tx3)">Standard</span> <b style="font-family:var(--mono)">{{ selDp.std }}</b> <span style="color:var(--tx3)">· 70%</span></span>
+                <span><span style="color:var(--tx3)">Custom</span> <b style="font-family:var(--mono)">{{ selDp.cus }}</b> <span style="color:var(--tx3)">· 30%</span></span>
+                <span style="color:var(--tx3)">Rows <b style="font-family:var(--mono);color:var(--tx)">{{ selDp.rows }}</b> · <span style="color:var(--ok)">{{ selDp.ng }}</span> / <span style="color:var(--wn)">{{ selDp.ny }}</span> / <span style="color:var(--er)">{{ selDp.nr }}</span></span>
+              </div>
+            </div>
+            <div style="display:flex;gap:2px;padding:6px 12px 0;border-bottom:1px solid var(--bd)">
+              <sc-for list="{{ dashTabs }}" as="t" hint-placeholder-count="6">
+                <button onClick="{{ t.go }}" style="font:inherit;font-size:13px;padding:8px 12px;border:none;border-bottom:2px solid {{ t.line }};background:transparent;color:{{ t.fg }};cursor:pointer;font-weight:{{ t.wt }};margin-bottom:-1px">{{ t.label }}</button>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ tabIsRules }}" hint-placeholder-val="{{ true }}">
+              <div data-dq-grid="detail">
+                <div style="padding:14px 18px;border-right:1px solid var(--bd)">
+                  <div style="display:grid;grid-template-columns:1fr 1fr 70px 1.3fr;gap:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);padding:0 8px 8px">
+                    <span>CDE</span><span>Dimension</span><span style="text-align:right">Weight</span><span>Pass rate</span>
+                  </div>
+                  <sc-for list="{{ ruleRows }}" as="r" hint-placeholder-count="7">
+                    <div onClick="{{ r.pick }}" style="display:grid;grid-template-columns:1fr 1fr 70px 1.3fr;gap:10px;align-items:center;padding:8px 8px;border-radius:6px;font-size:12.5px;cursor:pointer;background:{{ r.bg }}" style-hover="background:var(--sf2)">
+                      <span style="font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.cde }}</span>
+                      <span style="color:var(--tx2)">{{ r.dim }}</span>
+                      <span style="font-family:var(--mono);font-size:12px;text-align:right;color:var(--tx3)">{{ r.w }}</span>
+                      <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;border-radius:3px;background:var(--neutral-fill);overflow:hidden"><div style="height:100%;width:{{ r.pw }};background:{{ r.pc }}"></div></div><span style="font-family:var(--mono);font-size:12px;width:46px;text-align:right;color:{{ r.pc }}">{{ r.pass }}</span></div>
+                    </div>
+                  </sc-for>
+                  <div style="font-size:12px;color:var(--tx3);padding:8px 8px 0">Sorted worst first · select a rule to see its failing rows</div>
+                </div>
+                <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px;background:var(--sf2);min-width:0">
+                  <div style="display:flex;align-items:center;gap:10px;font-size:13px;flex-wrap:wrap"><span style="font-weight:600">Failing rows</span><span style="font-family:var(--mono);font-size:12px;color:var(--tx2)">COST_TOTAL_COST · Range</span><span style="margin-left:auto;font-size:12.5px;color:var(--er);font-weight:500">1,204 rows fail · 6.2%</span></div>
+                  <div style="border:1px solid var(--bd);border-radius:8px;overflow:auto;background:var(--sf)">
+                    <table style="border-collapse:collapse;font-size:12px;font-family:var(--mono);width:100%">
+                      <thead><tr><sc-for list="{{ failCols }}" as="c" hint-placeholder-count="5"><th style="text-align:left;padding:7px 10px;background:var(--sf2);color:var(--tx3);font-weight:500;border-bottom:1px solid var(--bd);white-space:nowrap">{{ c }}</th></sc-for></tr></thead>
+                      <tbody><sc-for list="{{ failRows }}" as="r" hint-placeholder-count="5"><tr><sc-for list="{{ r }}" as="cell" hint-placeholder-count="5"><td style="padding:6px 10px;border-bottom:1px solid var(--bd);white-space:nowrap;color:var(--tx2)">{{ cell }}</td></sc-for></tr></sc-for></tbody>
+                    </table>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--tx3)">Showing 5 of 1,204 · worst score first<a href="#" style="margin-left:auto">Download failing rows (CSV)</a></div>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ tabIsCde }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:16px 18px;display:flex;flex-direction:column;gap:8px;max-width:760px">
+                <sc-for list="{{ cdeScores }}" as="c" hint-placeholder-count="6">
+                  <div style="display:grid;grid-template-columns:220px 1fr 50px;gap:12px;align-items:center;font-size:12.5px"><span style="font-family:var(--mono);font-size:12px">{{ c.name }}</span><div style="height:10px;border-radius:3px;background:var(--neutral-fill);overflow:hidden"><div style="height:100%;width:{{ c.w }};background:{{ c.c }}"></div></div><span style="font-family:var(--mono);text-align:right;color:{{ c.c }}">{{ c.v }}</span></div>
+                </sc-for>
+                <div style="font-size:12px;color:var(--tx3);margin-top:6px">Unweighted mean of the pass rates of every rule tied to the CDE (Standard + Custom). Click a bar to inspect failing rows.</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ tabIsOther }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:40px 18px;text-align:center;color:var(--tx3);font-size:13px">{{ otherTabNote }}</div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ============ ML LAB ============ -->
+        <sc-if value="{{ isMlLab }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;background:var(--lab-soft);color:var(--lab);font-size:12.5px;width:fit-content"><span style="font-weight:600;white-space:nowrap">Read-only</span><span style="color:var(--tx2)">Analyses run on top of your scorecard. Nothing here changes scores, rules, weights or exports.</span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12.5px;color:var(--tx3);margin-right:4px">Data Product</span>
+            <sc-for list="{{ labPills }}" as="p" hint-placeholder-count="3"><button style="font:inherit;font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px solid {{ p.bd }};background:{{ p.bg }};color:{{ p.fg }};cursor:pointer;font-family:var(--mono)">{{ p.label }}</button></sc-for>
+            <span style="margin-left:auto;font-size:12.5px;color:var(--tx3)">ACCE · 6 CDEs · 9 standard · 6 custom · 51,880 rows</span>
+          </div>
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+            <div style="display:flex;gap:2px;padding:6px 12px 0;border-bottom:1px solid var(--bd);overflow:auto">
+              <sc-for list="{{ labTabs }}" as="t" hint-placeholder-count="9"><button style="font:inherit;font-size:13px;padding:8px 12px;border:none;border-bottom:2px solid {{ t.line }};background:transparent;color:{{ t.fg }};cursor:pointer;font-weight:{{ t.wt }};margin-bottom:-1px;white-space:nowrap">{{ t.label }}</button></sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:0">
+              <div style="padding:16px 18px;border-right:1px solid var(--bd);display:flex;flex-direction:column;gap:12px">
+                <div style="font-size:12.5px;color:var(--tx2)">How much would the overall score move if each rule were removed? Bars use current weights — a weight-aware complement to the unweighted CDE view.</div>
+                <sc-for list="{{ impact }}" as="i" hint-placeholder-count="6">
+                  <div style="display:grid;grid-template-columns:90px 1fr 60px;gap:12px;align-items:center;font-size:12.5px"><span style="font-family:var(--mono);font-size:12px">{{ i.id }}</span><div style="height:10px;border-radius:3px;background:var(--neutral-fill);overflow:hidden"><div style="height:100%;width:{{ i.w }};background:var(--lab)"></div></div><span style="font-family:var(--mono);text-align:right">{{ i.v }}</span></div>
+                </sc-for>
+              </div>
+              <div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px;background:var(--sf2)">
+                <div style="font-weight:600;font-size:13px">Reading this</div>
+                <div style="font-size:12.5px;color:var(--tx2)">Removing <span style="font-family:var(--mono)">AC7</span> would lift ACCE from <b style="font-family:var(--mono)">67.5</b> to <b style="font-family:var(--mono)">71.6</b>. High impact + low pass rate usually means the rule is right and the data is wrong — check its failing rows in the Dashboard before touching weights.</div>
+                <div style="font-size:12px;color:var(--tx3);margin-top:auto">Engine: numpy fallback · scikit-learn 1.5 available — enable in the header.</div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ============ ADOPTION ============ -->
+        <sc-if value="{{ isAdoption }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);border:1px solid var(--bd);border-radius:10px;background:var(--sf);overflow:hidden">
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="6"><div style="padding:14px 18px;border-right:1px solid var(--bd)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)">{{ k.label }}</div><div style="font-family:var(--mono);font-size:22px;font-weight:500;margin-top:4px">{{ k.v }}</div></div></sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px">
+            <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+              <div style="font-weight:600;font-size:13px">Scorecard runs per week</div>
+              <div style="display:flex;align-items:flex-end;gap:6px;height:120px;padding-top:6px"><sc-for list="{{ weeks }}" as="w" hint-placeholder-count="12"><div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end"><span style="font-family:var(--mono);font-size:10.5px;color:var(--tx3)">{{ w.v }}</span><div style="width:100%;height:{{ w.h }};background:var(--br);border-radius:3px 3px 0 0;opacity:.85"></div></div></sc-for></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);font-family:var(--mono)"><span>W24</span><span>W35</span></div>
+            </div>
+            <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+              <div style="padding:12px 18px;font-weight:600;font-size:13px;border-bottom:1px solid var(--bd)">Runs by domain / system</div>
+              <sc-for list="{{ bySystem }}" as="s" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:1fr 60px 60px 1fr;gap:10px;padding:9px 18px;font-size:12.5px;border-bottom:1px solid var(--bd)"><span>{{ s.domain }} · <span style="font-family:var(--mono)">{{ s.sys }}</span></span><span style="font-family:var(--mono);text-align:right">{{ s.runs }}</span><span style="font-family:var(--mono);text-align:right">{{ s.users }}</span><span style="color:var(--tx3);text-align:right">{{ s.last }}</span></div></sc-for>
+            </div>
+          </div>
+          <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;padding:12px 18px;border-bottom:1px solid var(--bd);gap:10px"><span style="font-weight:600;font-size:13px">Audit trail</span><span style="font-size:12px;color:var(--tx3)">most recent first · 100 events</span><input placeholder="Filter by user or event…" style="margin-left:auto;font:inherit;font-size:12.5px;padding:5px 10px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);width:220px"></div>
+            <div style="display:grid;grid-template-columns:170px 140px 130px 1fr;gap:10px;padding:8px 18px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);background:var(--sf2);border-bottom:1px solid var(--bd)"><span>When (UTC)</span><span>User</span><span>Event</span><span>Details</span></div>
+            <sc-for list="{{ audit }}" as="a" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:170px 140px 130px 1fr;gap:10px;padding:8px 18px;font-size:12.5px;border-bottom:1px solid var(--bd)"><span style="font-family:var(--mono);font-size:12px;color:var(--tx2)">{{ a.when }}</span><span>{{ a.user }}</span><span style="font-family:var(--mono);font-size:12px">{{ a.event }}</span><span style="color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.details }}</span></div></sc-for>
+          </div>
+        </sc-if>
+
+      </div>
+
+      <!-- ============ FOOTER NAV ============ -->
+      <sc-if value="{{ showFooter }}" hint-placeholder-val="{{ false }}">
+        <div style="position:sticky;bottom:0;margin-top:auto;background:var(--sf);border-top:1px solid var(--bd);padding:12px 36px;display:flex;align-items:center;gap:10px">
+          <button onClick="{{ goBack }}" style="font:inherit;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--bd2);background:var(--sf);color:var(--tx);cursor:pointer;white-space:nowrap;flex:none" style-hover="background:var(--sf2)">← Back</button>
+          <button onClick="{{ goHome }}" style="font:inherit;font-size:13px;padding:7px 10px;border-radius:6px;border:none;background:transparent;color:var(--tx3);cursor:pointer;white-space:nowrap;flex:none" style-hover="color:var(--tx)">Restart…</button>
+          <span style="margin-left:auto;font-size:12.5px;color:{{ footerMsgFg }};min-width:0;text-align:right;text-wrap:pretty">{{ footerMsg }}</span>
+          <sc-if value="{{ hasNext }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ goNext }}" style="font:inherit;font-size:13px;font-weight:500;padding:8px 14px;border-radius:6px;border:none;background:{{ nextBg }};color:{{ nextFg }};cursor:pointer;opacity:{{ nextOp }};white-space:nowrap;flex:none">{{ nextLabel }}</button>
+          </sc-if>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light' | 'dark'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;oneClickState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;idle&quot;,&quot;running&quot;],&quot;default&quot;:&quot;idle&quot;,&quot;tsType&quot;:&quot;'idle' | 'running'&quot;,&quot;section&quot;:&quot;States&quot;},&quot;weightsValid&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;States&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'home', mode: null, homeTab: 'new', ocState: 'idle',
+    openProject: 'cost-estimate-quarterly', sysTablesOpen: 'ADR', dpPrevOpen: 'ADR', exportOpen: false, stdCdeOpen: 'COST_TOTAL_COST',
+    cdeOpen: 'ADR', ruleOpen: 'AC7', ruleOff: {}, selDp: 'ACCE', dashTab: 'rules', selRule: 0,
+  };
+  set(patch) { return () => this.setState(patch); }
+  go(screen, extra) { return () => this.setState(Object.assign({ screen }, extra || {})); }
+
+  renderVals() {
+    const s = this.state;
+    const theme = this.props.theme ?? 'light';
+    const weightsOk = this.props.weightsValid ?? false;
+    const oc = (this.props.oneClickState ?? s.ocState);
+    const SBS = ['domain','systems','dpreview','cde','sources','standard','custom','weights','dashboard'];
+    const sbsLabels = { domain:'Domain', systems:'Systems', dpreview:'Data Products', cde:'CDEs', sources:'DQR sources', standard:'Standard DQRs', custom:'Custom DQRs', weights:'Weights', dashboard:'Scorecard' };
+    const scr = s.screen;
+    const is = (k) => scr === k;
+    const mode = s.mode || (['oneclick'].includes(scr) ? 'oc' : (SBS.includes(scr) ? 'sbs' : null));
+
+    // ---- header copy per screen
+    const idx = SBS.indexOf(scr);
+    const stepEyebrow = idx >= 0 ? `Step ${idx + 1} of ${SBS.length} · Step-by-step · Cost Estimate` : '';
+    const header = {
+      home: ['Start', 'Build a Data Quality scorecard', 'Choose how to build, or reopen a saved configuration.'],
+      oneclick: ['One-click · Cost Estimate', 'Pick a domain and systems', 'Everything else runs with curated defaults and lands on the Scorecard.'],
+      domain: ['Step 1 of 8 · Step-by-step', 'Pick a data domain', 'Sets the tables, CDE catalog, rule catalogs and project-filter column for the rest of the workflow.'],
+      systems: [stepEyebrow, 'Select systems', 'Each selected system is joined into one Data Product.'],
+      dpreview: [stepEyebrow, 'Review Data Products', 'Check row and column counts before configuring rules.'],
+      cde: [stepEyebrow, 'Mark Critical Data Elements', 'Profile metadata is inline; columns required by Custom DQRs are flagged.'],
+      sources: [stepEyebrow, 'Choose DQR sources', 'Apply Standard rules, Custom rules or both — and how they split the score.'],
+      standard: [stepEyebrow, 'Apply Standard DQRs', 'Pick the dimensions to check on each CDE. Suggested ones are based on the column profile; each rule is validated against the data type.'],
+      custom: [stepEyebrow, 'Configure Custom DQRs', 'Apply curated rules and set their options. Rules need their source fields marked as CDEs.'],
+      weights: [stepEyebrow, 'Assign rule weights', 'Rule weights must sum to 100% within each source.'],
+      dashboard: [mode === 'oc' ? 'Scorecard · One-click · Cost Estimate' : 'Step 9 of 9 · Step-by-step · Cost Estimate', 'Scorecard', 'Sample ≤ 50,000 rows/table · All projects · computed just now'],
+      mllab: ['ML Lab · Beta · Cost Estimate', 'ML Lab', 'Anomalies, rule impact, clustering and drift — complementary, experimental views over your scorecard.'],
+      adoption: ['Admin', 'Usage & audit', 'What authorized users did in this app. Access itself is governed by Databricks Apps permissions.'],
+    }[scr];
+
+    // ---- rail
+    let railSteps = [], railTitle = 'Start';
+    const mk = (id, label, state, go, meta) => {
+      const done = state === 'done', cur = state === 'current';
+      return { label, meta: meta || '', go, marker: done ? '✓' : String(id),
+        mkBg: cur ? 'var(--br)' : (done ? 'var(--br-soft)' : 'transparent'),
+        mkFg: cur ? '#fff' : (done ? 'var(--br-tx)' : 'var(--tx3)'),
+        mkBd: cur ? 'var(--br)' : (done ? 'var(--br-soft)' : 'var(--bd2)'),
+        fg: cur ? 'var(--tx)' : (done ? 'var(--tx2)' : 'var(--tx3)'), wt: cur ? 600 : 400,
+        rowBg: cur ? 'var(--sf2)' : 'transparent' };
+    };
+    if (mode === 'sbs') {
+      railTitle = 'Steps';
+      railSteps = SBS.map((k, i) => mk(i + 1, sbsLabels[k], i < idx ? 'done' : (i === idx ? 'current' : 'todo'), this.go(k, { mode: 'sbs' }), k === 'systems' && i < idx ? 'ADR, ACCE' : ''));
+      if (scr === 'mllab') { railSteps = railSteps.map(r => Object.assign({}, r, { rowBg: 'transparent', wt: 400 })); railSteps[SBS.length - 1] = mk('✓', 'Scorecard', 'done', this.go('dashboard')); railSteps.push(mk(SBS.length + 1, 'ML Lab', 'current', this.go('mllab'), 'beta')); }
+    } else if (mode === 'oc') {
+      railTitle = 'One-click';
+      const onDash = scr === 'dashboard' || scr === 'mllab';
+      railSteps = [mk(1, 'Domain & systems', onDash ? 'done' : 'current', this.go('oneclick', { mode: 'oc' }), onDash ? 'ADR, ACCE' : ''), mk(2, 'Scorecard', scr === 'dashboard' ? 'current' : (scr === 'mllab' ? 'done' : 'todo'), this.go('dashboard', { mode: 'oc' }))];
+      if (scr === 'mllab') railSteps.push(mk(3, 'ML Lab', 'current', this.go('mllab'), 'beta'));
+    } else if (scr === 'adoption') {
+      railTitle = 'Admin';
+      railSteps = [mk(1, 'Usage & audit', 'current', this.go('adoption'))];
+    } else {
+      railSteps = [mk(1, 'Choose how to build', 'current', this.go('home'))];
+    }
+    const hasContext = mode !== null && scr !== 'adoption';
+
+    // ---- proto nav
+    const protoDefs = [['home','Home'],['oneclick','One-click'],['domain','Domain'],['systems','Systems'],['dpreview','Data Products'],['cde','CDEs'],['sources','DQR sources'],['standard','Standard DQRs'],['custom','Custom DQRs'],['weights','Weights'],['dashboard','Dashboard'],['mllab','ML Lab'],['adoption','Usage & audit']];
+    const protoLinks = protoDefs.map(([k, label]) => ({ label, go: this.go(k, { mode: k === 'oneclick' ? 'oc' : (SBS.includes(k) ? 'sbs' : (k === 'dashboard' || k === 'mllab' ? (s.mode || 'oc') : null)) }),
+      bg: scr === k ? '#3a4050' : 'transparent', fg: scr === k ? '#fff' : '#b7bcc8', bd: scr === k ? '#4a5164' : '#2f3542' }));
+
+    // ---- selection card helpers
+    const sel = (on) => ({ bd: on ? 'var(--br)' : 'var(--bd)', ring: on ? '0 0 0 3px var(--br-soft)' : 'var(--sh)', mkBd: on ? 'var(--br)' : 'var(--bd2)', mkBg: on ? 'var(--br)' : 'transparent', dot: on ? '#fff' : 'transparent', check: on ? '✓' : '' });
+    const domains = [
+      Object.assign({ name: 'Cost Estimate', systems: 'ADR · ACCE · EPT', desc: 'ADR, ACCE and EPT estimate tables, 10 standard dimensions, 23 curated rules.', longDesc: 'Joins ADR, ACCE and EPT cost-estimate tables into one Data Product per system. Standard 10-dimension catalog plus 23 curated Custom DQRs.', chips: ['ADR','ACCE','EPT','PLANVIEW_ID'] }, sel(true)),
+      Object.assign({ name: 'Quality', systems: 'SQS', desc: 'Curated SQS inspection table with rules defined with the Quality team.', longDesc: 'Same workflow applied to the curated SQS inspection table CT_SQS_AT_INSPECTION, with rules defined with the Quality team.', chips: ['SQS','PROJECT_CODE'] }, sel(false)),
+    ];
+    const sysDefs = [
+      { code: 'ADR', name: 'ADR Cost Estimate', desc: 'Primary estimate system. Item record + cost, quantity and design detail tables joined on ROW_ID.', rules: 23, on: true, tables: [['ADR_DIM_ESTIMATEITEMRECORD','One row per estimate item · ROW_ID, PLANVIEW_ID', true],['ADR_FACT_ESTIMATECOSTRESULTS','Cost lines per item · 1:N on ROW_ID'],['ADR_FACT_ESTIMATEQTYRESULTS','Quantity lines per item · 1:N on ROW_ID'],['ADR_DIM_ESTIMATEDESIGNDETAILS','Design specs · 1:1 on ROW_ID']] },
+      { code: 'ACCE', name: 'ACCE Cost Estimate', desc: 'Parallel estimate system for cross-reconciliation with ADR. Design specs joined via DESIGN_ID.', rules: 18, on: true, tables: [['ACCE_ESTIMATEITEMRECORD','One row per estimate item', true],['ACCE_ESTIMATECOSTRESULTS','Cost lines · 1:N on ROW_ID'],['ACCE_ESTIMATEQTYRESULTS','Quantity lines · 1:N on ROW_ID'],['ACCE_ESTIMATEDESIGNDETAILS','Design attributes · joined on DESIGN_ID']] },
+      { code: 'EPT', name: 'EPT — Onshore CET Data', desc: 'Single project-level reference table keyed by PLANVIEW_ID.', rules: 0, on: false, tables: [['ONSHORE_CETDATA','Project-level reference table', true]] },
+    ];
+    const systems = sysDefs.map(d => Object.assign({ code: d.code, name: d.name, desc: d.desc, op: d.rules ? 1 : 0.7,
+      rules: d.rules ? `${d.rules} custom rules` : 'no custom rules', ruleBg: d.rules ? 'var(--ok-soft)' : 'var(--wn-soft)', ruleFg: d.rules ? 'var(--ok)' : 'var(--wn)' }, sel(d.on)));
+    const systemsFull = sysDefs.map(d => Object.assign({ code: d.code, name: d.name, desc: d.desc, open: s.sysTablesOpen === d.code, chev: s.sysTablesOpen === d.code ? '▾' : '▸',
+      tablesLabel: `${d.tables.length} table${d.tables.length > 1 ? 's' : ''}`, toggleTables: this.set({ sysTablesOpen: s.sysTablesOpen === d.code ? null : d.code }),
+      tables: d.tables.map(t => ({ name: t[0], desc: t[1], primary: !!t[2] })) }, sel(d.on)));
+
+    // ---- projects
+    const projDefs = [
+      { name: 'cost-estimate-quarterly', summary: 'v4 · weights rebalanced for AC7/AC8', domain: 'Cost Estimate', version: 'v4', updated: '2 h ago', by: 'g.silva', versions: [['v4','2026-09-03 13:10','g.silva','Custom weights: AC7 20→25, AC8 20→15'],['v3','2026-08-27 09:41','m.rocha','Added CDE QTY_QUANTITY; applied AC5'],['v2','2026-08-12 16:02','g.silva','Source split 60/40 → 70/30']] },
+      { name: 'adr-standard-only', summary: 'v2 · Standard DQRs on 8 CDEs', domain: 'Cost Estimate', version: 'v2', updated: 'Aug 21', by: 'm.rocha', versions: [['v2','2026-08-21 11:20','m.rocha','Dropped Timeliness rule'],['v1','2026-08-19 10:05','m.rocha','Initial save']] },
+      { name: 'sqs-inspections-baseline', summary: 'v1 · dq-inspection-12/13', domain: 'Quality', version: 'v1', updated: 'Jul 30', by: 'a.costa', versions: [['v1','2026-07-30 08:15','a.costa','Initial save']] },
+    ];
+    const projects = projDefs.map(p => Object.assign({}, p, { open: s.openProject === p.name, toggle: this.set({ openProject: s.openProject === p.name ? null : p.name }), versions: p.versions.map(v => ({ v: v[0], when: v[1], who: v[2], what: v[3] })) }));
+
+    // ---- one-click phases
+    const phaseDefs = [['Loading tables','8 tables · 14 s','done'],['Building Data Products','2 products','done'],['Profiling columns','ADR 62 · ACCE 58','run'],['Applying Custom DQRs','41 rules',''],['Computing scores','',''],['Preparing exports','CSV · JSON','']];
+    const ocPhases = phaseDefs.map(p => ({ label: p[0], meta: p[1], mark: p[2] === 'done' ? '✓' : (p[2] === 'run' ? '●' : '○'), fg: p[2] === '' ? 'var(--tx3)' : (p[2] === 'run' ? 'var(--br-tx)' : 'var(--tx)') }));
+
+    // ---- DP review
+    const dpDefs = [{ code: 'ADR', name: 'ADR Cost Estimate', rows: '48,120', cols: '62', ntables: '4', tables: sysDefs[0].tables.map(t => t[0]) }, { code: 'ACCE', name: 'ACCE Cost Estimate', rows: '51,880', cols: '58', ntables: '4', tables: sysDefs[1].tables.map(t => t[0]) }];
+    const dpList = dpDefs.map(d => Object.assign({}, d, { prevOpen: s.dpPrevOpen === d.code, chev: s.dpPrevOpen === d.code ? '▾' : '▸', togglePrev: this.set({ dpPrevOpen: s.dpPrevOpen === d.code ? null : d.code }) }));
+    const previewCols = ['ROW_ID','PLANVIEW_ID','ITEM_DESCRIPTION','COST_TOTAL_COST','QTY_QUANTITY','QTY_UOM','DESIGN_PRESSURE'];
+    const previewRows = [['1048211','PV-00341','Pipe rack module B2','1,204,550.00','340.0','m','16.5'],['1048212','PV-00341','Heat exchanger E-201','842,300.00','2.0','ea','—'],['1048213','PV-00352','Pump P-101 A/B','—','2.0','ea','12.0'],['1048214','PV-00352','Cable tray L3','56,120.00','1,250.0','m','—']];
+
+    // ---- CDE
+    const st = (k) => ({ good: ['✓','var(--ok)','var(--ok-soft)'], warn: ['▲','var(--wn)','var(--wn-soft)'], poor: ['✕','var(--er)','var(--er-soft)'] }[k]);
+    const cdeBlocks = [
+      { code: 'ADR', name: 'ADR Cost Estimate', k: 'good', status: '6 CDEs', meta: '62 columns · all rule-required columns picked', selected: [['ROW_ID',''],['PLANVIEW_ID','A1 A3'],['COST_TOTAL_COST','A2 A4 A7'],['QTY_QUANTITY','A5'],['QTY_UOM','A5'],['DESIGN_PRESSURE','']] },
+      { code: 'ACCE', name: 'ACCE Cost Estimate', k: 'warn', status: '4 CDEs · 2 required missing', meta: '58 columns', selected: [] },
+    ].map(b => { const t = st(b.k); return Object.assign({}, b, { stGlyph: t[0], stFg: t[1], stBg: t[2], open: s.cdeOpen === b.code, chev: s.cdeOpen === b.code ? '▾' : '▸', toggle: this.set({ cdeOpen: s.cdeOpen === b.code ? null : b.code }), selected: b.selected.map(c => ({ name: c[0], req: c[1] })) }); });
+    const nullColor = (p) => p >= 20 ? 'var(--er)' : (p >= 5 ? 'var(--wn)' : 'var(--ok)');
+    const cdeRows = [['ROW_ID',true,'','Identifier',0,'48,120','1048211, 1048212, …'],['PLANVIEW_ID',true,'A1 A3','Code',0.2,'412','PV-00341, PV-00352'],['ITEM_DESCRIPTION',false,'','Text',1.8,'31,004','Pipe rack module B2, …'],['COST_TOTAL_COST',true,'A2 A4 A7','Numeric',6.2,'39,877','1204550.00, 842300.00'],['QTY_QUANTITY',true,'A5','Numeric',3.1,'8,120','340.0, 2.0, 1250.0'],['QTY_UOM',true,'A5','Code',3.1,'14','m, ea, kg'],['DESIGN_PRESSURE',true,'','Numeric',27.4,'96','16.5, 12.0, 25.0']]
+      .map(r => Object.assign({ col: r[0], req: r[2], type: r[3], null: r[4].toFixed(1) + '%', nullW: Math.max(1, r[4]) + '%', nullC: nullColor(r[4]), distinct: r[5], sample: r[6], rowBg: r[1] ? 'var(--br-soft)' : 'transparent' }, sel(r[1])));
+
+    // ---- sources
+    const tg = (on) => ({ bd: on ? 'var(--br)' : 'var(--bd)', bg: on ? 'var(--br-soft)' : 'transparent', tg: on ? 'var(--br)' : 'var(--bd2)', knob: on ? '14px' : '2px' });
+    const sourceBlocks = [{ code: 'ADR', name: 'ADR Cost Estimate', cdes: '6 CDEs', std: true, cus: true, cusDesc: '23 curated rules for ADR — 5 need CDEs you have not picked yet.' }, { code: 'ACCE', name: 'ACCE Cost Estimate', cdes: '4 CDEs', std: false, cus: true, cusDesc: '18 curated rules for ACCE.' }]
+      .map(b => { const a = tg(b.std), c = tg(b.cus); return Object.assign({}, b, { stdBd: a.bd, stdBg: a.bg, stdTg: a.tg, stdKnob: a.knob, cusBd: c.bd, cusBg: c.bg, cusTg: c.tg, cusKnob: c.knob, both: b.std && b.cus, onlyCustom: !b.std && b.cus }); });
+
+    // ---- standard DQRs (step 4.1): per CDE × dimension
+    const dimDefs = ['Completeness','Uniqueness','Validity','Accuracy','Consistency','Conformity','Integrity','Timeliness','Currency','Precision'];
+    const stdCdeDefs = [
+      { cde: 'COST_TOTAL_COST', type: 'Numeric', nulls: '6.2%', distinct: '39,877', on: ['Completeness','Accuracy','Precision'], sugg: ['Completeness','Accuracy','Precision','Consistency'], warn: { Precision: 'warn' }, params: { Accuracy: 'Min 0 · Max 50,000,000 (from profile p99)', Precision: 'Max 2 decimals' } },
+      { cde: 'PLANVIEW_ID', type: 'Code', nulls: '0.2%', distinct: '412', on: ['Completeness','Validity','Uniqueness'], sugg: ['Completeness','Validity'], warn: { Uniqueness: 'err' }, params: { Validity: 'Regex ^PV-\\d{5}$' } },
+      { cde: 'QTY_QUANTITY', type: 'Numeric', nulls: '3.1%', distinct: '8,120', on: ['Completeness'], sugg: ['Completeness','Accuracy'], warn: {}, params: {} },
+      { cde: 'QTY_UOM', type: 'Code', nulls: '3.1%', distinct: '14', on: ['Conformity'], sugg: ['Completeness','Conformity'], warn: {}, params: { Conformity: 'Allowed: m, ea, kg, t, m2, m3' } },
+      { cde: 'DESIGN_PRESSURE', type: 'Numeric', nulls: '27.4%', distinct: '96', on: [], sugg: ['Completeness'], warn: {}, params: {} },
+    ];
+    const stdCdes = stdCdeDefs.map(c => {
+      const open = s.stdCdeOpen === c.cde;
+      const nErr = Object.values(c.warn).filter(v => v === 'err').length, nWarn = Object.values(c.warn).filter(v => v === 'warn').length;
+      const pending = c.sugg.filter(d => !c.on.includes(d)).length;
+      const st2 = nErr ? ['poor','✕',`${nErr} incompatible`] : (nWarn ? ['warn','▲',`${nWarn} warning`] : (c.on.length ? ['good','✓',`${c.on.length} rules`] : ['none','','no rules yet']));
+      return { cde: c.cde, type: c.type, nulls: c.nulls, distinct: c.distinct, open, chev: open ? '▾' : '▸', toggle: this.set({ stdCdeOpen: open ? null : c.cde }),
+        count: `${c.on.length} of 10`, pending: pending ? `${pending} suggested` : '', stKind: st2[0], stGlyph: st2[1], stText: st2[2],
+        stFg: { poor: 'var(--er)', warn: 'var(--wn)', good: 'var(--ok)', none: 'var(--tx3)' }[st2[0]], stBg: { poor: 'var(--er-soft)', warn: 'var(--wn-soft)', good: 'var(--ok-soft)', none: 'var(--neutral-fill)' }[st2[0]],
+        dims: dimDefs.map(d => { const on = c.on.includes(d), sug = c.sugg.includes(d), w = c.warn[d]; return { name: d, on, sug: sug && !on, tg: on ? 'var(--br)' : 'var(--bd2)', knob: on ? '14px' : '2px', fg: on ? 'var(--tx)' : 'var(--tx3)', param: on ? (c.params[d] || 'No parameters') : '', hasParam: on,
+          vGlyph: !on ? '' : (w === 'err' ? '✕' : (w === 'warn' ? '▲' : '✓')), vFg: w === 'err' ? 'var(--er)' : (w === 'warn' ? 'var(--wn)' : 'var(--ok)'),
+          vText: !on ? '' : (w === 'err' ? 'Incompatible: 412 distinct values on 48,120 rows — column is not unique by design' : (w === 'warn' ? 'Profile shows up to 4 decimals; rows above 2 will fail' : 'Compatible')) }; }) };
+    });
+    const exportItems = [['Executive report · HTML','All Data Products · print to PDF'],['ADR · CSV row scores',''],['ADR · JSON config + summary',''],['ACCE · CSV row scores',''],['ACCE · JSON config + summary','']].map(e => ({ label: e[0], meta: e[1] }));
+
+    // ---- custom rules
+    const ruleDefs = [['AC4','Unit cost within percentile range','Flags items whose unit cost is outside the 1st–99th percentile of the baseline.','Accuracy',true,'ok'],['AC5','Quantity has a unit of measure','Every quantity line must carry a UOM.','Completeness',true,'ok'],['AC7','Cost result exists for every item','Item records with no cost line are incomplete estimates.','Completeness',true,'warn'],['AC8','Design linked to a valid record','DESIGN_ID must resolve to a design detail row.','Consistency',false,'ok'],['A1','PLANVIEW_ID follows PV-##### pattern','Referential check against the project master.','Validity',true,'ok'],['A3','Project exists in Planview','Referential integrity against the reference dataset.','Validity',false,'ok'],['A9','Estimate date not in the future','Timeliness guard on ESTIMATE_DATE.','Timeliness',false,'off']];
+    const rules = ruleDefs.map(r => { const on = r[5] !== 'off' && !s.ruleOff[r[0]]; const warn = on && r[5] === 'warn'; return { id: r[0], name: r[1], desc: r[2], type: r[3], nameFg: on ? 'var(--tx)' : 'var(--tx3)', blocking: r[4] ? 'Blocking' : 'Non-blocking', blkFg: r[4] ? 'var(--er)' : 'var(--tx3)',
+      tg: on ? 'var(--br)' : 'var(--bd2)', knob: on ? '14px' : '2px', toggle: () => this.setState(p => ({ ruleOff: Object.assign({}, p.ruleOff, { [r[0]]: !p.ruleOff[r[0]] }) })),
+      cov: !on ? 'Not applied' : (warn ? 'Missing CDE: PLANVIEW_ID' : 'CDEs covered'), covGlyph: !on ? '' : (warn ? '▲' : '✓'), covFg: !on ? 'var(--tx3)' : (warn ? 'var(--wn)' : 'var(--ok)'),
+      open: s.ruleOpen === r[0], chev: s.ruleOpen === r[0] ? '▾' : '▸', expand: this.set({ ruleOpen: s.ruleOpen === r[0] ? null : r[0] }) }; });
+
+    // ---- weights
+    const weightGroups = [
+      { title: 'Standard rules', count: '9 rules · 70% of score', color: 'var(--br)', colA: 'CDE', colB: 'Dimension', rows: [['COST_TOTAL_COST','Completeness','15.00'],['COST_TOTAL_COST','Range','15.00'],['QTY_QUANTITY','Completeness','10.00'],['PLANVIEW_ID','Validity','10.00'],['PLANVIEW_ID','Uniqueness','10.00'],['QTY_UOM','Domain','10.00']].map(r => ({ a: r[0], b: r[1], w: r[2] })), total: '100.00%', totalW: '100%', totalC: 'var(--ok)', totalMsg: '✓ Sums to 100%' },
+      { title: 'Custom rules', count: '6 rules · 30% of score', color: 'var(--lab)', colA: 'Rule', colB: 'Name', rows: [['AC4','Unit cost within percentile','25.00'],['AC5','Quantity has UOM','20.00'],['AC7','Cost result exists','20.00'],['AC8','Design linked','10.00'],['A1','PLANVIEW_ID pattern','10.00'],['A3','Project exists','0.00']].map(r => ({ a: r[0], b: r[1], w: r[2] })), total: '85.00%', totalW: '85%', totalC: 'var(--wn)', totalMsg: '▲ 15.00% still unassigned' },
+    ];
+    if (weightsOk) { weightGroups[1].rows[5].w = '15.00'; Object.assign(weightGroups[1], { total: '100.00%', totalW: '100%', totalC: 'var(--ok)', totalMsg: '✓ Sums to 100%' }); }
+
+    // ---- dashboard
+    const scoreDefs = [{ code: 'ADR', name: 'ADR Cost Estimate', score: 84.2, k: 'good', rows: '48,120', g: 71, y: 19, delta: '+1.3 pp', ng: '34,165', ny: '9,143', nr: '4,812', std: '86.0', cus: '80.1' }, { code: 'ACCE', name: 'ACCE Cost Estimate', score: 67.5, k: 'warn', rows: '51,880', g: 48, y: 30, delta: '−6.3 pp', ng: '24,902', ny: '15,564', nr: '11,414', std: '71.2', cus: '58.9' }, { code: 'EPT', name: 'EPT — Onshore CET', score: null, k: null, rows: '—', g: 0, y: 0, delta: 'skipped', ng: '—', ny: '—', nr: '—', std: '—', cus: '—' }];
+    const labelOf = { good: 'Good', warn: 'Warning', poor: 'Poor' };
+    const dpScores = scoreDefs.map(d => { const t = d.k ? st(d.k) : ['–','var(--tx3)','var(--neutral-fill)']; const on = s.selDp === d.code; return Object.assign({}, d, { score: d.score === null ? '—' : d.score.toFixed(1), status: d.k ? labelOf[d.k] : 'Not scored', glyph: t[0], fg: t[1], bg: t[2], g: d.g + '%', y: d.y + '%', deltaFg: d.delta.startsWith('−') ? 'var(--er)' : (d.delta.startsWith('+') ? 'var(--ok)' : 'var(--tx3)'), bd: on ? 'var(--br)' : 'var(--bd)', ring: on ? '0 0 0 3px var(--br-soft)' : 'var(--sh)', pick: this.set({ selDp: d.code }) }); });
+    const selDp = dpScores.find(d => d.code === s.selDp) || dpScores[1];
+    const passColor = (p) => p >= 80 ? 'var(--ok)' : (p >= 60 ? 'var(--wn)' : 'var(--er)');
+    const attention = [['ACCE','AC7 · Cost result exists for every item',41.2],['ACCE','COST_TOTAL_COST · Range',58.7],['ADR','DESIGN_PRESSURE · Completeness',62.1],['ACCE','AC4 · Unit cost within percentile',66.0]].map(a => ({ dp: a[0], rule: a[1], pct: a[2].toFixed(1) + '%', w: a[2] + '%', c: passColor(a[2]) }));
+    const dashTabDefs = [['rules','Rules'],['custom','Custom rules'],['cde','CDEs'],['dim','Dimensions'],['fail','Failing rows'],['hist','History']];
+    const dashTabs = dashTabDefs.map(t => ({ label: t[1], go: this.set({ dashTab: t[0] }), line: s.dashTab === t[0] ? 'var(--br)' : 'transparent', fg: s.dashTab === t[0] ? 'var(--tx)' : 'var(--tx2)', wt: s.dashTab === t[0] ? 600 : 400 }));
+    const ruleRows = [['COST_TOTAL_COST','Range','15%',58.7],['COST_TOTAL_COST','Completeness','15%',93.8],['QTY_UOM','Domain','10%',71.4],['PLANVIEW_ID','Validity','10%',88.0],['QTY_QUANTITY','Completeness','10%',96.9],['PLANVIEW_ID','Uniqueness','10%',99.1],['DESIGN_PRESSURE','Completeness','10%',72.6]].map((r, i) => ({ cde: r[0], dim: r[1], w: r[2], pass: r[3].toFixed(1) + '%', pw: r[3] + '%', pc: passColor(r[3]), bg: s.selRule === i ? 'var(--br-soft)' : 'transparent', pick: this.set({ selRule: i }) }));
+    const failCols = ['row_score','ROW_ID','PLANVIEW_ID','COST_TOTAL_COST','QTY_QUANTITY'];
+    const failRows = [['12.5','2048211','PV-00341','−4,120.00','340.0'],['12.5','2048290','PV-00341','98,120,000.00','1.0'],['25.0','2048312','PV-00352','−0.01','2.0'],['25.0','2048377','PV-00360','41,000,000.00','—'],['37.5','2048401','PV-00360','−12.00','12.0']];
+    const cdeScores = [['COST_TOTAL_COST',61.3],['DESIGN_PRESSURE',72.6],['QTY_UOM',74.9],['PLANVIEW_ID',89.4],['QTY_QUANTITY',96.9],['ROW_ID',100]].map(c => ({ name: c[0], v: c[1].toFixed(1), w: c[1] + '%', c: passColor(c[1]) }));
+    const tabIsRules = s.dashTab === 'rules', tabIsCde = s.dashTab === 'cde', tabIsOther = !tabIsRules && !tabIsCde;
+    const otherTabNote = { custom: 'Custom rules — same table shape as Rules (id, name, type, blocking, weight, pass rate) with row selection → failing rows.', dim: 'Dimensions — horizontal bars like CDEs, click to drill into failing rows.', fail: 'Failing rows — the 50 lowest-scoring rows with one 100/0 column per rule; CSV export of the full list.', hist: 'History — score trend per run (◆ = config changed), run log, and what moved ≥ 5 pp vs the previous run.' }[s.dashTab] || '';
+
+    // ---- ML Lab
+    const labPills = ['ADR · 84.2','ACCE · 67.5'].map((l, i) => ({ label: l, bd: i === 1 ? 'var(--br)' : 'var(--bd2)', bg: i === 1 ? 'var(--br-soft)' : 'var(--sf)', fg: i === 1 ? 'var(--br-tx)' : 'var(--tx2)' }));
+    const labTabs = ['Rule impact','Row anomalies','CDE clustering','Weight sensitivity','Cross-product','Run history','Risk model','Recommendations','Row explainability'].map((l, i) => ({ label: l, line: i === 0 ? 'var(--br)' : 'transparent', fg: i === 0 ? 'var(--tx)' : 'var(--tx2)', wt: i === 0 ? 600 : 400 }));
+    const impact = [['AC7',4.1],['COST::Range',3.2],['AC4',1.9],['QTY_UOM::Domain',1.4],['DESIGN::Compl.',0.9],['A1',0.3]].map(i => ({ id: i[0], v: '+' + i[1].toFixed(1), w: (i[1] / 4.1 * 100) + '%' }));
+
+    // ---- adoption
+    const kpis = [['Unique users','14'],['App opens','212'],['Scorecard runs','87'],['Exports','61'],['Project saves','19'],['Project loads','33']].map(k => ({ label: k[0], v: k[1] }));
+    const weeks = [3,5,4,8,6,9,7,11,8,10,9,7].map(v => ({ v: String(v), h: (v / 11 * 100) + '%' }));
+    const bySystem = [['Cost Estimate','ADR','41','9','today'],['Cost Estimate','ACCE','32','7','today'],['Quality','SQS','11','3','Aug 29'],['Cost Estimate','EPT','3','2','Jul 14']].map(r => ({ domain: r[0], sys: r[1], runs: r[2], users: r[3], last: r[4] }));
+    const audit = [['2026-09-03 13:10:42','g.silva','project_saved','cost-estimate-quarterly v4'],['2026-09-03 13:02:11','g.silva','export','csv · ACCE'],['2026-09-03 12:58:30','g.silva','scorecard_run','ACCE 67.5 · ADR 84.2 · one_click'],['2026-09-03 09:14:05','m.rocha','project_loaded','adr-standard-only v2'],['2026-09-02 17:40:19','a.costa','step_view','ml_lab'],['2026-09-02 17:21:44','a.costa','app_open','']].map(a => ({ when: a[0], user: a[1], event: a[2], details: a[3] }));
+
+    // ---- footer
+    const nextOf = { domain: 'systems', systems: 'dpreview', dpreview: 'cde', cde: 'sources', sources: 'standard', standard: 'custom', custom: 'weights', weights: 'dashboard' };
+    const backOf = { oneclick: 'home', domain: 'home', systems: 'domain', dpreview: 'systems', cde: 'dpreview', sources: 'cde', standard: 'sources', custom: 'standard', weights: 'custom', dashboard: mode === 'oc' ? 'oneclick' : 'weights', mllab: 'dashboard', adoption: 'home' };
+    const showFooter = scr !== 'home';
+    const hasNext = !!nextOf[scr];
+    const blocked = (scr === 'weights' && !weightsOk) || scr === 'custom' || scr === 'standard';
+    const footerMsgs = { oneclick: '', domain: 'Cost Estimate selected', systems: '2 of 3 systems selected', dpreview: '2 Data Products ready', cde: '10 CDEs across 2 products', sources: 'Both sources on ADR · Custom only on ACCE', standard: '▲ ADR · PLANVIEW_ID · Uniqueness is incompatible with the column — turn it off or pick another dimension', custom: '▲ AC7 on ADR needs PLANVIEW_ID as a CDE — add it in CDEs or turn the rule off', weights: weightsOk ? 'All sources sum to 100%' : '▲ ACCE Custom rules need 15% more', dashboard: 'End of workflow — export from the header or save this configuration as a project', mllab: 'Experimental — complement to the rules-based scorecard, not a replacement', adoption: '' };
+    const nextLabel = scr === 'weights' ? 'Generate scorecard →' : 'Next →';
+
+    return Object.assign({
+      theme, protoLinks, railSteps, railTitle, hasContext,
+      ctxDomain: 'Cost Estimate', ctxMode: mode === 'oc' ? 'One-click' : 'Step-by-step', ctxSystems: 'ADR · ACCE' + (mode === 'oc' ? ' · EPT skipped' : ''),
+      eyebrow: header[0], title: header[1], subtitle: header[2],
+      isHome: is('home'), isOneClick: is('oneclick'), isDomain: is('domain'), isSystems: is('systems'), isDpReview: is('dpreview'), isCde: is('cde'), isSources: is('sources'), isStandard: is('standard'), isCustom: is('custom'),
+      stdCdes, exportItems, exportOpen: s.exportOpen, toggleExport: this.set({ exportOpen: !s.exportOpen }), exportBg: s.exportOpen ? 'var(--sf2)' : 'var(--sf)', isWeights: is('weights'), isDashboard: is('dashboard'), isMlLab: is('mllab'), isAdoption: is('adoption'),
+      homeIsNew: s.homeTab === 'new', homeIsSaved: s.homeTab === 'saved', setHomeNew: this.set({ homeTab: 'new' }), setHomeSaved: this.set({ homeTab: 'saved' }),
+      homeNewBg: s.homeTab === 'new' ? 'var(--br-soft)' : 'transparent', homeNewFg: s.homeTab === 'new' ? 'var(--br-tx)' : 'var(--tx2)', homeSavedBg: s.homeTab === 'saved' ? 'var(--br-soft)' : 'transparent', homeSavedFg: s.homeTab === 'saved' ? 'var(--br-tx)' : 'var(--tx2)',
+      startOneClick: this.go('oneclick', { mode: 'oc', ocState: 'idle' }), startStepByStep: this.go('domain', { mode: 'sbs' }), openProject: this.go('dashboard', { mode: 'sbs' }),
+      projects, domains, systems, systemsFull, ocIdle: oc === 'idle', ocRunning: oc === 'running', ocPhases, runOneClick: this.set({ ocState: 'running' }), finishOneClick: this.go('dashboard', { mode: 'oc', ocState: 'idle' }),
+      dpList, previewCols, previewRows, cdeBlocks, cdeRows, sourceBlocks, rules, weightGroups,
+      dpScores, selDp, attention, dashTabs, ruleRows, failCols, failRows, cdeScores, tabIsRules, tabIsCde, tabIsOther, otherTabNote,
+      labPills, labTabs, impact, kpis, weeks, bySystem, audit,
+      showFooter, hasNext, nextLabel, goBack: this.go(backOf[scr] || 'home'), goNext: this.go(nextOf[scr] || scr), goHome: this.go('home', { mode: null }), goAdoption: this.go('adoption'), goMlLab: this.go('mllab'), goDashboard: this.go('dashboard'),
+      footerMsg: footerMsgs[scr] || '', footerMsgFg: blocked ? 'var(--wn)' : 'var(--tx3)',
+      nextBg: blocked ? 'var(--neutral-fill)' : 'var(--br)', nextFg: blocked ? 'var(--tx3)' : '#fff', nextOp: 1,
+    });
+  }
+}
+</script>
+</body>
+</html>
