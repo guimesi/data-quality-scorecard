@@ -28,6 +28,7 @@ from ui.step_06._export import (
     _reference_columns_for_export,
 )
 from ui.step_06._history import _render_drop_alert, _render_history_tab
+from ui.step_06._rule_rows import standard_rule_rows
 from ui.step_06._shared import (
     _DEFAULT_ACCENT,
     _SYSTEM_ACCENTS,
@@ -175,23 +176,20 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                 )
 
         with tab_rules:
-            rows = []
             cfg = st.session_state.configs[code]
-            for a in cfg.assignments:
-                not_computed_reason = result.not_computed_standard_rules.get(a.rule_id)
-                rows.append({
-                    "CDE": a.cde_column,
-                    "Dimension": a.dimension,
-                    "Weight (%)": round(a.weight, 2),
-                    "Status": (
-                        "Not computed" if not_computed_reason is not None
-                        else "Evaluated"
-                    ),
+            rows = [
+                {
+                    "CDE": r["cde"],
+                    "Dimension": r["dimension"],
+                    "Weight (%)": round(r["weight"], 2),
+                    "Status": r["status"],
                     "Pass rate (%)": (
-                        float("nan") if not_computed_reason is not None
-                        else round(result.rule_pass_rates.get(a.rule_id, 0.0), 2)
+                        float("nan") if r["pass_rate"] is None
+                        else round(r["pass_rate"], 2)
                     ),
-                })
+                }
+                for r in standard_rule_rows(cfg, result)
+            ]
             if rows:
                 df_rules = pd.DataFrame(rows).sort_values(
                     "Pass rate (%)", na_position="first",

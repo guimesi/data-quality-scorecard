@@ -10,9 +10,9 @@ import html
 import pandas as pd
 import streamlit as st
 
-from config.custom_dqr_catalog import get_available_custom_dqr_rules
 from config.dqr_sources import SOURCE_LABELS
 from ui.step_06._drilldown import _render_custom_rule_drilldown
+from ui.step_06._rule_rows import custom_rule_rows
 from ui.step_06._shared import (
     _DEFAULT_ACCENT,
     _SYSTEM_ACCENTS,
@@ -55,29 +55,22 @@ def _render_source_breakdown(result) -> None:
 
 
 def _render_custom_rules_table(code: str, result) -> None:
-    catalog = {r.id: r for r in get_available_custom_dqr_rules(code)}
     cfg = st.session_state.configs[code]
-    rows = []
-    for a in cfg.custom_assignments:
-        rule = catalog.get(a.rule_id)
-        not_evaluated_reason = result.not_evaluated_custom_rules.get(a.rule_id)
-        if not_evaluated_reason is not None:
-            status = "Not evaluated"
-            pass_rate_display = float("nan")
-        else:
-            status = "Evaluated"
-            pass_rate_display = round(
-                result.custom_rule_pass_rates.get(a.rule_id, 0.0), 2
-            )
-        rows.append({
-            "Rule ID": a.rule_id,
-            "Name": rule.name if rule is not None else a.rule_id,
-            "Type": rule.type if rule is not None else "-",
-            "Blocking": "Yes" if (rule is not None and rule.blocking) else "No",
-            "Status": status,
-            "Weight (%)": round(a.weight, 2),
-            "Pass rate (%)": pass_rate_display,
-        })
+    rows = [
+        {
+            "Rule ID": r["rule_id"],
+            "Name": r["name"],
+            "Type": r["type"],
+            "Blocking": "Yes" if r["blocking"] else "No",
+            "Status": r["status"],
+            "Weight (%)": round(r["weight"], 2),
+            "Pass rate (%)": (
+                float("nan") if r["pass_rate"] is None
+                else round(r["pass_rate"], 2)
+            ),
+        }
+        for r in custom_rule_rows(code, cfg, result)
+    ]
     if not rows:
         st.caption("No custom rules selected for this Data Product.")
         return

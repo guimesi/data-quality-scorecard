@@ -41,6 +41,39 @@ def _sanitize_csv_cell(value: object) -> object:
     return value
 
 
+def _rule_column_specs(system_code: str, config, std_flags: pd.DataFrame,
+                       cust_flags: pd.DataFrame) -> list:
+    """``(rule_id, column header)`` pairs for every *evaluated* rule, in
+    assignment order (Standard first, then Custom).
+
+    Single source of the ``STD · CDE · Dim (w=..%)`` /
+    ``CUSTOM · ID · Name (w=..%)`` header format used by the worst-rows
+    table, the CSV export and the HTML report's embedded row store.
+    """
+    from config.custom_dqr_catalog import get_available_custom_dqr_rules
+
+    specs = []
+    for a in config.assignments:
+        if a.rule_id not in std_flags.columns:
+            continue
+        specs.append((
+            a.rule_id,
+            f"STD · {a.cde_column} · {a.dimension} (w={a.weight:.1f}%)",
+        ))
+    if config.custom_assignments:
+        catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code)}
+        for a in config.custom_assignments:
+            if a.rule_id not in cust_flags.columns:
+                continue
+            rule = catalog.get(a.rule_id)
+            label = rule.name if rule is not None else a.rule_id
+            specs.append((
+                a.rule_id,
+                f"CUSTOM · {a.rule_id} · {label} (w={a.weight:.1f}%)",
+            ))
+    return specs
+
+
 def _per_rule_score_columns(dp, config) -> pd.DataFrame:
     """Build per-row, per-rule score columns for both the worst-rows table
     and the CSV export.
@@ -52,33 +85,24 @@ def _per_rule_score_columns(dp, config) -> pd.DataFrame:
     so they're easy to tell apart; rules that couldn't be evaluated are
     omitted (they're flagged separately on the Dashboard tabs).
     """
-    from config.custom_dqr_catalog import get_available_custom_dqr_rules
     from src.custom_dqr_engine import evaluate_custom_rules
     from src.dqr_engine import evaluate_all_safe
 
-    out = pd.DataFrame(index=dp.df.index)
-
+    empty = pd.DataFrame(index=dp.df.index)
+    std_flags = cust_flags = empty
     if config.assignments:
         std_flags, _ = evaluate_all_safe(dp.df, config.assignments, dp.profiles)
-        for a in config.assignments:
-            if a.rule_id not in std_flags.columns:
-                continue
-            header = f"STD · {a.cde_column} · {a.dimension} (w={a.weight:.1f}%)"
-            out[header] = std_flags[a.rule_id].astype(int) * 100
-
     if config.custom_assignments:
         cust_flags, _ = evaluate_custom_rules(
             dp.df, config.custom_assignments, dp.system_code
         )
-        catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code)}
-        for a in config.custom_assignments:
-            if a.rule_id not in cust_flags.columns:
-                continue
-            rule = catalog.get(a.rule_id)
-            label = rule.name if rule is not None else a.rule_id
-            header = f"CUSTOM · {a.rule_id} · {label} (w={a.weight:.1f}%)"
-            out[header] = cust_flags[a.rule_id].astype(int) * 100
 
+    out = pd.DataFrame(index=dp.df.index)
+    for rule_id, header in _rule_column_specs(
+        dp.system_code, config, std_flags, cust_flags,
+    ):
+        flags = std_flags if rule_id in std_flags.columns else cust_flags
+        out[header] = flags[rule_id].astype(int) * 100
     return out
 
 
