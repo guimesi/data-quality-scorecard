@@ -81,13 +81,9 @@ def build_report(ctx: ReportContext, scorecards: Dict[str, object],
         + "\n</main>"
     )
     date = (ctx.generated_at or "")[:10]
-    title_parts = ["Data Quality Scorecard Report"]
-    if ctx.domain_name or ctx.domain_code:
-        title_parts.append(ctx.domain_name or ctx.domain_code)
-    if date:
-        title_parts.append(date)
+    title = sections.report_title(ctx) + (f" · {date}" if date else "")
     html_text = document(
-        title=" · ".join(title_parts),
+        title=title,
         css=REPORT_CSS,
         body=body,
         data_json=data_json,
@@ -96,12 +92,22 @@ def build_report(ctx: ReportContext, scorecards: Dict[str, object],
     return ReportArtifact(
         html=html_text.encode("utf-8"),
         filename=_filename(ctx),
+        # Every ReportContext field travels with the artifact for the
+        # publisher, including the ones the header no longer renders
+        # (mode, data scope, thresholds, saved project).
         metadata={
             "domain_code": ctx.domain_code,
             "domain_name": ctx.domain_name,
             "dp_codes": [v["code"] for v in views],
             "generated_at": ctx.generated_at,
             "generated_by": ctx.generated_by,
+            "mode": ctx.mode,
+            "data_scope": ctx.data_scope,
+            "sample_rows_cap": ctx.sample_rows_cap,
+            "project_filter": list(ctx.project_filter),
+            "threshold_green": ctx.threshold_green,
+            "threshold_yellow": ctx.threshold_yellow,
+            "saved_project": ctx.saved_project,
             "run_id": ctx.run_id,
             "overall_scores": {
                 v["code"]: round(float(v["result"].overall_score), 2)

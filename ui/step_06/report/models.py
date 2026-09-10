@@ -21,7 +21,8 @@ from typing import Any, Dict, List, Optional
 class ReportCaps:
     """Row caps embedded in (and stated by) the report.
 
-    - ``worst_rows``: rows rendered statically in the Worst rows table.
+    - ``worst_rows``: rows rendered statically in the Lowest-scoring rows
+      table.
     - ``drill_rows``: max rows a drill-down table renders client-side.
     - ``row_store``: lowest-scoring rows embedded once per DP in the
       JSON island (must be >= ``worst_rows``).

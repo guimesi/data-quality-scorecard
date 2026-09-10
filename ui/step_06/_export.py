@@ -42,13 +42,16 @@ def _sanitize_csv_cell(value: object) -> object:
 
 
 def _rule_column_specs(system_code: str, config, std_flags: pd.DataFrame,
-                       cust_flags: pd.DataFrame) -> list:
+                       cust_flags: pd.DataFrame,
+                       custom_prefix: str = "CUSTOM") -> list:
     """``(rule_id, column header)`` pairs for every *evaluated* rule, in
     assignment order (Standard first, then Custom).
 
     Single source of the ``STD · CDE · Dim (w=..%)`` /
     ``CUSTOM · ID · Name (w=..%)`` header format used by the worst-rows
-    table, the CSV export and the HTML report's embedded row store.
+    table, the CSV export and the HTML report's embedded row store. The
+    HTML report (DQRs only) passes ``custom_prefix="DQR"`` and an empty
+    ``std_flags`` frame, giving ``DQR · ID · Name (w=..%)`` headers.
     """
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
@@ -69,7 +72,7 @@ def _rule_column_specs(system_code: str, config, std_flags: pd.DataFrame,
             label = rule.name if rule is not None else a.rule_id
             specs.append((
                 a.rule_id,
-                f"CUSTOM · {a.rule_id} · {label} (w={a.weight:.1f}%)",
+                f"{custom_prefix} · {a.rule_id} · {label} (w={a.weight:.1f}%)",
             ))
     return specs
 

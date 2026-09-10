@@ -13,14 +13,15 @@ from typing import Dict, List, Optional
 
 from ui.step_06._rule_rows import STATUS_EVALUATED
 from ui.step_06.report.charts import score_bar
+from ui.step_06.report.collect import dqr_label
 from ui.step_06.report.html import esc, fmt_cell_number, fmt_int
 
 _BUCKET_LABELS = {"green": "Green", "yellow": "Yellow", "red": "Red"}
 
 _NOSCRIPT = (
     "<noscript>Failing-row tables need JavaScript; the "
-    '<a href="#{code}-rows">Worst rows</a> table below and the CSV export '
-    "carry the same records.</noscript>"
+    '<a href="#{code}-rows">Lowest-scoring rows</a> table below and the CSV '
+    "export carry the same records.</noscript>"
 )
 
 
@@ -46,16 +47,8 @@ def _fmt_param(value: object) -> str:
     return esc(value)
 
 
-def params_kv(params: Dict) -> str:
-    if not params:
-        return '<span class="muted">none</span>'
-    return ('<dl class="kv">' + "".join(
-        f"<dt>{esc(k)}</dt><dd>{_fmt_param(v)}</dd>" for k, v in params.items()
-    ) + "</dl>")
-
-
 def selected_options_kv(rule, params: Dict) -> str:
-    """The custom rule's toggles / selects with the values used this run."""
+    """The DQR's toggles / selects with the values used this run."""
     if rule is None or not (rule.options or rule.select_options):
         return '<span class="muted">none</span>'
     parts = []
@@ -86,8 +79,8 @@ def drill_div(code: str, key: str, total: int, label: str) -> str:
 def _drill_or_note(code: str, key: str, total: Optional[int],
                    label: str) -> str:
     if total is None:
-        return (f'<p class="note info">No computed rule for {esc(label)} - '
-                "the reasons are in the rule tables.</p>")
+        return (f'<p class="note info">No evaluated DQR for {esc(label)} - '
+                "the reasons are in the DQR table.</p>")
     if total == 0:
         return (f'<p class="note ok">No failing rows for {esc(label)} - '
                 "every row passes.</p>")
@@ -95,14 +88,8 @@ def _drill_or_note(code: str, key: str, total: Optional[int],
 
 
 def _tied_rule_li(rule: Dict) -> str:
-    if rule["kind"] == "std":
-        label = f"{rule['rule_id']}"
-        source = f"Standard · w={rule['weight']:.1f}%"
-    else:
-        label = f"{rule['rule_id']} · {rule['name']}"
-        source = f"Custom · w={rule['weight']:.1f}%"
-    head = (f"<li><code>{esc(label)}</code> "
-            f'<span class="muted">{esc(source)}</span> ')
+    head = (f"<li><code>{esc(dqr_label(rule))}</code> "
+            f'<span class="muted">w={rule["weight"]:.1f}%</span> ')
     if rule["status"] != STATUS_EVALUATED:
         return head + f'<span class="pill p-warn">{esc(rule["status"])}</span></li>'
     fails = rule["fail_count"] if rule["fail_count"] is not None else 0
@@ -125,27 +112,23 @@ def toolbar_sort_only() -> str:
     )
 
 
-def toolbar_rules(custom: bool) -> str:
-    """Filter + sort toolbar for the Standard / Custom rule lists."""
-    not_run = ("not-evaluated", "Not evaluated") if custom \
-        else ("not-computed", "Not computed")
-    blocking = ('<button type="button" class="tb" data-filter="blocking">'
-                "Blocking</button>") if custom else ""
-    name_label = "Sort: ID" if custom else "Sort: CDE"
+def toolbar_dqrs() -> str:
+    """Filter + sort toolbar for the DQR list."""
     return (
         '<div class="toolbar js-only"><span class="tb-group">'
         '<button type="button" class="tb on" data-filter="all">All</button>'
         '<button type="button" class="tb" data-filter="evaluated">Evaluated</button>'
-        f'<button type="button" class="tb" data-filter="{not_run[0]}">'
-        f"{not_run[1]}</button>"
+        '<button type="button" class="tb" data-filter="not-evaluated">'
+        "Not evaluated</button>"
         '<button type="button" class="tb" data-filter="below">Below Green</button>'
-        + blocking + "</span>"
+        '<button type="button" class="tb" data-filter="blocking">Blocking</button>'
+        "</span>"
         '<span class="tb-group">'
         '<button type="button" class="tb" data-sort="score" data-dir="asc">'
         "Sort: pass rate ↑</button>"
         '<button type="button" class="tb" data-sort="weight" data-dir="desc">'
         "Sort: weight ↓</button>"
-        f'<button type="button" class="tb" data-sort="name">{name_label}</button>'
+        '<button type="button" class="tb" data-sort="name">Sort: ID</button>'
         "</span>"
         '<span class="tb-count muted"></span></div>'
     )
@@ -156,28 +139,42 @@ def toolbar_rules(custom: bool) -> str:
 def group_list(view: Dict, items: List[Dict], kind: str) -> str:
     """The By-CDE (``kind="cde"``) / By-Dimension (``kind="dim"``) list."""
     code = view["code"]
+    g, y = view["result"].threshold_green, view["result"].threshold_yellow
     grid = f"{kind}-grid"
     head_label = "CDE" if kind == "cde" else "Dimension"
-    tied_heading = ("Rules tied to this CDE" if kind == "cde"
-                    else "Rules tied to this dimension")
+    tied_heading = ("DQRs tied to this CDE" if kind == "cde"
+                    else "DQRs tied to this dimension")
     rows = []
     for item in items:
         name, score = item["name"], item["score"]
         label = (f"CDE {name}" if kind == "cde" else f"dimension {name}")
-        below = "1" if item["bucket"] != "green" else "0"
+        if score is None:
+            # Every tied DQR was skipped: no score, never a misleading 0.
+            score_attr, below = "-1", "0"
+            cells = (
+                '<span class="c-bar"><span class="muted">—</span></span>'
+                '<span class="c-num num"><span class="muted">n/a</span></span>'
+                '<span class="c-badge"><span class="pill p-warn">'
+                "Not evaluated</span></span>"
+            )
+        else:
+            score_attr = f"{score:.2f}"
+            below = "1" if item["bucket"] != "green" else "0"
+            cells = (
+                f'<span class="c-bar">{score_bar(score, g, y)}</span>'
+                f'<span class="c-num num">{score:.1f}</span>'
+                f'<span class="c-badge">{badge(item["bucket"])}</span>'
+            )
         rows.append(
             f'<details class="gl-row" data-name="{esc(str(name).lower())}" '
-            f'data-score="{score:.2f}" data-below="{below}" '
+            f'data-score="{score_attr}" data-below="{below}" '
             f'data-search="{esc(item["search"])}">\n'
             f'<summary class="gl-grid {grid}">'
             f'<span class="c-name"><span class="tv">{esc(name)}</span></span>'
-            f'<span class="c-bar">'
-            f'{score_bar(score, view["result"].threshold_green, view["result"].threshold_yellow)}'
-            "</span>"
-            f'<span class="c-num num">{score:.1f}</span>'
-            f'<span class="c-badge">{badge(item["bucket"])}</span>'
+            + cells +
             f'<span class="c-rules num">{item["n_evaluated"]}/{item["n_tied"]}</span>'
-            f'<span class="c-src muted">{esc(item["source"])}</span></summary>\n'
+            f'<span class="c-src muted">{esc(", ".join(item["rule_ids"]))}</span>'
+            "</summary>\n"
             f'<div class="gl-body"><h5>{tied_heading}</h5>'
             '<ul class="rule-list">'
             + "".join(_tied_rule_li(r) for r in item["tied"])
@@ -188,16 +185,16 @@ def group_list(view: Dict, items: List[Dict], kind: str) -> str:
     head = (
         f'<div class="gl-head gl-grid {grid}"><span>{head_label}</span>'
         '<span>Score</span><span class="num">Value</span><span>Status</span>'
-        '<span class="num" title="Evaluated / tied rules">Rules</span>'
-        "<span>Source</span></div>"
+        '<span class="num" title="Evaluated / tied DQRs">DQRs</span>'
+        "<span>Rule IDs</span></div>"
     )
     return f'<div class="gl">{head}{"".join(rows)}</div>'
 
 
-# -------------------------------------------------------- Standard rules
+# ----------------------------------------------------------------- DQRs
 
 def _sorted_for_display(rules: List[Dict]) -> List[Dict]:
-    """Not-run rules first, then ascending pass rate - the order the
+    """Not-evaluated DQRs first, then ascending pass rate - the order the
     dashboard uses (``na_position="first"``)."""
     return sorted(
         rules,
@@ -205,84 +202,11 @@ def _sorted_for_display(rules: List[Dict]) -> List[Dict]:
     )
 
 
-def std_rules_list(view: Dict) -> str:
+def dqr_list(view: Dict) -> str:
     result = view["result"]
     g, y = result.threshold_green, result.threshold_yellow
     rows = []
-    for r in _sorted_for_display(view["std_rules"]):
-        evaluated = r["status"] == STATUS_EVALUATED
-        score_attr = f"{r['pass_rate']:.2f}" if evaluated else "-1"
-        status_attr = "evaluated" if evaluated else "not-computed"
-        below = "1" if evaluated and r["pass_rate"] < g else "0"
-        if evaluated:
-            fail_pct = 100.0 - r["pass_rate"]
-            bar = f'<span class="c-bar">{score_bar(r["pass_rate"], g, y)}</span>'
-            tail = (
-                f'<span class="num">{r["pass_rate"]:.1f}%</span>'
-                f'<span class="num">{fail_pct:.1f}%</span>'
-                f'<span class="num">{fmt_int(r["fail_count"] or 0)}</span>'
-            )
-            kv_tail = (
-                f"<dt>Pass rate</dt><dd>{r['pass_rate']:.1f}% "
-                f"({fmt_int(r['pass_count'] or 0)} rows)</dd>"
-                f"<dt>Fail rate</dt><dd>{fail_pct:.1f}% "
-                f"({fmt_int(r['fail_count'] or 0)} rows)</dd>"
-            )
-            reason_html = ""
-            drill = _drill_or_note(
-                view["code"], f"rule:{r['rule_id']}", r["drill_total"],
-                f"rule {r['rule_id']}",
-            )
-        else:
-            bar = '<span class="c-bar"><span class="muted">—</span></span>'
-            tail = ('<span class="num"><span class="muted">n/a</span></span>'
-                    * 3)
-            kv_tail = ""
-            reason_html = (
-                '<p class="callout warn"><b>Not computed.</b> '
-                f"{esc(r['reason'])} The rule contributed nothing to the "
-                "score; its weight was redistributed across the rules that "
-                "evaluated.</p>\n"
-            )
-            drill = ""
-        rows.append(
-            f'<details class="gl-row" data-name="{esc(r["rule_id"].lower())}" '
-            f'data-score="{score_attr}" data-weight="{r["weight"]:g}" '
-            f'data-status="{status_attr}" data-below="{below}" '
-            f'data-search="{esc(r["rule_id"].lower())}">\n'
-            f'<summary class="gl-grid std-grid">'
-            f'<span class="c-name"><span class="tv">{esc(r["cde"])}</span></span>'
-            f"<span>{esc(r['dimension'])}</span>"
-            f'<span class="num">{r["weight"]:.1f}%</span>'
-            f"<span>{status_pill(r['status'])}</span>"
-            f"{bar}{tail}</summary>\n"
-            f'<div class="gl-body">\n{reason_html}'
-            '<div class="two"><div><h5>Rule configuration</h5><dl class="kv">'
-            f"<dt>Rule ID</dt><dd><code>{esc(r['rule_id'])}</code></dd>"
-            f"<dt>CDE</dt><dd>{esc(r['cde'])}</dd>"
-            f"<dt>Dimension</dt><dd>{esc(r['dimension'])}</dd>"
-            f"<dt>Weight (Standard source)</dt><dd>{r['weight']:.1f}%</dd>"
-            f"<dt>Status</dt><dd>{esc(r['status'])}</dd>{kv_tail}</dl></div>"
-            f"<div><h5>Parameters</h5>{params_kv(r['params'])}</div></div>\n"
-            f"{drill}</div></details>"
-        )
-    head = (
-        '<div class="gl-head gl-grid std-grid"><span>CDE</span>'
-        '<span>Dimension</span><span class="num">Weight</span>'
-        "<span>Status</span><span>Pass rate</span>"
-        '<span class="num">Pass</span><span class="num">Fail</span>'
-        '<span class="num">Failing rows</span></div>'
-    )
-    return f'<div class="gl">{head}{"".join(rows)}</div>'
-
-
-# --------------------------------------------------------- Custom rules
-
-def custom_rules_list(view: Dict) -> str:
-    result = view["result"]
-    g, y = result.threshold_green, result.threshold_yellow
-    rows = []
-    for r in _sorted_for_display(view["custom_rules"]):
+    for r in _sorted_for_display(view["dqrs"]):
         evaluated = r["status"] == STATUS_EVALUATED
         rule = r["rule"]
         score_attr = f"{r['pass_rate']:.2f}" if evaluated else "-1"
@@ -290,7 +214,10 @@ def custom_rules_list(view: Dict) -> str:
         below = "1" if evaluated and r["pass_rate"] < g else "0"
         blocking_cell = ('<span class="pill p-err">Blocking</span>'
                          if r["blocking"] else '<span class="muted">No</span>')
-        search = f"{r['rule_id']} {r['name']} {r['type']}".lower()
+        src_cols = r.get("source_columns") or {}
+        search = " ".join(
+            [r["rule_id"], r["name"], r["type"]] + [str(c) for c in src_cols.values()]
+        ).lower()
 
         if evaluated:
             bar = f'<span class="c-bar">{score_bar(r["pass_rate"], g, y)}</span>'
@@ -304,7 +231,7 @@ def custom_rules_list(view: Dict) -> str:
             callout = ""
             drill = _drill_or_note(
                 view["code"], f"rule:{r['rule_id']}", r["drill_total"],
-                f"custom rule {r['rule_id']} ({r['name']})",
+                f"DQR {r['rule_id']} ({r['name']})",
             )
         else:
             bar = '<span class="c-bar"><span class="muted">—</span></span>'
@@ -314,8 +241,8 @@ def custom_rules_list(view: Dict) -> str:
             callout = (
                 '<p class="callout warn"><b>Not evaluated.</b> '
                 f"{esc(r['reason'])} This is not a failure: the rule was "
-                "dropped and its weight redistributed across the Custom "
-                "rules that evaluated.</p>\n"
+                "dropped and its weight redistributed across the DQRs that "
+                "evaluated.</p>\n"
             )
             drill = ""
 
@@ -325,7 +252,6 @@ def custom_rules_list(view: Dict) -> str:
             if rule.notes:
                 desc += f'<p class="desc muted">{esc(rule.notes)}</p>'
 
-        src_cols = r.get("source_columns") or {}
         src_kv = ('<dl class="kv">' + "".join(
             f"<dt>{esc(alias)}</dt><dd><code>{esc(col)}</code></dd>"
             for alias, col in src_cols.items()
@@ -362,7 +288,7 @@ def custom_rules_list(view: Dict) -> str:
             f"<dt>Rule ID</dt><dd><code>{esc(r['rule_id'])}</code></dd>"
             f"<dt>Type</dt><dd>{esc(r['type'])}</dd>"
             f"<dt>Blocking</dt><dd>{'Yes' if r['blocking'] else 'No'}</dd>"
-            f"<dt>Weight (Custom source)</dt><dd>{r['weight']:.1f}%</dd>"
+            f"<dt>Weight</dt><dd>{r['weight']:.1f}%</dd>"
             f"<dt>Status</dt><dd>{esc(r['status'])}</dd>{kv_tail}</dl>"
             f"<h5>Selected options</h5>{selected_options_kv(rule, r['params'])}"
             f"</div><div><h5>Source columns</h5>{src_kv}{ref_kv}</div></div>\n"
@@ -377,7 +303,7 @@ def custom_rules_list(view: Dict) -> str:
     return f'<div class="gl">{head}{"".join(rows)}</div>'
 
 
-# ----------------------------------------------------------- worst rows
+# ---------------------------------------------------- lowest-scoring rows
 
 def _value_cell(v: object) -> str:
     if v is None or v == "":
@@ -391,10 +317,10 @@ def _value_cell(v: object) -> str:
     return f'<td><span class="tv" title="{s}">{s}</span></td>'
 
 
-def worst_rows_table(view: Dict, caps) -> str:
-    """The static worst-rows table (works without JavaScript). Renders
-    the first ``caps.worst_rows`` rows of the embedded store - the same
-    records, same order, same formatting as the client-side tables."""
+def lowest_rows_table(view: Dict, caps) -> str:
+    """The static Lowest-scoring rows table (works without JavaScript).
+    Renders the first ``caps.worst_rows`` rows of the embedded store - the
+    same records, same order, same formatting as the client-side tables."""
     store = view["store_rows"][:caps.worst_rows]
     if not store:
         return '<p class="note">No rows scored for this Data Product.</p>'
@@ -466,8 +392,7 @@ def _drift_num(v: float) -> str:
 
 def drift_tables(drift: Dict) -> str:
     parts = []
-    for label, singular in (("Rules", "Rules"), ("CDEs", "CDEs"),
-                            ("Dimensions", "Dimensions")):
+    for label in ("DQRs", "CDEs", "Dimensions"):
         rows = drift["tables"].get(label) or []
         if not rows:
             continue
@@ -480,7 +405,7 @@ def drift_tables(drift: Dict) -> str:
             for t in rows
         )
         parts.append(
-            f"<h5>{singular} that moved ≥ "
+            f"<h5>{label} that moved ≥ "
             f"{drift.get('threshold', 5):g} pp</h5>"
             '<div class="tw"><table class="compact"><thead><tr><th>Name</th>'
             '<th class="num">Previous</th><th class="num">Current</th>'
@@ -496,45 +421,26 @@ def config_snapshot(view: Dict) -> str:
     cfg, result = view["cfg"], view["result"]
     chips = "".join(f"<code>{esc(c)}</code>" for c in cfg.cdes) or \
         '<span class="muted">none</span>'
-    sources_kv = "".join(
-        f"<dt>{esc(s)}</dt><dd>{w:.0f}%</dd>"
-        for s, w in cfg.effective_source_weights().items()
-    )
     tables = "<br>".join(
         f"<code>{esc(t)}</code>" for t in view["source_tables"]
     ) or '<span class="muted">—</span>'
 
-    std_rows = "".join(
-        f"<tr><td><code>{esc(a.cde_column)}</code></td>"
-        f"<td>{esc(a.dimension)}</td>"
-        f'<td class="num">{a.weight:.1f}%</td>'
-        f"<td>{_inline_params(a.params)}</td></tr>"
-        for a in cfg.assignments
-    )
-    std_table = (
-        f"<h5>Standard assignments ({len(cfg.assignments)}) - weights sum to "
-        f"{sum(a.weight for a in cfg.assignments):.0f}%</h5>"
-        '<div class="tw"><table class="compact"><thead><tr><th>CDE</th>'
-        '<th>Dimension</th><th class="num">Weight</th><th>Parameters</th>'
-        "</tr></thead><tbody>" + std_rows + "</tbody></table></div>"
-    ) if cfg.assignments else \
-        '<p class="note">No Standard DQRs configured.</p>'
-
-    cust_rows = "".join(
+    dqr_rows = "".join(
         f"<tr><td><code>{esc(r['rule_id'])}</code></td>"
         f"<td>{esc(r['name'])}</td>"
+        f"<td>{esc(r['type'])}</td>"
         f'<td class="num">{r["weight"]:.1f}%</td>'
         f"<td>{_inline_params(r['params'])}</td></tr>"
-        for r in view["custom_rules"]
+        for r in view["dqrs"]
     )
-    cust_table = (
-        f"<h5>Custom assignments ({len(view['custom_rules'])}) - weights sum "
-        f"to {sum(r['weight'] for r in view['custom_rules']):.0f}%</h5>"
+    dqr_table = (
+        f"<h5>DQR assignments ({len(view['dqrs'])}) - weights sum to "
+        f"{sum(r['weight'] for r in view['dqrs']):.0f}%</h5>"
         '<div class="tw"><table class="compact"><thead><tr><th>Rule</th>'
-        '<th>Name</th><th class="num">Weight</th><th>Options</th></tr>'
-        "</thead><tbody>" + cust_rows + "</tbody></table></div>"
-    ) if view["custom_rules"] else \
-        '<p class="note">No Custom DQRs configured.</p>'
+        '<th>Name</th><th>Type</th><th class="num">Weight</th>'
+        "<th>Options</th></tr></thead><tbody>" + dqr_rows
+        + "</tbody></table></div>"
+    ) if view["dqrs"] else '<p class="note">No DQRs configured.</p>'
 
     return (
         f'<details class="cfg" id="{esc(view["code"])}-config"><summary>'
@@ -544,7 +450,6 @@ def config_snapshot(view: Dict) -> str:
         '<div class="cfg-body">\n<div class="two">\n'
         f"<div><h5>Critical Data Elements ({len(cfg.cdes)})</h5>"
         f'<div class="chips">{chips}</div>\n'
-        f'<h5>DQR sources &amp; weights</h5><dl class="kv">{sources_kv}</dl>\n'
         '<h5>Thresholds</h5><dl class="kv">'
         f"<dt>Green</dt><dd>score ≥ {result.threshold_green:g}</dd>"
         f"<dt>Yellow</dt><dd>score ≥ {result.threshold_yellow:g}</dd>"
@@ -555,7 +460,7 @@ def config_snapshot(view: Dict) -> str:
         f"<dt>Rows</dt><dd>{fmt_int(view['n_rows'])}</dd>"
         f"<dt>Columns</dt><dd>{fmt_int(view['n_cols'])}</dd>"
         f"<dt>Source tables</dt><dd>{tables}</dd></dl></div>\n</div>\n"
-        + std_table + "\n" + cust_table + "\n</div></details>"
+        + dqr_table + "\n</div></details>"
     )
 
 

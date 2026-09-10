@@ -5,12 +5,15 @@ Everything here consumes ``ScorecardResult`` / ``DataProductConfig`` /
 for the renderers in :mod:`ui.step_06.report.sections` /
 :mod:`ui.step_06.report.tables`. No Streamlit calls anywhere.
 
-Single source of truth - nothing scoring-related is reimplemented:
+The report covers DQRs only (the rules formerly called "Custom DQRs"):
+Standard DQRs, source weights and the Standard/Custom sub-scores are
+not collected. Single source of truth - nothing scoring-related is
+reimplemented:
 
-- rule rows: :mod:`ui.step_06._rule_rows` (shared with the dashboard)
+- DQR rows: :mod:`ui.step_06._rule_rows` (shared with the dashboard)
 - failing-row selection: ``ui.step_06._drilldown`` helpers
 - row enrichment: ``ui.step_06._export`` (reference columns + the
-  ``STD ·`` / ``CUSTOM ·`` per-rule column headers)
+  ``DQR · ID · Name (w=..%)`` per-rule column headers)
 - history / drift: :mod:`src.run_history`, ``src.ml_lab.compute_drift``
 - buckets: :func:`utils.helpers.score_bucket`
 """
@@ -18,32 +21,23 @@ from __future__ import annotations
 
 import datetime as _dt
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 from config.custom_dqr_catalog import effective_required_columns
 from src.run_history import config_fingerprint, load_history, score_drop
-from ui.step_06._drilldown import (
-    _custom_flags,
-    _custom_rule_meta,
-    _failing_mask,
-    _standard_flags,
-)
-from ui.step_06._export import (
-    _reference_columns_for_export,
-    _rule_column_specs,
-)
-from ui.step_06._rule_rows import (
-    STATUS_EVALUATED,
-    custom_rule_rows,
-    standard_rule_rows,
-)
+from ui.step_06._drilldown import _custom_flags, _custom_rule_meta, _failing_mask
+from ui.step_06._export import _reference_columns_for_export, _rule_column_specs
+from ui.step_06._rule_rows import STATUS_EVALUATED, custom_rule_rows
 from utils.helpers import score_bucket
 
 # Same |Δ| >= 5 pp flag threshold as the dashboard History tab.
 DRIFT_RULE_DELTA_THRESHOLD = 5.0
+
+# Prefix of the per-DQR flag columns (``DQR · ID · Name (w=..%)``).
+RULE_COLUMN_PREFIX = "DQR"
 
 
 # --------------------------------------------------------------- primitives
@@ -77,18 +71,9 @@ def json_native(value: object) -> object:
     return str(value)
 
 
-def _source_label(has_std: bool, has_custom: bool) -> str:
-    if has_std and has_custom:
-        return "Standard + Custom"
-    if has_custom:
-        return "Custom"
-    return "Standard"
-
-
-def _rule_search_terms(rule: Dict) -> str:
-    if rule["kind"] == "std":
-        return f"{rule['cde']} · {rule['dimension']}".lower()
-    return f"{rule['rule_id']} · {rule['name']}".lower()
+def dqr_label(rule: Dict) -> str:
+    """``ID · Name`` - how a DQR is named everywhere in the report."""
+    return f"{rule['rule_id']} · {rule['name']}"
 
 
 # ------------------------------------------------------------ per-DP view
@@ -96,57 +81,44 @@ def _rule_search_terms(rule: Dict) -> str:
 def build_dp_view(code: str, dp, result, cfg, ctx) -> Dict:
     """Everything the per-DP section renderer needs, computed once.
 
-    Flags are evaluated once per DP and reused for fail counts, drill
-    totals and the embedded row store.
+    DQR pass flags are evaluated once per DP and reused for fail counts,
+    drill totals and the embedded row store.
     """
     empty = pd.DataFrame(index=dp.df.index)
-    std_flags = _standard_flags(dp, cfg) if cfg.assignments else empty
-    cust_flags = _custom_flags(dp, cfg) if cfg.custom_assignments else empty
-    all_flags = pd.concat(
-        [f for f in (std_flags, cust_flags) if not f.empty], axis=1,
-    ) if (not std_flags.empty or not cust_flags.empty) else empty
+    flags = _custom_flags(dp, cfg) if cfg.custom_assignments else empty
 
     ref_df = _reference_columns_for_export(dp, cfg)
-    specs = _rule_column_specs(dp.system_code, cfg, std_flags, cust_flags)
-    custom_meta = _custom_rule_meta(cfg, dp.system_code)
-
-    std_rows = [dict(r, kind="std") for r in standard_rule_rows(cfg, result)]
-    cust_rows = []
-    for r in custom_rule_rows(dp.system_code, cfg, result):
-        rule = r["rule"]
-        cust_rows.append(dict(
-            r, kind="custom",
-            source_columns=(effective_required_columns(rule, r["params"])
-                            if rule is not None else {}),
-        ))
-
-    fail_counts: Dict[str, int] = {
-        rid: int((~all_flags[rid]).sum())
-        for rid in all_flags.columns
-    }
-    for row in std_rows + cust_rows:
-        row["fail_count"] = fail_counts.get(row["rule_id"])
-        total = int(result.total_rows)
-        row["pass_count"] = (
-            total - row["fail_count"] if row["fail_count"] is not None else None
-        )
+    # DQRs only: no Standard flags -> no ``STD ·`` columns.
+    specs = _rule_column_specs(dp.system_code, cfg, empty, flags,
+                               custom_prefix=RULE_COLUMN_PREFIX)
+    meta = _custom_rule_meta(cfg, dp.system_code)
 
     def drill_total(rule_ids: List[str]) -> Optional[int]:
-        mask = _failing_mask(all_flags, rule_ids)
+        mask = _failing_mask(flags, rule_ids)
         return None if mask is None else int(mask.sum())
 
-    for row in std_rows + cust_rows:
-        row["drill_total"] = (
-            drill_total([row["rule_id"]])
-            if row["status"] == STATUS_EVALUATED else None
-        )
+    total = int(result.total_rows)
+    dqrs: List[Dict] = []
+    for r in custom_rule_rows(dp.system_code, cfg, result):
+        rule = r["rule"]
+        rid = r["rule_id"]
+        fail = int((~flags[rid]).sum()) if rid in flags.columns else None
+        dqrs.append(dict(
+            r,
+            source_columns=(effective_required_columns(rule, r["params"])
+                            if rule is not None else {}),
+            fail_count=fail,
+            pass_count=(total - fail) if fail is not None else None,
+            drill_total=(drill_total([rid])
+                         if r["status"] == STATUS_EVALUATED else None),
+        ))
 
-    store_rows, store_json = _build_store(
-        dp, result, ref_df, specs, std_flags, cust_flags,
-        custom_meta, cfg, ctx,
-    )
+    store_rows, store_json = _build_store(dp, result, ref_df, specs, flags,
+                                          meta, ctx)
+    cde_items, cdes_without_dqr = _cde_items(cfg, result, dqrs, meta,
+                                             drill_total)
 
-    view = {
+    return {
         "code": code,
         "name": dp.name,
         "result": result,
@@ -158,28 +130,23 @@ def build_dp_view(code: str, dp, result, cfg, ctx) -> Dict:
         "source_tables": list(dp.source_tables or []),
         "n_rows": int(dp.row_count),
         "n_cols": int(dp.column_count),
-        "std_rules": std_rows,
-        "custom_rules": cust_rows,
-        "cde_items": _cde_items(cfg, result, std_rows, cust_rows,
-                                custom_meta, drill_total),
-        "dim_items": _dim_items(result, std_rows, cust_rows,
-                                custom_meta, drill_total),
+        "dqrs": dqrs,
+        "not_run": [r for r in dqrs if r["status"] != STATUS_EVALUATED],
+        "n_cdes": len(cfg.cdes),
+        "cde_items": cde_items,
+        "cdes_without_dqr": cdes_without_dqr,
+        "dim_items": _dim_items(result, dqrs, meta, drill_total),
         "columns": [str(c) for c in dp.df.columns],
         "ref_columns": [str(c) for c in ref_df.columns],
         "rule_specs": specs,
         "store_rows": store_rows,
         "store_json": store_json,
-        "history": build_history_view(code, cust_rows),
+        "history": build_history_view(code, dqrs),
     }
-    view["not_run"] = (
-        [r for r in std_rows if r["status"] != STATUS_EVALUATED]
-        + [r for r in cust_rows if r["status"] != STATUS_EVALUATED]
-    )
-    return view
 
 
-def _build_store(dp, result, ref_df, specs, std_flags, cust_flags,
-                 custom_meta, cfg, ctx) -> Tuple[List[Dict], Dict]:
+def _build_store(dp, result, ref_df, specs, flags, meta, ctx
+                 ) -> Tuple[List[Dict], Dict]:
     """The per-DP row store: the ``row_store`` lowest-scoring rows, each
     embedded ONCE, plus the metadata the client-side drill-downs need."""
     scores = result.row_scores
@@ -197,96 +164,90 @@ def _build_store(dp, result, ref_df, specs, std_flags, cust_flags,
                               result.threshold_yellow),
             "v": [json_native(df.at[idx, c]) for c in dp.df.columns],
             "r": [json_native(refs.at[idx, c]) for c in ref_df.columns],
-            "f": [
-                int(bool(
-                    (std_flags if rid in std_flags.columns else cust_flags)
-                    .at[idx, rid]
-                ))
-                for rid, _ in specs
-            ],
+            "f": [int(bool(flags.at[idx, rid])) for rid, _ in specs],
         })
-
-    rules_meta: Dict[str, Dict] = {}
-    for a in cfg.assignments:
-        rules_meta[a.rule_id] = {
-            "cdes": [a.cde_column], "dim": a.dimension, "kind": "std",
-        }
-    for rid, (cols, rtype) in custom_meta.items():
-        rules_meta[rid] = {"cdes": list(cols), "dim": rtype, "kind": "custom"}
 
     store_json = {
         "columns": [str(c) for c in dp.df.columns],
         "refColumns": [str(c) for c in ref_df.columns],
         "ruleColumns": [{"id": rid, "header": header} for rid, header in specs],
-        "rules": {rid: rules_meta[rid] for rid, _ in specs if rid in rules_meta},
+        "rules": {
+            rid: {"cdes": list(meta[rid][0]), "dim": meta[rid][1]}
+            for rid, _ in specs if rid in meta
+        },
         "store": rows,
     }
     return rows, store_json
 
 
-def _cde_items(cfg, result, std_rows, cust_rows, custom_meta,
-               drill_total) -> List[Dict]:
-    """By-CDE list items, ascending score (same blend as the engine:
-    Standard rules via their CDE, Custom rules via the columns they read)."""
+def _cde_items(cfg, result, dqrs: List[Dict], meta,
+               drill_total: Callable) -> Tuple[List[Dict], List[str]]:
+    """By-CDE list items (ascending score) + the CDEs no DQR reads.
+
+    A CDE is tied to every DQR whose required columns include it (the
+    same roll-up ``compute_scorecard`` uses); CDEs without a DQR are not
+    scored - they are returned separately for the intro line.
+    """
     items: List[Dict] = []
-    for cde, score in sorted(result.cde_scores.items(), key=lambda kv: kv[1]):
-        tied = [r for r in std_rows if r["cde"] == cde]
-        tied += [
-            r for r in cust_rows
-            if cde in (custom_meta.get(r["rule_id"], ((), ""))[0])
-        ]
-        items.append(_group_item(
-            name=cde, score=float(score), tied=tied, result=result,
-            drill_total=drill_total,
-        ))
+    without: List[str] = []
+    for cde in cfg.cdes:
+        tied = [r for r in dqrs if cde in meta.get(r["rule_id"], ((), ""))[0]]
+        if not tied:
+            without.append(cde)
+            continue
+        items.append(_group_item(cde, result.cde_scores.get(cde), tied,
+                                 result, drill_total))
+    items.sort(key=_item_sort_key)
+    return items, without
+
+
+def _dim_items(result, dqrs: List[Dict], meta, drill_total: Callable
+               ) -> List[Dict]:
+    """By-Dimension list items (a DQR counts via its type). Dimensions the
+    engine did not score (their only DQR was not evaluated) do not appear."""
+    types = {meta[r["rule_id"]][1] for r in dqrs if r["rule_id"] in meta}
+    items: List[Dict] = []
+    for dim, score in result.dimension_scores.items():
+        if dim not in types:
+            continue
+        tied = [r for r in dqrs
+                if meta.get(r["rule_id"], ((), None))[1] == dim]
+        items.append(_group_item(dim, score, tied, result, drill_total))
+    items.sort(key=_item_sort_key)
     return items
 
 
-def _dim_items(result, std_rows, cust_rows, custom_meta,
-               drill_total) -> List[Dict]:
-    """By-Dimension list items (Custom rules count via their type)."""
-    items: List[Dict] = []
-    for dim, score in sorted(result.dimension_scores.items(),
-                             key=lambda kv: kv[1]):
-        tied = [r for r in std_rows if r["dimension"] == dim]
-        tied += [
-            r for r in cust_rows
-            if custom_meta.get(r["rule_id"], ((), None))[1] == dim
-        ]
-        items.append(_group_item(
-            name=dim, score=float(score), tied=tied, result=result,
-            drill_total=drill_total,
-        ))
-    return items
+def _item_sort_key(item: Dict) -> float:
+    # Unscored (no evaluated DQR) first, then ascending score - the same
+    # order the DQR list uses for not-evaluated rules.
+    return -1.0 if item["score"] is None else item["score"]
 
 
-def _group_item(name: str, score: float, tied: List[Dict], result,
-                drill_total) -> Dict:
+def _group_item(name: str, score: Optional[float], tied: List[Dict], result,
+                drill_total: Callable) -> Dict:
     evaluated = [r for r in tied if r["status"] == STATUS_EVALUATED]
-    rule_ids = [r["rule_id"] for r in evaluated]
-    search = " ".join(
-        [str(name).lower()] + [_rule_search_terms(r) for r in tied]
-    )
+    value = float(score) if (evaluated and score is not None) else None
     return {
         "name": name,
-        "score": score,
-        "bucket": score_bucket(score, result.threshold_green,
-                               result.threshold_yellow),
+        "score": value,
+        "bucket": (score_bucket(value, result.threshold_green,
+                                result.threshold_yellow)
+                   if value is not None else None),
         "tied": tied,
+        "rule_ids": [r["rule_id"] for r in tied],
         "n_evaluated": len(evaluated),
         "n_tied": len(tied),
-        "source": _source_label(
-            any(r["kind"] == "std" for r in tied),
-            any(r["kind"] == "custom" for r in tied),
+        "total": (drill_total([r["rule_id"] for r in evaluated])
+                  if evaluated else None),
+        "search": " ".join(
+            [str(name).lower()] + [dqr_label(r).lower() for r in tied]
         ),
-        "total": drill_total(rule_ids) if rule_ids else None,
-        "search": search,
     }
 
 
 # ---------------------------------------------------------------- history
 
-def build_history_view(code: str, cust_rows: List[Dict]) -> Dict:
+def build_history_view(code: str, dqrs: List[Dict]) -> Dict:
     """Persisted-run history + what-changed drift for one DP.
 
     Returns ``{"runs": [...], "drop": ..., "drift": ...}`` where ``runs``
@@ -319,18 +280,21 @@ def build_history_view(code: str, cust_rows: List[Dict]) -> Dict:
 
         raw = compute_drift(payloads[-2], payloads[-1],
                             rule_delta_threshold=DRIFT_RULE_DELTA_THRESHOLD)
-        name_map = {
-            r["rule_id"]: f"{r['rule_id']} · {r['name']}" for r in cust_rows
-        }
+        name_map = {r["rule_id"]: dqr_label(r) for r in dqrs}
         flagged_total = 0
         tables: Dict[str, List[Dict]] = {}
         for label, table_key, key_col in (
-            ("Rules", "rule_table", "rule_id"),
+            ("DQRs", "rule_table", "rule_id"),
             ("CDEs", "cde_table", "cde"),
             ("Dimensions", "dimension_table", "dimension"),
         ):
             table = raw[table_key]
             flagged = table[table["flagged"]] if not table.empty else table
+            if key_col == "rule_id" and not flagged.empty:
+                # DQRs only: Standard rule ids are ``CDE::Dimension``.
+                flagged = flagged[
+                    ~flagged[key_col].astype(str).str.contains("::", regex=False)
+                ]
             flagged_total += len(flagged)
             tables[label] = [
                 {
