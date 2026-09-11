@@ -32,7 +32,12 @@ from config.settings import SETTINGS
 from src import report_store
 from src.persistence import current_username, log_event
 from src.run_history import config_fingerprint, result_fingerprint
-from ui.step_06.report import ReportArtifacts, ReportContext, build_report
+from ui.step_06.report import (
+    ReportArtifacts,
+    ReportContext,
+    build_report,
+    split_zip,
+)
 from ui.step_06.report import (
     build_executive_report_html as _pure_build_executive_report_html,
 )
@@ -198,6 +203,21 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
              "configuration. Works offline from file://.",
     ):
         log_event("export", {"format": "executive_html"}, domain_code)
+
+    if st.download_button(
+        "📦 Data Quality Report (HTML + CSS + JS, zip)",
+        data=split_zip(artifacts),
+        file_name=artifacts.filenames["split_zip"],
+        mime="application/zip",
+        key="dl_exec_report_split",
+        help="The same interactive report as three files that reference "
+             "each other by name - for SharePoint, which strips inline "
+             "styles and scripts from .html files. Unzip the three files "
+             "into one folder and link the .html (file names carry no "
+             "timestamp, so a fixed link keeps pointing at the latest "
+             "upload).",
+    ):
+        log_event("export", {"format": "executive_split_zip"}, domain_code)
 
     if artifacts.pdf is not None:
         if st.download_button(

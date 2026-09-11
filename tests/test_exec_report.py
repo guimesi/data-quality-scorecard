@@ -53,8 +53,12 @@ from ui.step_06.report import (
     build_report,
     convert,
     render_interactive,
+    render_interactive_split,
     render_pdf_html,
+    split_zip,
 )
+from ui.step_06.report.interactivity import REPORT_JS as REPORT_JS_TEXT
+from ui.step_06.report.styles import REPORT_CSS as REPORT_CSS_TEXT
 
 # ================================================================ helpers
 
@@ -725,6 +729,101 @@ def test_fully_self_contained_both_editions():
         assert "@font-face" not in text
 
 
+# ============================================== split edition (HTML+CSS+JS)
+
+
+def test_split_edition_is_three_files_referencing_each_other():
+    """SharePoint strips inline <style>/<script> from .html files but
+    serves .css/.js untouched: the split edition keeps the body and moves
+    the stylesheet, the runtime and the JSON payload to side-car files
+    referenced by *relative* name (same folder)."""
+    dp, cfg, result = _fixture()
+    art = _artifacts(dp, cfg, result)
+    html = art.split["html"].decode("utf-8")
+    css = art.split["css"].decode("utf-8")
+    js = art.split["js"].decode("utf-8")
+
+    assert html.startswith("<!DOCTYPE html>")
+    assert '<link rel="stylesheet" href="dq_scorecard_report_COST_ESTIMATE.css">' in html
+    assert html.rstrip().endswith(
+        '<script src="dq_scorecard_report_COST_ESTIMATE.js"></script>\n</body></html>')
+    assert "<style" not in html and "<script>" not in html
+    assert 'id="report-data"' not in html          # payload lives in the .js
+    # No other external reference: the folder is all it needs.
+    assert not re.search(r'(href|src)="(https?:)?//', html)
+
+    assert css == REPORT_CSS_TEXT
+    assert js.endswith(REPORT_JS_TEXT)             # runtime verbatim
+    assert js.startswith("(function(){var s=document.createElement('script');")
+    assert "s.id='report-data'" in js and "JSON.stringify({" in js
+    assert "document.body.appendChild(s)" in js
+
+    # Same body as the self-contained edition (only head/tail differ).
+    body = lambda t: t.split("<body>", 1)[1].split("<script", 1)[0]  # noqa: E731
+    assert body(html) == body(art.html.decode("utf-8"))
+
+
+def test_split_edition_payload_matches_inline_island_and_is_escaped():
+    dp, cfg, result = _fixture(pd.DataFrame({
+        "PLANVIEW_ID": ["</script><script>alert(1)</script>", "PV-2"],
+        "CODE_OF_RESOURCE": ["LOC-A", None],
+        "ESTIMATE_COST": [1.0, 2.0],
+        "BASE_COST": [1.0, 1.0],
+    }))
+    model = build_model(_CTX, {"EPT": result}, {"EPT": dp}, {"EPT": cfg})
+    split = render_interactive_split(model)
+    inline = render_interactive(model)
+    island = re.search(r'<script type="application/json" id="report-data">(.*?)</script>',
+                       inline, re.S).group(1)
+    assert island in split["js"]                   # identical payload bytes
+    assert "</script>" not in split["js"].split(REPORT_JS_TEXT)[0]
+    payload = json.loads(island)
+    assert any("</script>" in str(r.get("v")) for r in payload["dps"]["EPT"]["store"])
+    assert "</script><script>alert(1)" not in split["html"]
+
+
+def test_split_zip_contains_exactly_the_three_files():
+    import io
+    import zipfile
+
+    dp, cfg, result = _fixture()
+    art = _artifacts(dp, cfg, result)
+    with zipfile.ZipFile(io.BytesIO(split_zip(art))) as zf:
+        assert sorted(zf.namelist()) == [
+            "dq_scorecard_report_COST_ESTIMATE.css",
+            "dq_scorecard_report_COST_ESTIMATE.html",
+            "dq_scorecard_report_COST_ESTIMATE.js",
+        ]
+        assert zf.read("dq_scorecard_report_COST_ESTIMATE.html") == art.split["html"]
+        assert zf.read("dq_scorecard_report_COST_ESTIMATE.css") == art.split["css"]
+        assert zf.read("dq_scorecard_report_COST_ESTIMATE.js") == art.split["js"]
+
+
+@pytest.mark.skipif(convert.find_chromium() is None,
+                    reason="no headless Chromium on this machine")
+def test_real_chromium_loads_split_edition_from_a_folder(tmp_path):
+    """Opened from a folder holding the three files, Chromium applies the
+    stylesheet and the runtime boots (html.js class, data island created
+    by the .js file) exactly like the self-contained edition."""
+    import subprocess
+
+    dp, cfg, result = _fixture()
+    art = _artifacts(dp, cfg, result)
+    for kind in ("html", "css", "js"):
+        (tmp_path / art.filenames[f"split_{kind}"]).write_bytes(art.split[kind])
+    page = tmp_path / art.filenames["split_html"]
+    out = subprocess.run(
+        [convert.find_chromium(), "--headless", "--disable-gpu", "--no-sandbox",
+         "--virtual-time-budget=2000", "--dump-dom", page.as_uri()],
+        capture_output=True, text=True, timeout=120, check=True,
+    ).stdout
+    assert '<html lang="en" class="js">' in out
+    assert 'id="report-data"' in out
+    # A style-dependent computed layout is not observable in dump-dom; the
+    # stylesheet link must at least be present and unchanged.
+    assert 'href="dq_scorecard_report_COST_ESTIMATE.css"' in out
+
+
 # ==================================================================== print
 
 
@@ -1017,8 +1116,13 @@ def test_artifacts_contract_filenames_and_metadata():
         "interactive": "dq_scorecard_report_COST_ESTIMATE_20260903_211842.html",
         "pdf": "dq_scorecard_report_COST_ESTIMATE_20260903_211842.pdf",
         "pdf_html": "dq_scorecard_report_COST_ESTIMATE_20260903_211842_print.html",
+        "split_html": "dq_scorecard_report_COST_ESTIMATE.html",
+        "split_css": "dq_scorecard_report_COST_ESTIMATE.css",
+        "split_js": "dq_scorecard_report_COST_ESTIMATE.js",
+        "split_zip": "dq_scorecard_report_COST_ESTIMATE_20260903_211842_split.zip",
     }
     assert art.filename == art.filenames["interactive"]
+    assert set(art.split) == {"html", "css", "js"}
 
     meta = art.metadata
     assert meta["dp_codes"] == ["EPT"]
@@ -1145,19 +1249,24 @@ def test_download_buttons_store_and_hosted_link(monkeypatch, local_report_store)
 
     labels = [c.args[0] for c in fake.download_button.call_args_list]
     assert labels == ["📑 Data Quality Report (HTML)",
+                      "📦 Data Quality Report (HTML + CSS + JS, zip)",
                       "📄 Data Quality Report (PDF)"]
     html_kwargs = fake.download_button.call_args_list[0].kwargs
     assert html_kwargs["data"].decode("utf-8").startswith("<!DOCTYPE html>")
     assert html_kwargs["file_name"].startswith("dq_scorecard_report_COST_ESTIMATE_")
     assert html_kwargs["file_name"].endswith(".html")
-    pdf_kwargs = fake.download_button.call_args_list[1].kwargs
+    zip_kwargs = fake.download_button.call_args_list[1].kwargs
+    assert zip_kwargs["data"].startswith(b"PK")
+    assert zip_kwargs["mime"] == "application/zip"
+    assert zip_kwargs["file_name"].endswith("_split.zip")
+    pdf_kwargs = fake.download_button.call_args_list[2].kwargs
     assert pdf_kwargs["data"] == _FAKE_PDF
     assert pdf_kwargs["mime"] == "application/pdf"
     assert pdf_kwargs["file_name"].endswith(".pdf")
 
     events = list_events(event_type="export")
-    assert [e["payload"]["format"] for e in events] == ["executive_html",
-                                                        "executive_pdf"]
+    assert [e["payload"]["format"] for e in events] == [
+        "executive_html", "executive_split_zip", "executive_pdf"]
     assert events[0]["domain_code"] == "cost_estimate"
 
     # Stored once, hosted link shown with the absolute app origin.
@@ -1210,14 +1319,15 @@ def test_wrapper_offers_print_html_when_no_converter(monkeypatch,
     er._render_executive_report_download({"EPT": result})
     labels = [c.args[0] for c in fake.download_button.call_args_list]
     assert labels == ["📑 Data Quality Report (HTML)",
+                      "📦 Data Quality Report (HTML + CSS + JS, zip)",
                       "🖨️ PDF edition (print-ready HTML)"]
-    print_kwargs = fake.download_button.call_args_list[1].kwargs
+    print_kwargs = fake.download_button.call_args_list[2].kwargs
     assert print_kwargs["data"].decode("utf-8").startswith("<!DOCTYPE html>")
     assert print_kwargs["file_name"].endswith("_print.html")
     captions = " ".join(c.args[0] for c in fake.caption.call_args_list)
     assert "no chromium" in captions
     assert [e["payload"]["format"] for e in list_events(event_type="export")] == \
-        ["executive_html", "executive_pdf_html"]
+        ["executive_html", "executive_split_zip", "executive_pdf_html"]
     assert not (local_report_store / f"{fake.session_state['_dq_report_cache']['artifacts'].run_id}.pdf").exists()
 
 

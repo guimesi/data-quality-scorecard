@@ -103,7 +103,13 @@ class ReportArtifacts:
     - ``metadata``: everything a publisher needs to fill library
       columns (domain, DP codes, scores, statuses, project filter,
       config hashes, caps, page count).
-    - ``filenames``: ``{"interactive": ..., "pdf": ..., "pdf_html": ...}``.
+    - ``filenames``: ``{"interactive": ..., "pdf": ..., "pdf_html": ...,
+      "split_html": ..., "split_css": ..., "split_js": ..., "split_zip": ...}``.
+    - ``split``: the interactive edition as three files (``{"html":
+      bytes, "css": bytes, "js": bytes}``) referencing each other by
+      relative file name - for hosts that sanitise inline styles and
+      scripts in ``.html`` files (SharePoint) but serve ``.css``/``.js``
+      untouched. Empty when the split edition was not rendered.
     """
     run_id: str
     domain_code: str
@@ -113,6 +119,7 @@ class ReportArtifacts:
     pdf_html: bytes
     metadata: Dict[str, Any] = field(default_factory=dict)
     filenames: Dict[str, str] = field(default_factory=dict)
+    split: Dict[str, bytes] = field(default_factory=dict)
 
     # -- compatibility with the previous single-artefact contract --------
     @property

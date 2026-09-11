@@ -47,7 +47,7 @@ def main() -> int:
     from src.one_click import run_one_click
     from src.persistence import current_username, save_run
     from src.run_history import record_run_if_new
-    from ui.step_06.report import ReportContext, build_report
+    from ui.step_06.report import ReportContext, build_report, split_zip
 
     systems = [s.strip() for s in args.systems.split(",") if s.strip()]
     result = run_one_click(args.domain, systems)
@@ -88,9 +88,17 @@ def main() -> int:
     (out / "dq_scorecard_pdf.html").write_bytes(artifacts.pdf_html)
     if artifacts.pdf:
         (out / "dq_scorecard_report.pdf").write_bytes(artifacts.pdf)
+    split_dir = out / "split"
+    split_dir.mkdir(exist_ok=True)
+    for kind in ("html", "css", "js"):
+        (split_dir / artifacts.filenames[f"split_{kind}"]).write_bytes(
+            artifacts.split[kind])
+    (out / artifacts.filenames["split_zip"]).write_bytes(split_zip(artifacts))
     (out / "metadata.json").write_text(
         json.dumps(artifacts.metadata, indent=2, default=str), encoding="utf-8")
     print(f"interactive: {len(artifacts.html):,} bytes")
+    print(f"split:       {', '.join(artifacts.filenames[f'split_{k}'] for k in ('html', 'css', 'js'))} "
+          f"-> {split_dir}")
     print(f"pdf html:    {len(artifacts.pdf_html):,} bytes "
           f"({artifacts.metadata['pdf_pages']} pages)")
     print(f"pdf:         {len(artifacts.pdf or b''):,} bytes"
