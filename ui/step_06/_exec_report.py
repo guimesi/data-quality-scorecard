@@ -27,7 +27,6 @@ name/signature for existing imports and tests.
 """
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
@@ -76,7 +75,6 @@ def _build_report_context(domain_code: str,
     sample_mode = st.session_state.get("sample_mode")
     saved_project = str(
         st.session_state.get("loaded_project_name", "") or "").strip() or None
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     return ReportContext(
         domain_code=domain_code,
         domain_name=_domain_name(domain_code),
@@ -95,7 +93,7 @@ def _build_report_context(domain_code: str,
         threshold_yellow=(float(first.threshold_yellow) if first is not None
                           else SETTINGS.threshold_yellow),
         saved_project=saved_project,
-        run_id=f"run_{stamp}_{uuid.uuid4().hex[:4]}",
+        # run_id is minted by build_report (<DOMAIN>__<DPs>__<stamp>_<hex>).
         drop_alert_pp=SETTINGS.drop_alert_pp,
     )
 

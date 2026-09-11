@@ -157,8 +157,9 @@ def test_volume_backend_without_path_degrades_to_off(monkeypatch):
 # ----------------------------------------------------------------- volume
 
 class _Entry:
-    def __init__(self, name):
+    def __init__(self, name, is_directory=False):
         self.name = name
+        self.is_directory = is_directory
 
 
 class _Download:
@@ -191,7 +192,11 @@ class _FakeFiles:
         if path not in self.dirs:
             raise NotFound("nope")
         prefix = path + "/"
-        return [_Entry(p[len(prefix):]) for p in self.objects if p.startswith(prefix)]
+        out = [_Entry(p[len(prefix):]) for p in self.objects
+               if p.startswith(prefix) and "/" not in p[len(prefix):]]
+        out += [_Entry(d[len(prefix):], is_directory=True) for d in self.dirs
+                if d.startswith(prefix) and "/" not in d[len(prefix):]]
+        return out
 
 
 class _FakeClient:
@@ -209,9 +214,15 @@ def test_volume_store_roundtrip_via_files_api():
     assert client.files.dirs == ["/Volumes/cat/schema/dq_reports"] * 2
     assert store.get(art.run_id, "html") == art.html
     assert store.get(art.run_id, "pdf") is None
-    assert store.list_run_ids() == [art.run_id]
     assert "/Volumes/cat/schema/dq_reports/run_20260910_120000_ab12.html" \
         in client.files.objects
+    # A minted id is filed under its domain folder; listing covers both.
+    minted = "COST_ESTIMATE__EPT__20260911_120000_ab12"
+    store.put(minted, "metadata", json.dumps({"run_id": minted}).encode())
+    assert client.files.dirs[-1] == "/Volumes/cat/schema/dq_reports/COST_ESTIMATE"
+    assert f"/Volumes/cat/schema/dq_reports/COST_ESTIMATE/{minted}.json" \
+        in client.files.objects
+    assert store.list_run_ids() == [minted, art.run_id]
 
 
 def test_volume_store_requires_a_volume_path():
@@ -275,11 +286,12 @@ class _FakeWorkspace:
             raise NotFound("nope")
         return io.BytesIO(self.objects[path])
 
-    def list(self, path):
+    def list(self, path, recursive=False):
         from databricks.sdk.errors import NotFound
         if path not in self.dirs:
             raise NotFound("nope")
-        return [_WsObj(p) for p in self.objects if p.startswith(path + "/")]
+        return [_WsObj(p) for p in self.objects if p.startswith(path + "/")
+                and (recursive or "/" not in p[len(path) + 1:])]
 
     def delete(self, path, recursive=None):
         from databricks.sdk.errors import NotFound
@@ -318,9 +330,18 @@ def test_workspace_store_roundtrip_via_workspace_api():
     assert client.workspace.dirs == ["/Users/ana@corp.com/dq_reports"]  # mkdirs once
     assert client.workspace.uploads[0] == \
         "/Users/ana@corp.com/dq_reports/run_20260910_120000_ab12.html"
+    minted = "COST_ESTIMATE__ACCE-ADR__20260911_120000_ab12"
+    store.put(minted, "pdf", b"%PDF")
+    store.put(minted, "metadata", json.dumps({"run_id": minted}).encode())
+    assert client.workspace.dirs == ["/Users/ana@corp.com/dq_reports",
+                                     "/Users/ana@corp.com/dq_reports/COST_ESTIMATE"]
+    assert client.workspace.uploads[-1] == \
+        f"/Users/ana@corp.com/dq_reports/COST_ESTIMATE/{minted}.json"
+    assert store.get(minted, "pdf") == b"%PDF"
+    assert store.list_run_ids() == [minted, art.run_id]
     assert store.get(art.run_id, "html") == art.html
     assert store.get(art.run_id, "pdf") is None
-    assert store.list_run_ids() == [art.run_id]
+    assert store.list_run_ids() == [minted, art.run_id]
     store.delete(art.run_id, "html")
     store.delete(art.run_id, "html")            # already gone: no error
     assert store.get(art.run_id, "html") is None
@@ -429,6 +450,35 @@ def test_last_error_and_describe_store(monkeypatch, tmp_path):
     monkeypatch.setattr(rs, "_STORE", ws)
     assert rs.describe_store() == "workspace folder /Users/ana@corp.com/dq_reports"
     rs.reset_report_store()
+
+
+def test_local_store_files_minted_runs_per_domain(monkeypatch, tmp_path):
+    _stored(monkeypatch, tmp_path, keep=0)
+    try:
+        minted = "QUALITY__SQS__20260911_120000_ab12"
+        assert rs.save_artifacts(_artifacts(run_id=minted, domain_code="quality"))
+        assert rs.save_artifacts(_artifacts())                 # legacy id: root
+        root = tmp_path / "reports"
+        assert (root / "QUALITY" / f"{minted}.html").is_file()
+        assert (root / "QUALITY" / f"{minted}.pdf").is_file()
+        assert (root / "run_20260910_120000_ab12.html").is_file()
+        assert rs.load_report(minted, "pdf") == b"%PDF-1.7 x"
+        assert sorted(m["run_id"] for m in rs.list_reports()) == \
+            [minted, "run_20260910_120000_ab12"]
+        assert rs.prune_reports(keep=1) == []                  # one per domain
+        rs.get_report_store().delete(minted, "html")
+        assert not (root / "QUALITY" / f"{minted}.html").exists()
+    finally:
+        rs.reset_report_store()
+
+
+@pytest.mark.parametrize("run_id, folder", [
+    ("COST_ESTIMATE__ACCE-ADR__20260911_120000_ab12", "COST_ESTIMATE"),
+    ("run_20260910_120000_ab12", ""),
+    ("__x", ""),
+])
+def test_run_folder(run_id, folder):
+    assert rs.run_folder(run_id) == folder
 
 
 def test_latest_url_shapes():

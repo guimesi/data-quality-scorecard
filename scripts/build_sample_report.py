@@ -77,7 +77,6 @@ def main() -> int:
         data_scope="sample",
         sample_rows_cap=50000,
         project_filter=[p for p in args.project_filter.split(",") if p],
-        run_id=f"run_{now.strftime('%Y%m%d_%H%M%S')}_demo",
     )
     artifacts = build_report(ctx, result.scorecards, result.data_products,
                              result.configs, want_pdf=not args.no_pdf)

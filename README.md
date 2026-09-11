@@ -278,8 +278,9 @@ scope: DQRs only) once per run and caches them in the session:
 SharePoint sanitises `.html` files, so the interactive edition is also
 **hosted by the app**: every run's artefacts go to the report store
 (`DQS_REPORT_STORE=local|workspace|volume|off`; in production a folder of
-workspace files shared with the app's service principal, no admin
-needed) and `server.py` (`st.App`) serves them at `GET /reports/<run_id>`
+workspace files shared with the app's service principal as Can Manage,
+no admin needed; one sub-folder per domain, files named
+`<DOMAIN>__<DPs>__<stamp>_<hex>.<ext>`) and `server.py` (`st.App`) serves them at `GET /reports/<run_id>`
 (plus `/reports/<run_id>/pdf`, an index at `/reports`, and the fixed
 `/reports/latest/<DOMAIN>` link that always redirects to the newest run
 of a domain - what a SharePoint page or an Airtable button points at).

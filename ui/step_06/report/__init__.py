@@ -30,6 +30,7 @@ contract). The builder never touches Streamlit -
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -61,6 +62,8 @@ __all__ = [
     "build_model",
     "build_report",
     "filenames_for",
+    "mint_run_id",
+    "run_id_domain",
     "render_interactive",
     "render_pdf_html",
 ]
@@ -92,13 +95,49 @@ def filenames_for(ctx: ReportContext) -> Dict[str, str]:
     }
 
 
+_RUN_ID_MAX = 80          # src.report_store.is_valid_run_id
+_RUN_ID_MAX_DPS = 4       # codes listed before "-etc"
+
+
+def _token(value: str) -> str:
+    """``[A-Za-z0-9_-]`` only, never a double underscore (the segment
+    separator) - the run id must stay a safe, parseable path segment."""
+    token = re.sub(r"[^A-Za-z0-9_-]+", "-", str(value or ""))
+    token = re.sub(r"_{2,}", "_", token)
+    return token.strip("-_")
+
+
+def mint_run_id(domain_code: str, dp_codes, now: Optional[datetime] = None
+                ) -> str:
+    """``<DOMAIN>__<DP1-DP2>__<YYYYMMDD_HHMMSS>_<hex4>`` - self-describing,
+    so the stored files read as "which domain, which systems, when" in
+    the workspace browser, and the store can file each run under its
+    domain folder (the segment before the first ``__``)."""
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%d_%H%M%S")
+    domain = _token((domain_code or "report").upper()) or "REPORT"
+    codes = [_token(str(c).upper()) for c in (dp_codes or []) if _token(str(c))]
+    if len(codes) > _RUN_ID_MAX_DPS:
+        codes = codes[:_RUN_ID_MAX_DPS] + ["etc"]
+    dps = "-".join(codes) or "NA"
+    tail = f"__{stamp}_{uuid.uuid4().hex[:4]}"
+    budget = _RUN_ID_MAX - len(domain) - 2 - len(tail)
+    if len(dps) > budget:
+        dps = dps[:max(budget, 2)].rstrip("-")
+    return f"{domain}__{dps}{tail}"
+
+
+def run_id_domain(run_id: str) -> str:
+    """The domain segment of a minted run id (``""`` for legacy ids)."""
+    head, sep, _ = (run_id or "").partition("__")
+    return head if sep else ""
+
+
 def _ensure_run_id(ctx: ReportContext) -> ReportContext:
     """Every artefact set needs an identifier (it keys the report store
     and the ``/reports/<run_id>`` link); mint one when the caller did not."""
     if ctx.run_id:
         return ctx
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    return replace(ctx, run_id=f"run_{stamp}_{uuid.uuid4().hex[:4]}")
+    return replace(ctx, run_id=mint_run_id(ctx.domain_code, ctx.dp_codes))
 
 
 def render_interactive(model: ReportModel) -> str:

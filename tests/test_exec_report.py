@@ -410,7 +410,7 @@ def test_unset_metadata_renders_dashes_never_invented():
     assert footer.count("—") == 1                        # generated-by
     # A run identifier is minted (it keys the store / hosted link) and is
     # the same everywhere.
-    assert art.run_id.startswith("run_")
+    assert re.fullmatch(r"COST_ESTIMATE__EPT__\d{8}_\d{6}_[0-9a-f]{4}", art.run_id)
     assert f"<code>{art.run_id}</code>" in footer
     assert art.metadata["run_id"] == art.run_id
     assert "<h1>Data Quality Scorecard Report - cost_estimate</h1>" in html
@@ -1087,6 +1087,31 @@ def test_real_chromium_renders_mixed_orientation_pdf():
     assert sum(1 for w in widths if w < 700) == len(boxes) - 2
 
 
+@pytest.mark.parametrize("domain, dps, expected_head", [
+    ("cost_estimate", ["ACCE", "ADR"], "COST_ESTIMATE__ACCE-ADR__"),
+    ("quality", [], "QUALITY__NA__"),
+    ("", ["a b", "c/d"], "REPORT__A-B-C-D__"),
+    ("cost_estimate", ["A", "B", "C", "D", "E", "F"], "COST_ESTIMATE__A-B-C-D-etc__"),
+])
+def test_mint_run_id_is_self_describing_and_safe(domain, dps, expected_head):
+    from src.report_store import is_valid_run_id, run_folder
+    from ui.step_06.report import mint_run_id, run_id_domain
+
+    run_id = mint_run_id(domain, dps)
+    assert run_id.startswith(expected_head)
+    assert is_valid_run_id(run_id)
+    assert run_id_domain(run_id) == run_folder(run_id) == expected_head.split("__")[0]
+
+
+def test_mint_run_id_stays_within_the_80_char_limit():
+    from src.report_store import is_valid_run_id
+    from ui.step_06.report import mint_run_id
+
+    run_id = mint_run_id("a_very_long_domain_code_name_indeed_x",
+                         ["SYSTEMCODE1", "SYSTEMCODE2", "SYSTEMCODE3", "SYSTEMCODE4"])
+    assert len(run_id) <= 80 and is_valid_run_id(run_id)
+
+
 def test_compat_alias_returns_bytes():
     dp, cfg, result = _fixture()
     for fn in (er._build_executive_report_html, build_executive_report_html):
@@ -1167,8 +1192,8 @@ def test_download_buttons_store_and_hosted_link(monkeypatch, local_report_store)
     cache = fake.session_state["_dq_report_cache"]
     art = cache["artifacts"]
     assert cache["stored"] is True
-    assert (local_report_store / f"{art.run_id}.html").exists()
-    assert (local_report_store / f"{art.run_id}.pdf").exists()
+    assert (local_report_store / "COST_ESTIMATE" / f"{art.run_id}.html").exists()
+    assert (local_report_store / "COST_ESTIMATE" / f"{art.run_id}.pdf").exists()
     caption = fake.caption.call_args.args[0]
     assert f"https://dq-app.example.databricksapps.com/reports/{art.run_id}" in caption
     assert art.metadata["project_filter"] == ["PV-1"]

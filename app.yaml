@@ -47,8 +47,9 @@ env:
   # and served by the app at /reports/<run_id> and at the fixed link
   # /reports/latest/<DOMAIN> - what SharePoint pages / Airtable buttons
   # point at. Create the folder in your workspace and share it with the
-  # app's service principal ("Can Edit"); no admin or Unity Catalog
-  # object is involved. Replace <owner> with the workspace user (email)
+  # app's service principal ("Can Manage"); no admin or Unity Catalog
+  # object is involved. One sub-folder per domain is created; files are
+  # named <DOMAIN>__<DPs>__<stamp>_<hex>.<ext>. Replace <owner> with the workspace user (email)
   # who owns the folder. Alternatives: "volume" (+ DQS_REPORT_VOLUME, needs
   # a UC admin, see deploy/databricks/03_report_volume.sql) or "off".
   - name: DQS_REPORT_STORE

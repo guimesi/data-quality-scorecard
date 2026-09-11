@@ -52,7 +52,8 @@ resource mapping).
       `Workspace → Users → <you> → dq_reports`.
    2. On that folder choose **Share** and add the app's service principal
       (the `app-xxxx ...` identity shown on the app page) with **Can
-      Edit**. That is the only permission the store needs.
+      Manage** (verified: *Can Edit* is not enough for the Workspace API
+      to create the per-domain sub-folders and files).
    3. In `app.yaml` set `DQS_REPORT_WORKSPACE_DIR` to the folder
       (`/Workspace/Users/<you>/dq_reports`); `DQS_REPORT_STORE` is already
       `workspace`.
@@ -60,7 +61,11 @@ resource mapping).
    (index at `/reports`) and the newest run of a domain at the fixed link
    `https://<app-url>/reports/latest/<DOMAIN>` (`/pdf` for the PDF) - what
    to paste in SharePoint or behind an Airtable button. Files also appear
-   in the folder, so the PDF can be downloaded from the workspace browser.
+   in the folder, so the PDF can be downloaded from the workspace browser:
+   one sub-folder per domain, files named
+   `<DOMAIN>__<DP1-DP2>__<YYYYMMDD_HHMMSS>_<hex>.html|.pdf|.print.html|.json`
+   (the run id), so "which domain, which systems, when" is readable at a
+   glance.
    Retention: `DQS_REPORT_KEEP_RUNS` newest runs per domain (default 30).
    Per-file limit of the Workspace API: 10 MB.
    Alternative with a Unity Catalog admin: `DQS_REPORT_STORE=volume` +
@@ -135,7 +140,7 @@ resource mapping).
       `Sites.Selected`, write grant on the target site, secret resource
       `sharepoint-client-secret`, `SHAREPOINT_*` values in `app.yaml`
 - [ ] Report store: create the `dq_reports` workspace folder, share it
-      with the app's service principal (Can Edit), set
+      with the app's service principal (Can Manage), set
       `DQS_REPORT_WORKSPACE_DIR` (or `03_report_volume.sql` + `volume`,
       or `DQS_REPORT_STORE=off`)
 - [ ] Decide on the PDF edition: print-ready HTML (default) or a

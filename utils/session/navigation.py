@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import Callable, Dict, List
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from config.dqr_sources import SOURCE_CUSTOM, SOURCE_STANDARD
 from utils.session.state import APP_MODE_ONE_CLICK, APP_MODE_STEP_BY_STEP, STEPS
@@ -89,16 +88,22 @@ def consume_scroll_to_top() -> None:
     if not st.session_state.get(_SCROLL_TO_TOP_KEY):
         return
     st.session_state[_SCROLL_TO_TOP_KEY] = False
-    components.html(
+    # ``st.html`` runs the script in the host document itself (no iframe),
+    # so the window and Streamlit's scrolling main section are reached
+    # directly. Replaces the deprecated ``st.components.v1.html``.
+    st.html(
         """
         <script>
-            // The component runs in an iframe sharing origin with the host
-            // page, so we can scroll the parent window directly.
-            window.parent.scrollTo({top: 0, left: 0, behavior: 'instant'});
+            (function () {
+                var opts = {top: 0, left: 0, behavior: 'instant'};
+                window.scrollTo(opts);
+                var main = document.querySelector('[data-testid="stMain"]')
+                    || document.querySelector('section.main');
+                if (main) { main.scrollTo(opts); }
+            })();
         </script>
         """,
-        height=0,
-        width=0,
+        unsafe_allow_javascript=True,
     )
 
 

@@ -11,6 +11,12 @@ one ``run_id`` as four objects:
 - ``<run_id>.print.html`` print-ready HTML (the PDF edition's source)
 - ``<run_id>.json``      metadata (publisher columns, filenames)
 
+Minted run ids are self-describing -
+``<DOMAIN>__<DP1-DP2>__<YYYYMMDD_HHMMSS>_<hex4>`` - and every backend
+files a run under ``<DOMAIN>/`` (:func:`run_folder`), so the store reads
+as one folder per domain with "which systems, when" in each file name.
+Legacy ``run_...`` ids stay at the root.
+
 Four interchangeable backends selected by ``SETTINGS.report_store``
 (``DQS_REPORT_STORE``):
 
@@ -21,7 +27,7 @@ Four interchangeable backends selected by ``SETTINGS.report_store``
   ``/Workspace/Users/<you>/dq_reports``) through the Workspace API. The
   production backend when no Unity Catalog admin is available: the folder
   owner creates it and shares it with the app's service principal ("Can
-  Edit") - no GRANT, no Volume. Files show up in the workspace browser, a
+  Manage") - no GRANT, no Volume. Files show up in the workspace browser, a
   scheduled job writes there with plain file I/O. Per-file cap: 10 MB
   (Workspace import API).
 - ``volume``    - a Unity Catalog Volume (``SETTINGS.report_volume_path``,
@@ -81,6 +87,30 @@ def _object_name(run_id: str, kind: str) -> str:
     return f"{run_id}{KINDS[kind]['suffix']}"
 
 
+def run_folder(run_id: str) -> str:
+    """Sub-folder of a run inside the store: the domain segment of a
+    minted id (``COST_ESTIMATE__ACCE-ADR__20260911_173025_ab12`` ->
+    ``COST_ESTIMATE``); ``""`` (the store root) for legacy ``run_...`` ids."""
+    head, sep, _ = (run_id or "").partition("__")
+    return head if sep and head else ""
+
+
+def _object_rel_path(run_id: str, kind: str) -> str:
+    """``<DOMAIN>/<run_id><suffix>`` or ``<run_id><suffix>``."""
+    name = _object_name(run_id, kind)
+    folder = run_folder(run_id)
+    return f"{folder}/{name}" if folder else name
+
+
+def _run_id_of(name: str) -> Optional[str]:
+    """``<run_id>.json`` -> ``run_id`` (metadata objects only)."""
+    suffix = KINDS["metadata"]["suffix"]
+    base = name.rsplit("/", 1)[-1]
+    if base.endswith(suffix) and is_valid_run_id(base[:-len(suffix)]):
+        return base[:-len(suffix)]
+    return None
+
+
 # =============================================================================
 # Backends
 # =============================================================================
@@ -92,24 +122,23 @@ class LocalReportStore:
         self.root = Path(root)
 
     def put(self, run_id: str, kind: str, data: bytes) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / _object_name(run_id, kind)).write_bytes(data)
+        path = self.root / _object_rel_path(run_id, kind)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
 
     def get(self, run_id: str, kind: str) -> Optional[bytes]:
-        path = self.root / _object_name(run_id, kind)
+        path = self.root / _object_rel_path(run_id, kind)
         return path.read_bytes() if path.is_file() else None
 
     def list_run_ids(self) -> List[str]:
         if not self.root.is_dir():
             return []
         suffix = KINDS["metadata"]["suffix"]
-        return sorted(
-            p.name[:-len(suffix)] for p in self.root.glob(f"*{suffix}")
-            if is_valid_run_id(p.name[:-len(suffix)])
-        )
+        found = [_run_id_of(p.name) for p in self.root.rglob(f"*{suffix}")]
+        return sorted(r for r in found if r)
 
     def delete(self, run_id: str, kind: str) -> None:
-        path = self.root / _object_name(run_id, kind)
+        path = self.root / _object_rel_path(run_id, kind)
         if path.is_file():
             path.unlink()
 
@@ -121,7 +150,7 @@ class WorkspaceReportStore:
     (``/Workspace/Users/<owner>/dq_reports`` or the API form without the
     ``/Workspace`` prefix). Identity is resolved by ``databricks.sdk``
     like the SQL client; the folder owner shares it with that identity
-    ("Can Edit") - a user-level action, no admin involved.
+    ("Can Manage") - a user-level action, no admin involved.
 
     Uploads use ``ImportFormat.AUTO`` so ``.html`` / ``.pdf`` / ``.json``
     land as plain workspace files (not notebooks); downloads use
@@ -140,7 +169,7 @@ class WorkspaceReportStore:
             )
         self.directory = api_path
         self._client = client
-        self._dir_ready = False
+        self._ready_dirs: set = set()
 
     def _ws(self):
         if self._client is None:
@@ -150,7 +179,7 @@ class WorkspaceReportStore:
         return self._client.workspace
 
     def _path(self, run_id: str, kind: str) -> str:
-        return f"{self.directory}/{_object_name(run_id, kind)}"
+        return f"{self.directory}/{_object_rel_path(run_id, kind)}"
 
     def put(self, run_id: str, kind: str, data: bytes) -> None:
         from databricks.sdk.service.workspace import ImportFormat  # type: ignore
@@ -160,11 +189,12 @@ class WorkspaceReportStore:
                 f"{_object_name(run_id, kind)} is {len(data) / 1024 / 1024:.1f} MB; "
                 "workspace files are limited to 10 MB per upload")
         ws = self._ws()
-        if not self._dir_ready:
-            ws.mkdirs(self.directory)
-            self._dir_ready = True
-        ws.upload(self._path(run_id, kind), io.BytesIO(data),
-                  format=ImportFormat.AUTO, overwrite=True)
+        path = self._path(run_id, kind)
+        folder = path.rsplit("/", 1)[0]
+        if folder not in self._ready_dirs:
+            ws.mkdirs(folder)
+            self._ready_dirs.add(folder)
+        ws.upload(path, io.BytesIO(data), format=ImportFormat.AUTO, overwrite=True)
 
     def get(self, run_id: str, kind: str) -> Optional[bytes]:
         from databricks.sdk.errors import NotFound  # type: ignore
@@ -180,17 +210,12 @@ class WorkspaceReportStore:
     def list_run_ids(self) -> List[str]:
         from databricks.sdk.errors import NotFound  # type: ignore
 
-        suffix = KINDS["metadata"]["suffix"]
         try:
-            entries = list(self._ws().list(self.directory))
+            entries = list(self._ws().list(self.directory, recursive=True))
         except NotFound:
             return []
-        out = []
-        for entry in entries:
-            name = str(getattr(entry, "path", "") or "").rsplit("/", 1)[-1]
-            if name.endswith(suffix) and is_valid_run_id(name[:-len(suffix)]):
-                out.append(name[:-len(suffix)])
-        return sorted(out)
+        found = [_run_id_of(str(getattr(e, "path", "") or "")) for e in entries]
+        return sorted(r for r in found if r)
 
     def delete(self, run_id: str, kind: str) -> None:
         from databricks.sdk.errors import NotFound  # type: ignore
@@ -236,12 +261,13 @@ class VolumeReportStore:
         return self._client.files
 
     def _path(self, run_id: str, kind: str) -> str:
-        return f"{self.directory}/{_object_name(run_id, kind)}"
+        return f"{self.directory}/{_object_rel_path(run_id, kind)}"
 
     def put(self, run_id: str, kind: str, data: bytes) -> None:
         files = self._files()
-        files.create_directory(self.directory)
-        files.upload(self._path(run_id, kind), io.BytesIO(data), overwrite=True)
+        path = self._path(run_id, kind)
+        files.create_directory(path.rsplit("/", 1)[0])
+        files.upload(path, io.BytesIO(data), overwrite=True)
 
     def get(self, run_id: str, kind: str) -> Optional[bytes]:
         from databricks.sdk.errors import NotFound  # type: ignore
@@ -256,17 +282,22 @@ class VolumeReportStore:
     def list_run_ids(self) -> List[str]:
         from databricks.sdk.errors import NotFound  # type: ignore
 
-        suffix = KINDS["metadata"]["suffix"]
+        files = self._files()
         try:
-            entries = list(self._files().list_directory_contents(self.directory))
+            entries = list(files.list_directory_contents(self.directory))
         except NotFound:
             return []
-        out = []
-        for entry in entries:
-            name = str(getattr(entry, "name", "") or "")
-            if name.endswith(suffix) and is_valid_run_id(name[:-len(suffix)]):
-                out.append(name[:-len(suffix)])
-        return sorted(out)
+        # One level of domain sub-folders below the root.
+        for entry in list(entries):
+            if getattr(entry, "is_directory", False):
+                try:
+                    entries.extend(files.list_directory_contents(
+                        f"{self.directory}/{entry.name}"))
+                except NotFound:
+                    pass
+        found = [_run_id_of(str(getattr(e, "name", "") or "")) for e in entries
+                 if not getattr(e, "is_directory", False)]
+        return sorted(r for r in found if r)
 
     def delete(self, run_id: str, kind: str) -> None:
         from databricks.sdk.errors import NotFound  # type: ignore
