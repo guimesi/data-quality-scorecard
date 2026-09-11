@@ -66,6 +66,22 @@ class Settings:
     # (identical runs are never re-recorded, the pre-window behaviour).
     reverify_hours: float = float(os.getenv("DQS_REVERIFY_HOURS", "24"))
 
+    # Report store (Step 6 Data Quality Report). Every run's artefacts
+    # (interactive HTML, PDF, print-ready HTML, metadata) are kept so the
+    # app can serve the interactive edition at ``/reports/<run_id>`` - the
+    # link SharePoint gets instead of the .html file it would sanitise.
+    #   local  -> files under ``<store_dir>/reports/`` (default)
+    #   volume -> a Unity Catalog Volume (``DQS_REPORT_VOLUME`` path) via
+    #             the Databricks Files API - survives app restarts
+    #   off    -> nothing is stored; /reports/<run_id> always 404s
+    report_store: str = os.getenv("DQS_REPORT_STORE", "local").lower()
+    # e.g. /Volumes/entai_sandbox_catalog/data_quality_scorecards/dq_reports
+    report_volume_path: str = os.getenv("DQS_REPORT_VOLUME", "")
+    # PDF edition: headless Chromium binary used for HTML -> PDF when the
+    # Playwright package is not installed (or as an explicit override).
+    # Empty = auto-detect (Playwright first, then well-known Chrome paths).
+    chromium_path: str = os.getenv("DQS_CHROMIUM_PATH", "")
+
     # Airtable write-back (Step 6 "Send to Airtable"). Empty token or base
     # means "not configured": the UI hides the button and nothing is sent.
     # Databricks Apps have outbound internet access, so no extra network

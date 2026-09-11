@@ -176,3 +176,156 @@ def score_bar(score: float, green: float, yellow: float) -> str:
         f'<span class="bar-fill f-{bucket}" style="width:{width:.1f}%"></span>'
         "</span>"
     )
+
+
+# ================================================================ PDF edition
+#
+# The paginated edition draws its own SVG variants (fixed pixel sizes,
+# explicit colours instead of CSS classes) so the charts print identically
+# from any Chromium - a port of the handoff's ``reference/generate_pdf.js``.
+
+_PDF_COLOURS = {"green": "#16a34a", "yellow": "#eab308", "red": "#dc2626"}
+_PDF_NAVY = "#1e2a5e"
+
+
+def pdf_gauge_svg(score: float, green: float, yellow: float,
+                  size: int = 150) -> str:
+    """Half-circle gauge with threshold ticks, colours inlined."""
+    score = float(score)
+    frac = max(0.005, min(100.0, score) / 100.0)
+    x0, y0 = _arc_point(0.0, _G_R)
+    x1, y1 = _arc_point(1.0, _G_R)
+    fx, fy = _arc_point(frac, _G_R)
+    colour = _PDF_COLOURS[score_bucket(score, green, yellow)]
+    ticks = []
+    for threshold in (yellow, green):
+        tf = max(0.0, min(100.0, float(threshold))) / 100.0
+        ax, ay = _arc_point(tf, _G_R - 9)
+        bx, by = _arc_point(tf, _G_R + 9)
+        ticks.append(
+            f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
+            'stroke="#94a3b8" stroke-width="1.5"/>'
+        )
+    return (
+        f'<svg width="{size}" viewBox="0 0 140 84" role="img" '
+        f'aria-label="Score {score:.1f}">'
+        f'<path d="M{x0:.1f} {y0:.1f} A{_G_R:.0f} {_G_R:.0f} 0 0 1 '
+        f'{x1:.1f} {y1:.1f}" fill="none" stroke="#e5e7eb" stroke-width="12"/>'
+        f'<path d="M{x0:.1f} {y0:.1f} A{_G_R:.0f} {_G_R:.0f} 0 0 1 '
+        f'{fx:.1f} {fy:.1f}" fill="none" stroke="{colour}" stroke-width="12"/>'
+        + "".join(ticks)
+        + f'<text x="70" y="66" text-anchor="middle" font-size="26" '
+        f'font-weight="700" fill="#1f2937">{score:.1f}</text>'
+        '<text x="70" y="80" text-anchor="middle" font-size="10" '
+        'fill="#64748b">/ 100</text></svg>'
+    )
+
+
+def stack_svg(rows_green: int, rows_yellow: int, rows_red: int,
+              width: int = 420, height: int = 14) -> str:
+    """Threshold distribution as a stacked SVG bar (prints without CSS)."""
+    total = max(int(rows_green) + int(rows_yellow) + int(rows_red), 1)
+    x = 0.0
+    segs = []
+    for colour, n in (("#16a34a", rows_green), ("#eab308", rows_yellow),
+                      ("#dc2626", rows_red)):
+        w = int(n) / total * width
+        segs.append(f'<rect x="{x:.1f}" y="0" width="{w:.1f}" '
+                    f'height="{height}" fill="{colour}"/>')
+        x += w
+    return (
+        f'<svg width="100%" viewBox="0 0 {width} {height}" '
+        'preserveAspectRatio="none" style="display:block;border-radius:3px;'
+        f'height:{height}px" role="img" aria-label="Threshold distribution">'
+        + "".join(segs) + "</svg>"
+    )
+
+
+def pdf_trend_svg(runs: Sequence[Dict], green: float, yellow: float,
+                  width: int = 460, height: int = 170) -> str:
+    """Score trend with threshold bands, value + date labels on every run
+    and ◆ markers where the configuration changed (``runs`` oldest-first,
+    each with ``score``, ``date``, ``changed``)."""
+    pl, pr, pt, pb = 30, 24, 22, 26
+    n = len(runs)
+    inner = width - pl - pr
+
+    def x(i: int) -> float:
+        return pl + (inner / 2.0 if n == 1 else i * inner / (n - 1))
+
+    def y(v: float) -> float:
+        return pt + (1 - max(0.0, min(100.0, float(v))) / 100.0) * (height - pt - pb)
+
+    def band(a: float, b: float, colour: str) -> str:
+        return (f'<rect x="{pl}" y="{y(b):.1f}" width="{inner}" '
+                f'height="{y(a) - y(b):.1f}" fill="{colour}" opacity=".09"/>')
+
+    pts = [(x(i), y(r["score"])) for i, r in enumerate(runs)]
+    points = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
+    area = (f"M{pts[0][0]:.1f},{y(0):.1f} "
+            + " ".join(f"L{px:.1f},{py:.1f}" for px, py in pts)
+            + f" L{pts[-1][0]:.1f},{y(0):.1f} Z") if pts else ""
+    marks: List[str] = []
+    for i, (r, (cx, cy)) in enumerate(zip(runs, pts)):
+        if r.get("changed"):
+            marks.append(
+                f'<rect x="{cx - 5:.1f}" y="{cy - 5:.1f}" width="10" height="10" '
+                f'transform="rotate(45 {cx:.1f} {cy:.1f})" fill="#fff" '
+                f'stroke="{_PDF_NAVY}" stroke-width="2"/>'
+            )
+        else:
+            marks.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="4" fill="#fff" '
+                         f'stroke="{_PDF_NAVY}" stroke-width="2"/>')
+        anchor = "start" if i == 0 else ("end" if i == n - 1 else "middle")
+        marks.append(
+            f'<text x="{cx:.1f}" y="{cy - 10:.1f}" text-anchor="middle" '
+            f'font-size="13" font-weight="700" fill="#1f2937">'
+            f"{float(r['score']):.1f}</text>"
+            f'<text x="{cx:.1f}" y="{height - 8}" text-anchor="{anchor}" '
+            f'font-size="11" fill="#64748b">{esc(r["date"])}</text>'
+        )
+    axis = "".join(
+        f'<text x="{pl - 5}" y="{y(v) + 3:.1f}" text-anchor="end" '
+        f'font-size="10" fill="#64748b">{v:g}</text>'
+        for v in (0, yellow, green, 100)
+    )
+    return (
+        f'<svg width="100%" viewBox="0 0 {width} {height}" role="img" '
+        'aria-label="Score trend">'
+        + band(0, yellow, "#dc2626") + band(yellow, green, "#eab308")
+        + band(green, 100, "#16a34a")
+        + f'<line x1="{pl}" y1="{y(green):.1f}" x2="{width - pr}" '
+        f'y2="{y(green):.1f}" stroke="#16a34a" stroke-dasharray="3 3"/>'
+        f'<line x1="{pl}" y1="{y(yellow):.1f}" x2="{width - pr}" '
+        f'y2="{y(yellow):.1f}" stroke="#eab308" stroke-dasharray="3 3"/>'
+        + axis
+        + (f'<path d="{area}" fill="{_PDF_NAVY}" opacity=".06"/>' if area else "")
+        + f'<polyline points="{points}" fill="none" stroke="{_PDF_NAVY}" '
+        'stroke-width="2"/>' + "".join(marks) + "</svg>"
+    )
+
+
+def spark_svg(runs: Sequence[Dict], green: float, yellow: float,
+              width: int = 90, height: int = 26) -> str:
+    """Tiny score sparkline; the last point is coloured by its bucket."""
+    n = len(runs)
+    if not n:
+        return ""
+
+    def x(i: int) -> float:
+        return 2 + (width / 2.0 if n == 1 else i * (width - 4) / (n - 1))
+
+    def y(v: float) -> float:
+        return 2 + (1 - max(0.0, min(100.0, float(v))) / 100.0) * (height - 4)
+
+    points = " ".join(f"{x(i):.1f},{y(r['score']):.1f}" for i, r in enumerate(runs))
+    last = float(runs[-1]["score"])
+    colour = _PDF_COLOURS[score_bucket(last, green, yellow)]
+    return (
+        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+        'aria-hidden="true">'
+        f'<polyline points="{points}" fill="none" stroke="{_PDF_NAVY}" '
+        'stroke-width="1.5"/>'
+        f'<circle cx="{x(n - 1):.1f}" cy="{y(last):.1f}" r="2.5" fill="{colour}"/>'
+        "</svg>"
+    )

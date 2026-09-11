@@ -12,6 +12,7 @@ the runtime.
 |---|---|---|
 | `databricks/01_grants.sql` | Least-privilege Unity Catalog grants for the app's service principal | catalog admin, once per environment |
 | `databricks/02_persistence_tables.sql` | DDL for the `DQS_RUNS` / `DQS_EVENTS` / `DQS_PROJECTS` app-state tables | schema owner, once per environment |
+| `databricks/03_report_volume.sql` | Unity Catalog Volume `dq_reports` (+ grants) holding every run's Data Quality Report artefacts, served at `/reports/<run_id>` | schema owner, once per environment |
 
 The runtime configuration itself lives at the repo root in
 [`app.yaml`](../app.yaml) (start command + env vars + SQL Warehouse
@@ -46,6 +47,22 @@ resource mapping).
 5. **(Optional) Airtable write-back**: add `AIRTABLE_TOKEN` (as an app
    secret) and `AIRTABLE_BASE_ID` to the app's environment. Leave unset
    to hide the feature.
+5b. **Report store (hosted Data Quality Reports)**: run
+   `databricks/03_report_volume.sql` (creates the `dq_reports` Volume and
+   grants `READ VOLUME` / `WRITE VOLUME` to the app's service principal).
+   `app.yaml` sets `DQS_REPORT_STORE=volume` and `DQS_REPORT_VOLUME` to
+   that path; the app then serves every run at
+   `https://<app-url>/reports/<run_id>` (index at `/reports`) - the link
+   to paste in SharePoint next to the PDF. Set `DQS_REPORT_STORE=off` to
+   disable hosting (downloads keep working).
+5c. **(Optional) PDF edition**: the PDF is rendered by headless Chromium.
+   The Apps container has none by default, so the app offers the
+   print-ready HTML instead (Ctrl+P in Chrome/Edge produces the same PDF).
+   To render server-side, add `playwright` to `requirements.txt` and make
+   the Chromium download available to the container (e.g.
+   `playwright install chromium` in a custom start command, with
+   `PLAYWRIGHT_BROWSERS_PATH` on a writable path), or point
+   `DQS_CHROMIUM_PATH` at a Chromium binary available in the image.
 6. **Deploy the code**: from the repo root either
    ```bash
    databricks sync --watch . /Workspace/Users/<you>/dq-scorecard   # dev loop
@@ -53,7 +70,9 @@ resource mapping).
    ```
    or connect the repo in the workspace UI and press **Deploy**. The
    platform installs `requirements.txt` and runs the `command` from
-   `app.yaml`.
+   `app.yaml` (`streamlit run server.py` - the `st.App` entry point that
+   serves the Streamlit UI plus the `/reports` routes; `streamlit run
+   app.py` is the UI-only local equivalent).
 7. **Share the app**: app page → *Permissions* → grant **Can use** to the
    user groups who should open it. App viewers authenticate with their
    own Databricks identity; the app forwards it (HTTP headers) into the
@@ -76,4 +95,8 @@ resource mapping).
 - [ ] Run `02_persistence_tables.sql`, then `01_grants.sql` (needs the
       app's service principal id)
 - [ ] Configure Airtable secrets on the app (optional feature)
+- [ ] Run `03_report_volume.sql` (Volume for the hosted Data Quality
+      Reports; or set `DQS_REPORT_STORE=off`)
+- [ ] Decide on the PDF edition: print-ready HTML (default) or a
+      Chromium in the container (optional)
 - [ ] Grant *Can use* on the app to the intended user groups

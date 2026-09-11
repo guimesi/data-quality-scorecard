@@ -31,6 +31,7 @@ from src.run_history import config_fingerprint, load_history, score_drop
 from ui.step_06._drilldown import _custom_flags, _custom_rule_meta, _failing_mask
 from ui.step_06._export import _reference_columns_for_export, _rule_column_specs
 from ui.step_06._rule_rows import STATUS_EVALUATED, custom_rule_rows
+from ui.step_06.report.models import ReportContext, ReportModel
 from utils.helpers import score_bucket
 
 # Same |Δ| >= 5 pp flag threshold as the dashboard History tab.
@@ -38,6 +39,91 @@ DRIFT_RULE_DELTA_THRESHOLD = 5.0
 
 # Prefix of the per-DQR flag columns (``DQR · ID · Name (w=..%)``).
 RULE_COLUMN_PREFIX = "DQR"
+
+# Columns the PDF sample tables show first when the Data Product has them
+# (the row identifier and the project key), before the DQR's own columns.
+PREFERRED_ID_COLUMNS = ("ROW_ID", "PLANVIEW_ID")
+
+
+# ------------------------------------------------------------------ model
+
+def build_model(ctx: ReportContext, scorecards: Dict[str, object],
+                dps: Dict[str, object],
+                configs: Dict[str, object]) -> ReportModel:
+    """Collect the ONE view model both editions render from.
+
+    ``scorecards`` / ``dps`` / ``configs`` are keyed by system code; a
+    code missing from ``dps`` or ``configs`` is skipped (same behaviour
+    as the previous builder). History and drift come from the persisted
+    run store via :mod:`src.run_history`.
+    """
+    views = [
+        build_dp_view(code, dps[code], result, configs[code], ctx)
+        for code, result in scorecards.items()
+        if code in dps and code in configs
+    ]
+    data = {
+        "green": ctx.threshold_green,
+        "yellow": ctx.threshold_yellow,
+        "caps": {
+            "worst_rows": ctx.caps.worst_rows,
+            "drill_rows": ctx.caps.drill_rows,
+            "row_store": ctx.caps.row_store,
+        },
+        "dps": {v["code"]: v["store_json"] for v in views},
+    }
+    return ReportModel(ctx=ctx, dps=views, data=data)
+
+
+def id_column_index(view: Dict) -> int:
+    """Index of the column that identifies a row (``ROW_ID`` when the Data
+    Product has it, else its first column)."""
+    columns = view["columns"]
+    for name in PREFERRED_ID_COLUMNS[:1]:
+        if name in columns:
+            return columns.index(name)
+    return 0
+
+
+def sample_failing_rows(view: Dict, rule_id: str, limit: int) -> List[Dict]:
+    """The first ``limit`` store rows (lowest-scoring first) failing
+    ``rule_id`` - the same semantics as the interactive drill-down."""
+    specs = view["rule_specs"]
+    idx = next((i for i, (rid, _) in enumerate(specs) if rid == rule_id), None)
+    if idx is None:
+        return []
+    return [r for r in view["store_rows"] if r["f"][idx] == 0][:limit]
+
+
+def sample_columns(view: Dict, rule: Dict, limit: int = 6) -> List[int]:
+    """Column indices a DQR detail card shows: the identifier columns the
+    Data Product has, then the columns the DQR reads (deduplicated, at
+    most ``limit``)."""
+    columns = view["columns"]
+    wanted: List[str] = []
+    for name in PREFERRED_ID_COLUMNS:
+        if name in columns and name not in wanted:
+            wanted.append(name)
+    for col in (rule.get("source_columns") or {}).values():
+        # ``effective_required_columns`` may annotate a column
+        # ("PLANVIEW_ID (required by project_scoped)"); keep the name.
+        name = str(col).split(" ")[0]
+        if name in columns and name not in wanted:
+            wanted.append(name)
+    return [columns.index(name) for name in wanted[:limit]]
+
+
+def reference_columns_for_rule(view: Dict, rule: Dict, limit: int = 2
+                               ) -> List[int]:
+    """Indices (into ``ref_columns``) of the reference-dataset columns the
+    DQR joined, at most ``limit``."""
+    rule_def = rule.get("rule")
+    ref = getattr(rule_def, "reference", None) if rule_def is not None else None
+    if not ref:
+        return []
+    suffix = f"[{ref.get('reference_dataset', '')}]"
+    return [i for i, c in enumerate(view["ref_columns"])
+            if c.endswith(suffix)][:limit]
 
 
 # --------------------------------------------------------------- primitives

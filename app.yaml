@@ -11,7 +11,11 @@
 # "sql-warehouse" below, permission CAN_USE). The valueFrom entry maps the
 # attached warehouse's id into DATABRICKS_WAREHOUSE_ID, which the data
 # layer turns into /sql/1.0/warehouses/<id>.
-command: ["streamlit", "run", "app.py"]
+#
+# server.py is the ASGI entry point (st.App): the Streamlit UI (app.py)
+# plus the GET /reports/<run_id> routes that serve every run's Data
+# Quality Report (interactive HTML + PDF) from the UC Volume below.
+command: ["streamlit", "run", "server.py"]
 
 env:
   - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
@@ -38,6 +42,15 @@ env:
   # record is this many hours old, so History shows verification cadence.
   - name: DQS_REVERIFY_HOURS
     value: "24"
+  # Report store: every run's Data Quality Report (interactive HTML, PDF,
+  # print-ready HTML, metadata) is written to this Unity Catalog Volume
+  # (create it once with deploy/databricks/03_report_volume.sql) and served
+  # by the app at /reports/<run_id> - the link to paste in SharePoint.
+  # Switch to "off" to disable hosting (downloads keep working).
+  - name: DQS_REPORT_STORE
+    value: "volume"
+  - name: DQS_REPORT_VOLUME
+    value: "/Volumes/entai_sandbox_catalog/data_quality_scorecards/dq_reports"
   # Airtable write-back (Step 6 "Send to Airtable"). The token comes from
   # the app secret resource with key "airtable-token" (scope dq-scorecard);
   # the base id is plain config. The button stays hidden until BOTH are

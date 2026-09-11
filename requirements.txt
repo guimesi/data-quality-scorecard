@@ -4,7 +4,9 @@
 #
 # Python >= 3.10 required: the security-fixed Streamlit (>=1.54) needs 3.10+;
 # CI runs Python 3.11 (same major line as the Databricks Apps runtime).
-streamlit>=1.54.0,<2.0
+# >= 1.62: ``st.App`` (Starlette/uvicorn server) hosts the /reports routes
+# of server.py next to the UI; starlette + uvicorn come with it.
+streamlit>=1.62.0,<2.0
 pandas>=2.0.0,<3.0
 numpy>=1.24.0,<3.0
 # Databricks SQL Warehouse access (Arrow fetch path) + unified headless
@@ -16,6 +18,12 @@ python-dotenv>=1.2.2,<2.0
 # Makes SSL use the OS trust store so outbound HTTPS (Airtable push) works
 # behind corporate TLS-inspecting proxies; injected defensively in app.py.
 truststore>=0.9.0,<1.0
+# Optional: headless Chromium for the PDF edition of the Data Quality
+# Report (Step 6). Without it the app still ships the print-ready HTML
+# (Ctrl+P in Chrome/Edge gives the same PDF) and DQS_CHROMIUM_PATH can
+# point at any installed Chrome / Edge / Chromium binary instead.
+#   pip install playwright && playwright install chromium
+# playwright>=1.45,<2.0
 pytest>=8.3.4,<10.0
 pytest-cov>=4.1.0,<8.0
 # Optional: enables IsolationForest / KMeans / PCA / LogisticRegression in

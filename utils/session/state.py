@@ -129,6 +129,9 @@ def _clear_workflow_state_for_domain_switch() -> None:
     # One-click leaves a one-time summary banner for the dashboard; drop it
     # so a restarted / re-pointed session doesn't show a stale notice.
     st.session_state.pop("one_click_summary", None)
+    # The Data Quality Report artefacts are cached per run (Step 6); a new
+    # domain / mode / restart must never serve the previous run's files.
+    st.session_state.pop("_dq_report_cache", None)
 
 
 def set_domain(code: str) -> None:

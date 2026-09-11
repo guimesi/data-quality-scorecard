@@ -117,7 +117,9 @@ ui/
     _drilldown.py              # Click a bar / select a rule -> failing rows table
     _history.py                # Auto-record runs + drop alert + History tab
     _projects.py               # Save-as-project panel + version changelog
-    _exec_report.py            # Self-contained executive HTML report (print-to-PDF)
+    _exec_report.py            # Data Quality Report wrapper: build once per run, downloads, hosted link
+    report/                    # Pure builder: collect -> ReportModel -> interactive HTML + PDF edition
+                               # (models, collect, sections, tables, charts, pdf, convert, styles, js)
     _dp_dashboard.py           # Per-DP card (gauge + tab row) + cross-DP overview
   step_adoption.py             # 📊 Adoption & audit admin page (standalone)
   step_07_ml_lab.py            # SLIM orchestrator + tab dispatcher

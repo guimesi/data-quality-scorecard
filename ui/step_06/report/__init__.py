@@ -1,76 +1,110 @@
-"""Data Quality Report (HTML) - the self-contained report builder.
+"""Data Quality Report - two artefacts from ONE view model.
 
 ``build_report`` turns real ``ScorecardResult`` / config / data-product
-objects (plus the run metadata in :class:`ReportContext`) into ONE
-standalone ``.html`` - no CDN, no fonts, no Plotly, no external JS/CSS -
-that works from ``file:///`` with no internet and no Streamlit. It is a
-published data product; a future ``publish_report()`` (SharePoint or
-other) consumes the returned :class:`ReportArtifact` unchanged.
+objects (plus the run metadata in :class:`ReportContext`) into a
+:class:`ReportArtifacts`:
+
+- the **interactive HTML** - ONE standalone ``.html`` (no CDN, no fonts,
+  no Plotly, no external JS/CSS) that works from ``file:///`` and is
+  hosted by the app at ``/reports/<run_id>``;
+- the **PDF edition** - a paginated A4 HTML (``pdf_html``, print-ready
+  in any Chromium browser) converted with headless Chromium into
+  ``pdf`` bytes when a converter is available (see
+  :mod:`ui.step_06.report.convert`).
+
+Pipeline::
+
+    ScorecardResult + Config + history
+            │
+            ▼
+    collect.build_model()  ──►  ReportModel
+            ├── render_interactive(model) ─► html
+            └── pdf.render_pdf_html(model) ─► pdf_html ─► convert.html_to_pdf() ─► pdf
 
 ``build_executive_report_html`` is the backwards-compatible alias
-returning just the HTML bytes (the previous builder's contract).
-
-The builder never touches Streamlit - ``ui/step_06/_exec_report.py`` is
-the thin wrapper that assembles a ``ReportContext`` from session state.
+returning just the interactive HTML bytes (the previous builder's
+contract). The builder never touches Streamlit -
+``ui/step_06/_exec_report.py`` is the thin wrapper that assembles a
+``ReportContext`` from session state.
 """
 from __future__ import annotations
 
+import logging
+import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from ui.step_06.report import collect, sections
+from ui.step_06.report.convert import PdfConversionUnavailable, html_to_pdf
 from ui.step_06.report.html import document
 from ui.step_06.report.interactivity import REPORT_JS, safe_json_for_script
-from ui.step_06.report.models import ReportArtifact, ReportCaps, ReportContext
+from ui.step_06.report.models import (
+    ReportArtifact,
+    ReportArtifacts,
+    ReportCaps,
+    ReportContext,
+    ReportModel,
+)
+from ui.step_06.report.pdf import count_pages, render_pdf_html
 from ui.step_06.report.styles import REPORT_CSS
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ReportArtifact",
+    "ReportArtifacts",
     "ReportCaps",
     "ReportContext",
+    "ReportModel",
     "build_executive_report_html",
+    "build_model",
     "build_report",
+    "filenames_for",
+    "render_interactive",
+    "render_pdf_html",
 ]
 
+build_model = collect.build_model
 
-def _filename(ctx: ReportContext) -> str:
-    domain = (ctx.domain_code or "report").upper()
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(
+        timespec="seconds").replace("+00:00", "Z")
+
+
+def _stamp(ctx: ReportContext) -> str:
     try:
-        stamp = datetime.fromisoformat(
+        return datetime.fromisoformat(
             ctx.generated_at.replace("Z", "+00:00")
         ).strftime("%Y%m%d_%H%M%S")
     except ValueError:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    return f"dq_scorecard_report_{domain}_{stamp}.html"
+        return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
-def build_report(ctx: ReportContext, scorecards: Dict[str, object],
-                 dps: Dict[str, object],
-                 configs: Dict[str, object]) -> ReportArtifact:
-    """Build the full Data Quality Report for one scorecard run.
+def filenames_for(ctx: ReportContext) -> Dict[str, str]:
+    """``dq_scorecard_report_<DOMAIN>_<YYYYMMDD_HHMMSS>.<ext>`` per artefact."""
+    base = f"dq_scorecard_report_{(ctx.domain_code or 'report').upper()}_{_stamp(ctx)}"
+    return {
+        "interactive": f"{base}.html",
+        "pdf": f"{base}.pdf",
+        "pdf_html": f"{base}_print.html",
+    }
 
-    ``scorecards`` / ``dps`` / ``configs`` are keyed by system code; a
-    code missing from ``dps`` or ``configs`` is skipped (same behaviour
-    as the previous builder). History and drift come from the persisted
-    run store via :mod:`src.run_history`.
-    """
-    views = [
-        collect.build_dp_view(code, dps[code], result, configs[code], ctx)
-        for code, result in scorecards.items()
-        if code in dps and code in configs
-    ]
 
-    data_json = safe_json_for_script({
-        "green": ctx.threshold_green,
-        "yellow": ctx.threshold_yellow,
-        "caps": {
-            "worst_rows": ctx.caps.worst_rows,
-            "drill_rows": ctx.caps.drill_rows,
-            "row_store": ctx.caps.row_store,
-        },
-        "dps": {v["code"]: v["store_json"] for v in views},
-    })
+def _ensure_run_id(ctx: ReportContext) -> ReportContext:
+    """Every artefact set needs an identifier (it keys the report store
+    and the ``/reports/<run_id>`` link); mint one when the caller did not."""
+    if ctx.run_id:
+        return ctx
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return replace(ctx, run_id=f"run_{stamp}_{uuid.uuid4().hex[:4]}")
 
+
+def render_interactive(model: ReportModel) -> str:
+    """The interactive edition (self-contained HTML) of ``model``."""
+    ctx = model.ctx
+    views = model.dps
     body = (
         sections.render_nav(views)
         + '\n<main class="wrap">\n'
@@ -82,38 +116,95 @@ def build_report(ctx: ReportContext, scorecards: Dict[str, object],
     )
     date = (ctx.generated_at or "")[:10]
     title = sections.report_title(ctx) + (f" · {date}" if date else "")
-    html_text = document(
+    return document(
         title=title,
         css=REPORT_CSS,
         body=body,
-        data_json=data_json,
+        data_json=safe_json_for_script(model.data),
         js=REPORT_JS,
     )
-    return ReportArtifact(
-        html=html_text.encode("utf-8"),
-        filename=_filename(ctx),
-        # Every ReportContext field travels with the artifact for the
-        # publisher, including the ones the header no longer renders
+
+
+def build_report(ctx: ReportContext, scorecards: Dict[str, object],
+                 dps: Dict[str, object], configs: Dict[str, object], *,
+                 want_pdf: bool = True,
+                 converter: Optional[Callable[[str], bytes]] = None,
+                 ) -> ReportArtifacts:
+    """Build both editions of the Data Quality Report for one run.
+
+    ``scorecards`` / ``dps`` / ``configs`` are keyed by system code; a
+    code missing from ``dps`` or ``configs`` is skipped. History and
+    drift come from the persisted run store via :mod:`src.run_history`.
+
+    ``want_pdf=False`` skips the Chromium conversion (the print-ready
+    HTML is still produced); ``converter`` overrides the converter
+    detection. A failed conversion never fails the build: ``pdf`` is
+    ``None`` and ``metadata["pdf_error"]`` carries the reason.
+    """
+    ctx = _ensure_run_id(ctx)
+    model = build_model(ctx, scorecards, dps, configs)
+    html_text = render_interactive(model)
+    pdf_html = render_pdf_html(model)
+
+    pdf_bytes: Optional[bytes] = None
+    pdf_error: Optional[str] = None
+    if want_pdf:
+        try:
+            pdf_bytes = html_to_pdf(pdf_html, converter=converter)
+        except PdfConversionUnavailable as exc:
+            pdf_error = str(exc)
+            logger.info("PDF edition not rendered: %s", exc)
+        except Exception as exc:  # converter crashed: degrade, don't fail
+            pdf_error = f"{type(exc).__name__}: {exc}"
+            logger.warning("PDF conversion failed", exc_info=True)
+    else:
+        pdf_error = "PDF conversion not requested"
+
+    views = model.dps
+    caps = ctx.caps
+    metadata = {
+        # Every ReportContext field travels with the artefacts for the
+        # publisher, including the ones the report does not render
         # (mode, data scope, thresholds, saved project).
-        metadata={
-            "domain_code": ctx.domain_code,
-            "domain_name": ctx.domain_name,
-            "dp_codes": [v["code"] for v in views],
-            "generated_at": ctx.generated_at,
-            "generated_by": ctx.generated_by,
-            "mode": ctx.mode,
-            "data_scope": ctx.data_scope,
-            "sample_rows_cap": ctx.sample_rows_cap,
-            "project_filter": list(ctx.project_filter),
-            "threshold_green": ctx.threshold_green,
-            "threshold_yellow": ctx.threshold_yellow,
-            "saved_project": ctx.saved_project,
-            "run_id": ctx.run_id,
-            "overall_scores": {
-                v["code"]: round(float(v["result"].overall_score), 2)
-                for v in views
-            },
+        "run_id": ctx.run_id,
+        "domain_code": ctx.domain_code,
+        "domain_name": ctx.domain_name,
+        "dp_codes": [v["code"] for v in views],
+        "dp_names": {v["code"]: v["name"] for v in views},
+        "generated_at": ctx.generated_at,
+        "generated_by": ctx.generated_by,
+        "mode": ctx.mode,
+        "data_scope": ctx.data_scope,
+        "sample_rows_cap": ctx.sample_rows_cap,
+        "project_filter": list(ctx.project_filter),
+        "threshold_green": ctx.threshold_green,
+        "threshold_yellow": ctx.threshold_yellow,
+        "saved_project": ctx.saved_project,
+        "overall_scores": {
+            v["code"]: round(float(v["result"].overall_score), 2) for v in views
         },
+        "statuses": {v["code"]: v["bucket"] for v in views},
+        "row_counts": {v["code"]: int(v["result"].total_rows) for v in views},
+        "config_hashes": {v["code"]: v["config_hash"] for v in views},
+        "caps": {
+            "worst_rows": caps.worst_rows, "drill_rows": caps.drill_rows,
+            "row_store": caps.row_store, "pdf_rows": caps.pdf_rows,
+            "pdf_sample_rows": caps.pdf_sample_rows,
+            "pdf_run_log": caps.pdf_run_log,
+        },
+        "pdf_pages": count_pages(pdf_html),
+        "has_pdf": pdf_bytes is not None,
+        "pdf_error": pdf_error,
+    }
+    return ReportArtifacts(
+        run_id=ctx.run_id or "",
+        domain_code=ctx.domain_code,
+        generated_at=ctx.generated_at,
+        html=html_text.encode("utf-8"),
+        pdf=pdf_bytes,
+        pdf_html=pdf_html.encode("utf-8"),
+        metadata=metadata,
+        filenames=filenames_for(ctx),
     )
 
 
@@ -121,22 +212,21 @@ def build_executive_report_html(
     domain_code: str, scorecards: Dict[str, object], dps: Dict[str, object],
     configs: Dict[str, object], ctx: Optional[ReportContext] = None,
 ) -> bytes:
-    """Compatibility alias: the report as UTF-8 bytes.
+    """Compatibility alias: the interactive report as UTF-8 bytes.
 
     Builds a minimal :class:`ReportContext` when none is given (metadata
     fields the caller didn't provide render as an em dash - the builder
-    never invents values).
+    never invents values) and skips the PDF conversion.
     """
     if ctx is None:
         first = next(iter(scorecards.values()), None)
         ctx = ReportContext(
             domain_code=domain_code,
             dp_codes=list(scorecards.keys()),
-            generated_at=datetime.now(timezone.utc).isoformat(
-                timespec="seconds").replace("+00:00", "Z"),
+            generated_at=_utc_now_iso(),
             threshold_green=(float(first.threshold_green)
                              if first is not None else 80.0),
             threshold_yellow=(float(first.threshold_yellow)
                               if first is not None else 60.0),
         )
-    return build_report(ctx, scorecards, dps, configs).html
+    return build_report(ctx, scorecards, dps, configs, want_pdf=False).html
