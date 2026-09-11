@@ -119,6 +119,40 @@ resource mapping).
    own Databricks identity; the app forwards it (HTTP headers) into the
    run history / telemetry as `username`.
 
+8. **Scheduled runs without the UI (Databricks Job)**: the scorecard +
+   report can run on a schedule with no Streamlit involved -
+   `src/scheduled_report.py` scores a domain (One-click pipeline),
+   records the run history, builds both report editions, stores them in
+   the same report folder the app serves (`/reports/<run_id>`,
+   `/reports/latest/<DOMAIN>`) and pushes the scores to Airtable when
+   configured. Set it up once:
+   1. **Job** → *Create job*, task type **Notebook**, source **Git**
+      (this repository, the branch to run), path
+      `deploy/databricks/scheduled_report_job` (the notebook in
+      `deploy/databricks/scheduled_report_job.py`). Or import
+      `deploy/databricks/job_dq_report.json` after replacing its `<...>`
+      placeholders (`databricks jobs create --json @…`).
+   2. **Compute**: a small single-node job cluster. For the PDF edition
+      attach `deploy/databricks/init_chromium.sh` as a workspace-file init
+      script (installs Playwright's Chromium with its system libraries).
+      Without it the notebook tries `playwright install chromium` itself
+      and, failing that, stores the print-ready HTML instead of the PDF.
+   3. **Parameters** (notebook base parameters): `domain`, optional
+      `systems` (empty = every system of the domain), `project_filter`,
+      `warehouse_id` (the SQL warehouse the app uses),
+      `report_workspace_dir` (the same folder as `app.yaml`), `want_pdf`,
+      and for Airtable `airtable_base_id` + the secret scope/key holding
+      the token (`databricks secrets create-scope dq-scorecard`,
+      `databricks secrets put-secret dq-scorecard airtable-token`).
+   4. **Schedule** (e.g. weekdays 06:00 `America/Sao_Paulo`) and a failure
+      e-mail. The run **fails** when no system could be scored or the
+      report could not be stored; the JSON summary at the end of the run
+      output says why (`skipped`, `store_error`, `airtable_error`).
+   The job runs as its owner: the data tables, the `DQS_*` tables and the
+   report folder are accessed with your identity, so nothing new has to
+   be granted. Locally the same entry point runs against mock data:
+   `DATA_SOURCE=mock python scripts/run_scheduled_report.py --domain cost_estimate --no-pdf`.
+
 ## Environment matrix
 
 | Context | Identity | Warehouse | Config source |
@@ -126,6 +160,7 @@ resource mapping).
 | Databricks Apps (prod) | app service principal (OAuth, injected) | app resource `sql-warehouse` | `app.yaml` |
 | Local dev vs real data | your PAT (`DATABRICKS_TOKEN`) | `DATABRICKS_WAREHOUSE_ID` in `.env` | `.env` (see `.env.example`) |
 | Local dev / demo | none needed | none | `DATA_SOURCE=mock` (default) |
+| Scheduled Job | the job owner (notebook auth) | `warehouse_id` parameter | notebook parameters (`scheduled_report_job.py`) |
 
 ## Manual steps checklist (things the repo cannot do for you)
 
@@ -143,6 +178,9 @@ resource mapping).
       with the app's service principal (Can Manage), set
       `DQS_REPORT_WORKSPACE_DIR` (or `03_report_volume.sql` + `volume`,
       or `DQS_REPORT_STORE=off`)
+- [ ] Scheduled runs (optional): create the Job from
+      `job_dq_report.json` / the notebook, attach `init_chromium.sh`,
+      set the parameters and the schedule
 - [ ] Decide on the PDF edition: print-ready HTML (default) or a
       Chromium in the container (optional)
 - [ ] Grant *Can use* on the app to the intended user groups

@@ -302,6 +302,14 @@ what the publishers consume:
 `python scripts/build_sample_report.py` generates both editions from
 mock data (`output/dq_report/`).
 
+**Scheduled runs without the UI**: `scripts/run_scheduled_report.py`
+(library: `src/scheduled_report.py`) scores a domain with the One-click
+pipeline, records history, builds and stores both report editions and
+pushes the scores to Airtable - a Databricks Job runs it on a schedule
+through the notebook `deploy/databricks/scheduled_report_job.py` (setup
+in `deploy/README.md`, step 8). The job fails when nothing could be
+scored or the report could not be stored, and prints a JSON summary.
+
 ### 📊 Adoption & audit (admin page)
 
 The app records adoption/audit telemetry through the same fire-and-forget

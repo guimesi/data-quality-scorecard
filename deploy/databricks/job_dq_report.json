@@ -1,0 +1,59 @@
+{
+  "_comment": "Databricks Job running the scorecard + Data Quality Report on a schedule without the Streamlit app. Replace every <...> placeholder, then: databricks jobs create --json @deploy/databricks/job_dq_report.json (or create the job in the UI with the same settings). The job runs as its owner (you); it needs no grants beyond what the dashboard already has.",
+  "name": "DQ Scorecard - scheduled report (cost_estimate)",
+  "schedule": {
+    "quartz_cron_expression": "0 0 6 ? * MON-FRI",
+    "timezone_id": "America/Sao_Paulo",
+    "pause_status": "UNPAUSED"
+  },
+  "max_concurrent_runs": 1,
+  "timeout_seconds": 3600,
+  "email_notifications": {
+    "on_failure": ["<you@corp.com>"]
+  },
+  "git_source": {
+    "git_url": "https://github.com/guimesi/data-quality-scorecard",
+    "git_provider": "gitHub",
+    "git_branch": "development"
+  },
+  "job_clusters": [
+    {
+      "job_cluster_key": "dq_report_cluster",
+      "new_cluster": {
+        "spark_version": "15.4.x-scala2.12",
+        "node_type_id": "<small node type, e.g. Standard_DS3_v2 / m5.large>",
+        "num_workers": 0,
+        "spark_conf": {
+          "spark.master": "local[*]",
+          "spark.databricks.cluster.profile": "singleNode"
+        },
+        "custom_tags": { "ResourceClass": "SingleNode" },
+        "data_security_mode": "SINGLE_USER",
+        "init_scripts": [
+          { "workspace": { "destination": "/Workspace/Users/<you@corp.com>/dq-scorecard/deploy/databricks/init_chromium.sh" } }
+        ]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "task_key": "scheduled_report",
+      "job_cluster_key": "dq_report_cluster",
+      "notebook_task": {
+        "notebook_path": "deploy/databricks/scheduled_report_job",
+        "source": "GIT",
+        "base_parameters": {
+          "domain": "cost_estimate",
+          "systems": "",
+          "project_filter": "",
+          "warehouse_id": "<SQL warehouse id used by the app>",
+          "report_workspace_dir": "/Workspace/Users/<you@corp.com>/dq_reports",
+          "want_pdf": "true",
+          "airtable_base_id": "",
+          "airtable_secret_scope": "dq-scorecard",
+          "airtable_secret_key": "airtable-token"
+        }
+      }
+    }
+  ]
+}
