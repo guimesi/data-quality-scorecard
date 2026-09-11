@@ -301,7 +301,7 @@ def _generate_button(*, enabled: bool) -> bool:
             "⚡ Generate scorecards",
             type="primary",
             disabled=not enabled,
-            use_container_width=True,
+            width="stretch",
             key="oneclick_generate",
         )
 
@@ -316,7 +316,7 @@ def _nav() -> None:
     st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
     c_back, c_restart, _ = st.columns([1, 1, 4])
     with c_back:
-        if st.button("⬅ Back", use_container_width=True,
+        if st.button("⬅ Back", width="stretch",
                      help="Return to the mode picker."):
             prev_step()
     with c_restart:

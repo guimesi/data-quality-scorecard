@@ -54,7 +54,7 @@ def _render_tab_recommendations(code: str, dp, config, result) -> None:
 
     st.dataframe(
         df,
-        use_container_width=True, hide_index=True, height=360,
+        width="stretch", hide_index=True, height=360,
         column_config={
             "similarity": st.column_config.NumberColumn(
                 format="%.3f", help="Cosine similarity on profile vectors.",

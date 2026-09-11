@@ -105,7 +105,7 @@ def _render_history_tab(code: str) -> None:
         yaxis=dict(range=[0, 105], title="Overall score"),
         margin=dict(t=20, b=20, l=20, r=20),
     )
-    st.plotly_chart(fig, use_container_width=True, key=f"hist_chart_{code}")
+    st.plotly_chart(fig, width="stretch", key=f"hist_chart_{code}")
     st.caption(
         "◆ marker = the configuration changed vs the previous run. Alert "
         f"threshold: drop ≥ {SETTINGS.drop_alert_pp:.0f} pp shows a banner "
@@ -125,7 +125,7 @@ def _render_history_tab(code: str) -> None:
         })
     st.dataframe(
         pd.DataFrame(rows).iloc[::-1],  # newest first
-        use_container_width=True, hide_index=True, height=220,
+        width="stretch", hide_index=True, height=220,
         column_config={
             "Score": st.column_config.NumberColumn(format="%.2f"),
             "Δ vs prev": st.column_config.NumberColumn(format="%+.2f"),
@@ -162,7 +162,7 @@ def _render_history_tab(code: str) -> None:
             st.markdown(f"**{html.escape(label)} that moved ≥ 5 pp**")
             st.dataframe(
                 flagged.drop(columns=["flagged"]),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
                 column_config={
                     "score_a": st.column_config.NumberColumn(
                         "previous", format="%.2f"),

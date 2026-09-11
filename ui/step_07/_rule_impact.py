@@ -49,7 +49,7 @@ def _render_tab_rule_impact(code: str, dp, config, result) -> None:
             "baseline_source_score", "loo_source_score",
             "delta_vs_baseline", "criticality", "potential_uplift_pct",
         ]],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=380,
         column_config={
@@ -88,7 +88,7 @@ def _render_tab_rule_impact(code: str, dp, config, result) -> None:
                 line=dict(color="rgba(0,0,0,0.4)", width=1, dash="dot"),
             )],
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         st.caption(
             "Green bars (Δ < 0) = the rule's removal would HURT the source - "
             "it's load-bearing. Red bars (Δ > 0) = the rule is dragging the "

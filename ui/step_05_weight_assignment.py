@@ -75,7 +75,7 @@ def _render_section_head(title: str, badge: str, badge_class: str,
         return st.button(
             button_label,
             key=button_key,
-            use_container_width=True,
+            width="stretch",
         )
 
 

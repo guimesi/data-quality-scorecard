@@ -206,12 +206,12 @@ def render() -> None:
 def _nav() -> None:
     c1, c2, c3, c_mid = st.columns([1, 1, 2, 4])
     with c1:
-        if st.button("⬅ Back", use_container_width=True, key="ml_lab_back"):
+        if st.button("⬅ Back", width="stretch", key="ml_lab_back"):
             prev_step()
     with c2:
         render_restart_button(restart_app, key="restart_confirm_mllab")
     with c3:
-        if st.button("📊 Back to Dashboard", use_container_width=True,
+        if st.button("📊 Back to Dashboard", width="stretch",
                      key="ml_lab_to_dashboard",
                      help="Return to the rules-based scorecard dashboard."):
             goto("dashboard")

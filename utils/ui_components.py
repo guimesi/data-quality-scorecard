@@ -34,7 +34,7 @@ def render_restart_button(
     on_restart: Callable[[], None],
     *,
     key: str = "restart_confirm",
-    use_container_width: bool = True,
+    width: str = "stretch",
 ) -> None:
     """Render Restart as a two-click confirmation.
 
@@ -48,7 +48,7 @@ def render_restart_button(
     ``key`` must be unique per page so two nav rows can't collide on the
     confirm button's widget key.
     """
-    with st.popover("🔄 Restart", use_container_width=use_container_width):
+    with st.popover("🔄 Restart", width=width):
         st.markdown("**Restart and clear everything?**")
         st.caption(
             "This clears all selections, data products, configs and "
@@ -81,7 +81,7 @@ def render_nav_footer(
     """
     c1, c2, c_mid, c3 = st.columns([1, 1, 4, 1])
     with c1:
-        if st.button("⬅ Back", use_container_width=True):
+        if st.button("⬅ Back", width="stretch"):
             on_back()
     with c2:
         render_restart_button(on_restart, key="restart_confirm_nav")
@@ -106,13 +106,13 @@ def render_nav_footer(
         if show_next:
             if st.button(
                 next_button_label, type="primary",
-                use_container_width=True,
+                width="stretch",
             ):
                 on_next()
         else:
             st.button(
                 next_button_label, disabled=True,
-                use_container_width=True,
+                width="stretch",
             )
 
 
@@ -199,7 +199,7 @@ def render_choice_card(
                 select_label,
                 key=select_key,
                 type="primary" if selected else "secondary",
-                use_container_width=True,
+                width="stretch",
             )
         if after_control is not None:
             after_control()

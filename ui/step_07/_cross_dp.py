@@ -61,7 +61,7 @@ def _render_tab_cross_dp(scorecards: Dict[str, ScorecardResult]) -> None:
         yaxis=dict(range=[0, 105], title="overall_score"),
         margin=dict(t=20, b=20, l=20, r=20),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption(
         "Status uses **colour and hatch** (so it reads without relying on colour "
         "alone): ✕-hatched = **Anomalous**, diagonal = **Single DP**, plain = "
@@ -71,7 +71,7 @@ def _render_tab_cross_dp(scorecards: Dict[str, ScorecardResult]) -> None:
     st.markdown("##### 🔭 Comparison table")
     st.dataframe(
         df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "overall_score": st.column_config.ProgressColumn(

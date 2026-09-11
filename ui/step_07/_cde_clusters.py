@@ -101,7 +101,7 @@ def _render_tab_cde_clusters(code: str, dp, config, result) -> None:
         margin=dict(t=20, b=30, l=20, r=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.markdown("##### 🌿 Cluster summary")
     summary = (
@@ -115,7 +115,7 @@ def _render_tab_cde_clusters(code: str, dp, config, result) -> None:
         name="cdes_in_cluster",
     )
     summary = summary.merge(counts, on="cluster", how="left")
-    st.dataframe(summary, use_container_width=True, hide_index=True)
+    st.dataframe(summary, width="stretch", hide_index=True)
     st.caption(
         "Clusters with higher null/duplicate ratios and lower cde_score "
         "are the ones to audit first - they are the columns behaving "

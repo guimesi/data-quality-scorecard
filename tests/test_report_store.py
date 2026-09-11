@@ -410,6 +410,27 @@ def test_prune_disabled_with_zero(monkeypatch, tmp_path):
         rs.reset_report_store()
 
 
+def test_last_error_and_describe_store(monkeypatch, tmp_path):
+    _stored(monkeypatch, tmp_path, keep=0)
+    try:
+        assert rs.save_artifacts(_artifacts()) is True
+        assert rs.last_error() is None
+        assert rs.describe_store() == f"local folder {tmp_path / 'reports'}"
+
+        def explode(*a, **k):
+            raise OSError("disk full")
+        monkeypatch.setattr(rs.get_report_store(), "put", explode)
+        assert rs.save_artifacts(_artifacts(run_id="run_x")) is False
+        assert rs.last_error() == "OSError: disk full"
+    finally:
+        rs.reset_report_store()
+    ws = rs.WorkspaceReportStore("/Workspace/Users/ana@corp.com/dq_reports",
+                                 client=_FakeWsClient())
+    monkeypatch.setattr(rs, "_STORE", ws)
+    assert rs.describe_store() == "workspace folder /Users/ana@corp.com/dq_reports"
+    rs.reset_report_store()
+
+
 def test_latest_url_shapes():
     assert rs.latest_url("cost_estimate") == "/reports/latest/COST_ESTIMATE"
     assert rs.latest_url("cost_estimate", "pdf") == "/reports/latest/COST_ESTIMATE/pdf"

@@ -40,7 +40,7 @@ def _render_project_save_panel() -> None:
                         unsafe_allow_html=True)
             save_clicked = st.button(
                 "💾 Save version", key="project_save_btn",
-                use_container_width=True, disabled=not name.strip(),
+                width="stretch", disabled=not name.strip(),
             )
         if save_clicked:
             record = save_project(name, domain_code, configs)
@@ -69,5 +69,5 @@ def _render_project_save_panel() -> None:
                     }
                     for v in versions
                 ]).iloc[::-1],
-                use_container_width=True, hide_index=True, height=180,
+                width="stretch", hide_index=True, height=180,
             )

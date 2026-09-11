@@ -277,7 +277,7 @@ def _render_dp_block(
                 "Selections are persisted as ``CustomDQRAssignment`` entries "
                 "and per-rule options keep their previously stored values."
             ),
-            use_container_width=True,
+            width="stretch",
         ):
             for rule in rules:
                 st.session_state[f"custom_{system_code}_{rule.id}_enabled"] = True

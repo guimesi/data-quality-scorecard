@@ -354,7 +354,7 @@ def _render_dp_block(system_code: str, dp) -> None:
                     "Mark every column flagged in the Custom DQRs column as a "
                     "CDE. Existing CDE picks are preserved."
                 ),
-                use_container_width=True,
+                width="stretch",
             ):
                 required_cols = set(required_by_rule.keys())
                 current_cdes = set(cfg.cdes)
@@ -411,7 +411,7 @@ def _render_dp_block(system_code: str, dp) -> None:
         },
         disabled=_READ_ONLY_COLUMNS,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         height=380,
         key=editor_key,
     )

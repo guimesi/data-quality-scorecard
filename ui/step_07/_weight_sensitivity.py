@@ -97,7 +97,7 @@ def _render_tab_weight_sensitivity(code: str, dp, config, result) -> None:
         yaxis_title="count",
         margin=dict(t=30, b=30, l=20, r=20),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption(
         "If P95 − P05 is small (a few points), your score is robust. "
         "If it spans a 10-15+ point range, the current weighting is "

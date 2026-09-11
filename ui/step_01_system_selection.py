@@ -210,7 +210,7 @@ def _nav(selected: list[str], total: int) -> None:
     st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
     c_back, c_restart, c_mid, c_next = st.columns([1, 1, 4, 1])
     with c_back:
-        if st.button("⬅ Back", use_container_width=True,
+        if st.button("⬅ Back", width="stretch",
                      help="Return to Step 0 - change the active domain."):
             prev_step()
     with c_restart:
@@ -229,7 +229,7 @@ def _nav(selected: list[str], total: int) -> None:
             "Next ➡",
             type="primary",
             disabled=(total == 0 or len(selected) == 0),
-            use_container_width=True,
+            width="stretch",
             key="step1_next",
         ):
             st.session_state.selected_systems = selected

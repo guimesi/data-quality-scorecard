@@ -294,6 +294,26 @@ class NullReportStore:
 
 
 _STORE: Optional[object] = None
+_LAST_ERROR: Optional[str] = None
+
+
+def last_error() -> Optional[str]:
+    """Why the most recent :func:`save_artifacts` did not store (``None``
+    after a successful write). Shown in the Step 6 panel so a
+    misconfigured store is diagnosable without digging through logs."""
+    return _LAST_ERROR
+
+
+def describe_store() -> str:
+    """Human-readable target of the active backend (for messages)."""
+    store = get_report_store()
+    if isinstance(store, LocalReportStore):
+        return f"local folder {store.root}"
+    if isinstance(store, WorkspaceReportStore):
+        return f"workspace folder {store.directory}"
+    if isinstance(store, VolumeReportStore):
+        return f"volume {store.directory}"
+    return "off"
 
 
 def get_report_store():
@@ -354,12 +374,16 @@ def save_artifacts(artifacts) -> bool:
     logged and return ``False`` (fire-and-forget) - the download buttons
     keep working from the in-memory artefacts.
     """
+    global _LAST_ERROR
     run_id = artifacts.run_id
     if not is_valid_run_id(run_id):
-        logger.warning("Refusing to store report with invalid run_id %r", run_id)
+        _LAST_ERROR = f"invalid run_id {run_id!r}"
+        logger.warning("[report store] refusing to store report with invalid "
+                       "run_id %r", run_id)
         return False
     store = get_report_store()
     if isinstance(store, NullReportStore):
+        _LAST_ERROR = "report store is off (DQS_REPORT_STORE)"
         return False
     objects = [("html", artifacts.html), ("pdf_html", artifacts.pdf_html)]
     if artifacts.pdf:
@@ -376,10 +400,14 @@ def save_artifacts(artifacts) -> bool:
     try:
         for kind, data in objects:
             store.put(run_id, kind, data)
-    except Exception:
-        logger.warning("Report store write failed (run_id=%s)", run_id,
-                       exc_info=True)
+    except Exception as exc:
+        _LAST_ERROR = f"{type(exc).__name__}: {str(exc)[:300]}"
+        logger.warning("[report store] write failed (run_id=%s, target=%s): %s",
+                       run_id, describe_store(), _LAST_ERROR, exc_info=True)
         return False
+    _LAST_ERROR = None
+    logger.info("[report store] stored run %s (%d objects) in %s", run_id,
+                len(objects), describe_store())
     prune_reports()
     return True
 

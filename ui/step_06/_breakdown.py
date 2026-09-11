@@ -77,7 +77,7 @@ def _render_custom_rules_table(code: str, result) -> None:
     df = pd.DataFrame(rows).sort_values("Pass rate (%)")
     custom_event = st.dataframe(
         df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Pass rate (%)": st.column_config.ProgressColumn(

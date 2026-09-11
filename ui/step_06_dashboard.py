@@ -194,13 +194,13 @@ def render() -> None:
 def _nav() -> None:
     c1, c2, c3, c_mid = st.columns([1, 1, 2, 4])
     with c1:
-        if st.button("⬅ Back", use_container_width=True):
+        if st.button("⬅ Back", width="stretch"):
             prev_step()
     with c2:
         render_restart_button(restart_app, key="restart_confirm_dashboard")
     with c3:
         if st.button(
-            "🧪 ML Lab (beta)", use_container_width=True,
+            "🧪 ML Lab (beta)", width="stretch",
             key="dashboard_open_ml_lab",
             help="Open the experimental ML Lab - anomaly detection, "
                  "rule impact, CDE clustering, weight sensitivity. "

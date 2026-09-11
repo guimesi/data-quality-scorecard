@@ -71,7 +71,7 @@ def _render_tab_risk_model(code: str, dp, config, result, flags=None, rule_meta=
     coef = report["coef_table"]
     st.dataframe(
         coef,
-        use_container_width=True, hide_index=True, height=360,
+        width="stretch", hide_index=True, height=360,
         column_config={
             "coefficient": st.column_config.NumberColumn(format="%+.3f"),
             # %.3g (not %.2f): odds_ratio = e^coefficient and the coefficient
@@ -104,7 +104,7 @@ def _render_tab_risk_model(code: str, dp, config, result, flags=None, rule_meta=
                 line=dict(color="rgba(0,0,0,0.4)", width=1, dash="dot"),
             )],
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         st.caption(
             "🔴 Red bars → failing the rule makes the row more likely RED. "
             "🟢 Green bars → failing the rule (counter-intuitively) is "
@@ -129,7 +129,7 @@ def _render_tab_risk_model(code: str, dp, config, result, flags=None, rule_meta=
             xaxis_title="P(row is RED)", yaxis_title="count",
             margin=dict(t=20, b=30, l=20, r=20),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 
 # =============================================================================

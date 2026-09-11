@@ -57,7 +57,7 @@ def _render_runs_trend() -> None:
         yaxis=dict(title="Runs", rangemode="tozero"),
         margin=dict(t=20, b=20, l=20, r=20),
     )
-    st.plotly_chart(fig, use_container_width=True, key="adoption_runs_trend")
+    st.plotly_chart(fig, width="stretch", key="adoption_runs_trend")
 
 
 def _render_tables() -> None:
@@ -66,7 +66,7 @@ def _render_tables() -> None:
     if by_system.empty:
         st.caption("No scorecard runs recorded yet.")
     else:
-        st.dataframe(by_system, use_container_width=True, hide_index=True,
+        st.dataframe(by_system, width="stretch", hide_index=True,
                      height=200)
 
     st.markdown("##### 👥 Activity by user")
@@ -74,7 +74,7 @@ def _render_tables() -> None:
     if per_user.empty:
         st.caption("No activity recorded yet.")
     else:
-        st.dataframe(per_user, use_container_width=True, hide_index=True,
+        st.dataframe(per_user, width="stretch", hide_index=True,
                      height=200)
 
     st.markdown("##### 📜 Audit trail (most recent first)")
@@ -82,7 +82,7 @@ def _render_tables() -> None:
     if trail.empty:
         st.caption("Nothing recorded yet.")
     else:
-        st.dataframe(trail, use_container_width=True, hide_index=True,
+        st.dataframe(trail, width="stretch", hide_index=True,
                      height=320)
 
 
@@ -102,5 +102,5 @@ def render() -> None:
     _render_tables()
     st.markdown("---")
     if st.button("⬅ Back to start", key="adoption_back",
-                 use_container_width=False):
+                 width="content"):
         goto("mode_selection")

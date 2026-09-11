@@ -91,7 +91,7 @@ def _render_tab_row_anomalies(code: str, dp, config, result, flags=None, rule_me
     )
     st.dataframe(
         report["table"],
-        use_container_width=True,
+        width="stretch",
         height=420,
         column_config={
             "row_score": st.column_config.ProgressColumn(
@@ -133,7 +133,7 @@ def _render_tab_row_anomalies(code: str, dp, config, result, flags=None, rule_me
                 xaxis_title="row_score", yaxis_title="count",
                 margin=dict(t=20, b=30, l=20, r=20),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
     with cright:
         st.markdown("##### 🧮 Per-rule fail rate (rarity context)")
         st.caption(
@@ -152,7 +152,7 @@ def _render_tab_row_anomalies(code: str, dp, config, result, flags=None, rule_me
         fr = fr[["label", "fail_rate_pct"]]
         st.dataframe(
             fr,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=320,
             column_config={

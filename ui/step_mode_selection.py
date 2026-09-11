@@ -104,7 +104,7 @@ def _mode_card(card: dict, is_active: bool) -> None:
         label,
         key=f"mode_pick_{card['mode']}",
         type="primary" if is_active else "secondary",
-        use_container_width=True,
+        width="stretch",
     ):
         set_app_mode(card["mode"])
         goto(card["next_step"])
@@ -216,7 +216,7 @@ def _render_saved_projects() -> None:
         st.markdown("<div style='height:1.7em'></div>", unsafe_allow_html=True)
         open_clicked = st.button(
             "📂 Open", key="project_open_btn", type="primary",
-            use_container_width=True,
+            width="stretch",
         )
     with st.expander(f"📜 Changelog - {name}", expanded=False):
         st.dataframe(
@@ -229,7 +229,7 @@ def _render_saved_projects() -> None:
                 }
                 for v in versions
             ]).iloc[::-1],
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
     if open_clicked:
         record = get_project(name, version)

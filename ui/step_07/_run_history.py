@@ -78,7 +78,7 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
 
     bar_l, bar_m, bar_r, bar_x = st.columns([1.4, 1.4, 1.4, 1])
     with bar_l:
-        if st.button("📸 Snapshot current runs", use_container_width=True,
+        if st.button("📸 Snapshot current runs", width="stretch",
                      key="ml_lab_snap_btn", help="Capture every current scorecard."):
             new = []
             for code, res in scorecards.items():
@@ -91,7 +91,7 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
         if _UPLOAD_UNDER_MAINTENANCE:
             st.button(
                 "📂 Upload (under maintenance)",
-                use_container_width=True,
+                width="stretch",
                 key="ml_lab_uploader_disabled",
                 disabled=True,
                 help="Snapshot upload is temporarily under maintenance. Snapshots "
@@ -104,11 +104,11 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
                 "💾 Export history (JSON)",
                 data=buf, file_name="ml_lab_history.json",
                 mime="application/json",
-                use_container_width=True,
+                width="stretch",
                 key="ml_lab_history_dl",
             )
     with bar_x:
-        if runs and st.button("🗑 Clear", use_container_width=True,
+        if runs and st.button("🗑 Clear", width="stretch",
                               key="ml_lab_clear_hist",
                               help="Drop every snapshot in session state."):
             st.session_state.ml_lab_runs = []
@@ -141,7 +141,7 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
         for s in runs
     ])
     st.markdown("##### 📜 Snapshots in session")
-    st.dataframe(snap_df, use_container_width=True, hide_index=True, height=240)
+    st.dataframe(snap_df, width="stretch", hide_index=True, height=240)
 
     # ---- Trend chart ----
     # ``filter(None, ...)`` drops falsy values (None / empty string) so the
@@ -169,7 +169,7 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
                     yaxis=dict(range=[0, 100], title="overall_score"),
                     margin=dict(t=30, b=20, l=20, r=20),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
     # ---- Drift analyzer ----
     st.markdown("##### 🌊 Drift between two snapshots")
@@ -251,7 +251,7 @@ def _render_tab_run_history(scorecards: Dict[str, ScorecardResult]) -> None:
                 continue
             st.dataframe(
                 df_,
-                use_container_width=True, hide_index=True, height=320,
+                width="stretch", hide_index=True, height=320,
                 column_config={
                     "score_a": st.column_config.NumberColumn(format="%.2f"),
                     "score_b": st.column_config.NumberColumn(format="%.2f"),

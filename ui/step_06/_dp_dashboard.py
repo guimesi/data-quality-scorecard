@@ -61,7 +61,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     data=_build_rowscores_csv(dp, result, cfg),
                     file_name=f"{code}_row_scores.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width="stretch",
                     key=f"dl_csv_{code}",
                 ):
                     log_event("export", {"format": "csv", "dp": code},
@@ -72,7 +72,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     data=_build_config_json(dp, result, cfg),
                     file_name=f"{code}_scorecard.json",
                     mime="application/json",
-                    use_container_width=True,
+                    width="stretch",
                     key=f"dl_json_{code}",
                 ):
                     log_event("export", {"format": "json", "dp": code},
@@ -85,7 +85,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
             st.plotly_chart(
                 _gauge(result.overall_score, "Data Product Score",
                        result.threshold_green, result.threshold_yellow),
-                use_container_width=True,
+                width="stretch",
             )
         with c2:
             cc1, cc2, cc3, cc4 = st.columns(4)
@@ -99,7 +99,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
             cc4.metric("🔴 Red", f"{result.rows_red:,}",
                        delta=f"{result.rows_red/max(result.total_rows,1)*100:.1f}%",
                        delta_color="off")
-            st.plotly_chart(_threshold_bar(result), use_container_width=True)
+            st.plotly_chart(_threshold_bar(result), width="stretch")
 
         # Breakdowns
         tab_cde, tab_dim, tab_rules, tab_custom, tab_worst, tab_hist = st.tabs([
@@ -133,7 +133,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     "for weight-aware score impact see ML Lab → 🎯 Rule Impact."
                 )
                 cde_event = st.plotly_chart(
-                    fig, use_container_width=True,
+                    fig, width="stretch",
                     on_select="rerun", key=f"cde_chart_{code}",
                 )
                 _render_cde_drilldown(
@@ -168,7 +168,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     "🎯 Rule Impact."
                 )
                 dim_event = st.plotly_chart(
-                    fig, use_container_width=True,
+                    fig, width="stretch",
                     on_select="rerun", key=f"dim_chart_{code}",
                 )
                 _render_dimension_drilldown(
@@ -196,7 +196,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                 )
                 rules_event = st.dataframe(
                     df_rules,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config={
                         "Pass rate (%)": st.column_config.ProgressColumn(
@@ -254,7 +254,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     "column shows 100 (pass) or 0 (fail); weights are in the "
                     "column header."
                 )
-                st.dataframe(show, use_container_width=True, height=350)
+                st.dataframe(show, width="stretch", height=350)
 
 def _render_overview_cards(scorecards) -> None:
     """Render the per-DP score cards across the top of the dashboard.

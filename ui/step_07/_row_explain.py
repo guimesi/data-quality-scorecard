@@ -62,12 +62,12 @@ def _render_tab_row_explain(code: str, dp, config, result, flags=None, rule_meta
         )
         row_index = options[int(chosen_pos)]
     with c2:
-        if st.button("🔴 Worst row", use_container_width=True,
+        if st.button("🔴 Worst row", width="stretch",
                      key=f"ml_lab_row_worst_{code}"):
             st.session_state[pending_key] = options.index(worst_idx)
             st.rerun()
     with c3:
-        if st.button("🟡 Median row", use_container_width=True,
+        if st.button("🟡 Median row", width="stretch",
                      key=f"ml_lab_row_med_{code}"):
             st.session_state[pending_key] = options.index(median_idx)
             st.rerun()
@@ -115,7 +115,7 @@ def _render_tab_row_explain(code: str, dp, config, result, flags=None, rule_meta
             yaxis_title="row_score points",
             margin=dict(t=20, b=40, l=20, r=20),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         st.caption(
             "Each red step shows how many points the corresponding CDE's "
             "failing rules cost this row. The bars sum to exactly "
@@ -129,7 +129,7 @@ def _render_tab_row_explain(code: str, dp, config, result, flags=None, rule_meta
         if not expl["per_cde"].empty:
             st.dataframe(
                 expl["per_cde"],
-                use_container_width=True, hide_index=True, height=260,
+                width="stretch", hide_index=True, height=260,
                 column_config={
                     "deficit": st.column_config.NumberColumn(format="%.2f"),
                     "share_pct": st.column_config.ProgressColumn(
@@ -144,7 +144,7 @@ def _render_tab_row_explain(code: str, dp, config, result, flags=None, rule_meta
         if not expl["per_rule"].empty:
             st.dataframe(
                 expl["per_rule"],
-                use_container_width=True, hide_index=True, height=260,
+                width="stretch", hide_index=True, height=260,
                 column_config={
                     "contribution_to_deficit": st.column_config.NumberColumn(
                         "deficit pts", format="%.2f",

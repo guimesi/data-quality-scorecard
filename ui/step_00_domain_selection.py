@@ -127,7 +127,7 @@ def render() -> None:
     st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
     c_back, c_restart, c_mid, c_next = st.columns([1, 1, 4, 1])
     with c_back:
-        if st.button("⬅ Back", use_container_width=True,
+        if st.button("⬅ Back", width="stretch",
                      help="Return to the mode picker (One-click / Step-by-step)."):
             prev_step()
     with c_restart:
@@ -146,6 +146,6 @@ def render() -> None:
             "Next ➡",
             type="primary",
             disabled=picked_code is None,
-            use_container_width=True,
+            width="stretch",
         ):
             next_step()

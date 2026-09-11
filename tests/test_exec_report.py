@@ -1242,6 +1242,30 @@ def test_wrapper_without_store_shows_no_link(monkeypatch, tmp_path):
         report_store.reset_report_store()
 
 
+def test_wrapper_explains_a_failing_store(monkeypatch, local_report_store):
+    """A configured-but-broken store must say WHY nothing was stored (the
+    user cannot read the app logs comfortably)."""
+    dp, cfg, result = _fixture()
+    fake = _fake_st(dp, cfg, download_returns=False)
+    monkeypatch.setattr(er, "st", fake)
+    monkeypatch.setattr(er, "build_report",
+                        partial(build_report, want_pdf=False))
+
+    def explode(run_id, kind, data):
+        raise PermissionError("PERMISSION_DENIED: no Can Edit on folder")
+
+    monkeypatch.setattr(report_store.get_report_store(), "put", explode)
+    er._render_executive_report_download({"EPT": result})
+    cache = fake.session_state["_dq_report_cache"]
+    assert cache["stored"] is False
+    assert cache["store_error"].startswith("PermissionError: PERMISSION_DENIED")
+    captions = " ".join(c.args[0] for c in fake.caption.call_args_list)
+    assert "Report not stored" in captions
+    assert "PERMISSION_DENIED: no Can Edit" in captions
+    assert "local folder" in captions
+    assert "Hosted copy" not in captions
+
+
 def test_download_button_hidden_without_scorecards(monkeypatch):
     fake = MagicMock()
     fake.session_state = _FakeSessionState()

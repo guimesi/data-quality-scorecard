@@ -164,6 +164,7 @@ def _get_artifacts(domain_code: str, scorecards: Dict[str, object],
         stored = report_store.save_artifacts(artifacts)
     st.session_state[_CACHE_KEY] = {
         "key": key, "artifacts": artifacts, "stored": stored,
+        "store_error": None if stored else report_store.last_error(),
     }
     return artifacts, stored
 
@@ -246,6 +247,13 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
         )
 
     hosted_url = _hosted_url(artifacts.run_id) if stored else None
+    if not stored and report_store.is_enabled():
+        st.caption(
+            "⚠️ Report not stored - hosted links unavailable for this run. "
+            f"Store: {report_store.describe_store()}. Reason: "
+            f"{report_store.last_error() or 'unknown'} (search the app logs "
+            "for `[report store]`)."
+        )
     if hosted_url:
         latest = _latest_url(domain_code)
         st.caption(

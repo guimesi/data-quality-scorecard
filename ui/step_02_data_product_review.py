@@ -254,7 +254,7 @@ def render() -> None:
                     "Read-only sample of the joined Data Product. "
                     "Full data is used for profiling and scoring downstream."
                 )
-                st.dataframe(dp.df.head(10), use_container_width=True, height=300)
+                st.dataframe(dp.df.head(10), width="stretch", height=300)
 
     st.markdown("---")
     _nav(show_next=True)

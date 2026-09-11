@@ -159,7 +159,7 @@ def _render_failing_rows(dp, result, cfg, mask: pd.Series,
             f"Showing the {len(shown_idx)} lowest-scoring of the "
             f"{n_fail:,} failing rows. Use the CSV export for the full list."
         )
-    st.dataframe(show, use_container_width=True, height=300, key=key)
+    st.dataframe(show, width="stretch", height=300, key=key)
 
 
 def _render_cde_drilldown(code: str, dp, result, cfg, event) -> None:

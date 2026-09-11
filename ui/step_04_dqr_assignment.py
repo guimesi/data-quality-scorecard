@@ -269,7 +269,7 @@ def _render_apply_all_suggestions_button(system_code: str, dp, cfg) -> None:
                 "Data Product. Suggestions you have already enabled are kept "
                 "as-is and your manual edits are preserved."
             ),
-            use_container_width=True,
+            width="stretch",
         ):
             for cde, sug in pending:
                 cfg.assignments.append(sug)
