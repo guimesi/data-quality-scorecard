@@ -168,10 +168,9 @@ def _get_artifacts(domain_code: str, scorecards: Dict[str, object],
     return artifacts, stored
 
 
-def _hosted_url(run_id: str) -> str:
-    """Absolute ``/reports/<run_id>`` link when the request URL is known,
-    else the app-relative path."""
-    path = report_store.report_url(run_id)
+def _absolute(path: str) -> str:
+    """``path`` prefixed with the app origin when the request URL is
+    known, else the app-relative path."""
     try:
         url = str(st.context.url or "")
     except Exception:  # nosec B110 - no request context (tests, scripts)
@@ -180,6 +179,16 @@ def _hosted_url(run_id: str) -> str:
         origin = url.split("://", 1)[0] + "://" + url.split("://", 1)[1].split("/", 1)[0]
         return origin + path
     return path
+
+
+def _hosted_url(run_id: str) -> str:
+    """Absolute ``/reports/<run_id>`` link (this run)."""
+    return _absolute(report_store.report_url(run_id))
+
+
+def _latest_url(domain_code: str) -> str:
+    """Absolute ``/reports/latest/<DOMAIN>`` link (always the newest run)."""
+    return _absolute(report_store.latest_url(domain_code))
 
 
 def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
@@ -238,10 +247,13 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
 
     hosted_url = _hosted_url(artifacts.run_id) if stored else None
     if hosted_url:
+        latest = _latest_url(domain_code)
         st.caption(
-            f"Hosted copy: [{hosted_url}]({hosted_url}) - the link to paste "
-            "in SharePoint (opens for users entitled to this app). "
-            f"Run `{artifacts.run_id}`."
+            f"Hosted copy of this run: [{hosted_url}]({hosted_url}) "
+            f"(run `{artifacts.run_id}`). Fixed link to the newest run of "
+            f"this domain, for SharePoint pages or an Airtable button: "
+            f"[{latest}]({latest}) - add `/pdf` for the PDF edition. Both "
+            "open for users entitled to this app."
         )
     _render_sharepoint_push(domain_code, artifacts, hosted_url)
     _render_airtable_push(domain_code, scorecards)

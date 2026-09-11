@@ -22,10 +22,11 @@ from ui.step_06.report.models import ReportArtifacts
 RUN = "run_20260910_120000_ab12"
 
 
-def _artifacts(run_id: str = RUN, pdf=b"%PDF-1.7 fake"):
+def _artifacts(run_id: str = RUN, pdf=b"%PDF-1.7 fake",
+               generated_at: str = "2026-09-10T12:00:00Z"):
     return ReportArtifacts(
         run_id=run_id, domain_code="cost_estimate",
-        generated_at="2026-09-10T12:00:00Z",
+        generated_at=generated_at,
         html=b"<!DOCTYPE html><html><body>interactive <b>x</b></body></html>",
         pdf=pdf, pdf_html=b"<!DOCTYPE html><html>print</html>",
         metadata={"dp_codes": ["EPT"], "overall_scores": {"EPT": 81.5},
@@ -155,6 +156,35 @@ def test_index_when_store_is_empty_or_off(app, monkeypatch):
     assert status == 404 and b"disabled" in body
 
 
+def test_latest_redirects_to_newest_run_of_the_domain(app):
+    rs.save_artifacts(_artifacts(run_id="run_old", generated_at="2026-09-01T10:00:00Z"))
+    rs.save_artifacts(_artifacts(run_id="run_new", generated_at="2026-09-02T10:00:00Z"))
+    status, headers, _ = _get(app, "/reports/latest/COST_ESTIMATE")
+    assert status == 302
+    assert headers["location"] == "/reports/run_new"
+    assert headers["cache-control"] == "no-store"      # follows new runs
+    assert headers["x-content-type-options"] == "nosniff"
+    status, headers, _ = _get(app, "/reports/latest/cost_estimate/pdf")
+    assert status == 302 and headers["location"] == "/reports/run_new/pdf"
+
+
+@pytest.mark.parametrize("path, status", [
+    ("/reports/latest/QUALITY", 404),              # no run of that domain
+    ("/reports/latest/COST_ESTIMATE/exe", 404),    # unknown kind
+    ("/reports/latest/a%20b", 404),                # hostile domain
+])
+def test_latest_unknown_cases_are_404(app, path, status):
+    rs.save_artifacts(_artifacts())
+    got, headers, body = _get(app, path)
+    assert got == status
+    assert headers["cache-control"] == "no-store" or b"Not found" in body
+
+
+def test_index_mentions_the_fixed_latest_link(app):
+    _, _, body = _get(app, "/reports")
+    assert b"/reports/latest/&lt;DOMAIN&gt;" in body
+
+
 def test_server_entry_point_mounts_the_routes():
     """``server.py`` exposes an ``st.App`` (what ``streamlit run server.py``
     discovers) with the /reports routes attached."""
@@ -164,5 +194,7 @@ def test_server_entry_point_mounts_the_routes():
 
     server = importlib.import_module("server")
     assert isinstance(server.app, st.App)
-    paths = sorted(r.path for r in server.app._user_routes)
-    assert paths == ["/reports", "/reports/{run_id}", "/reports/{run_id}/{kind}"]
+    paths = [r.path for r in server.app._user_routes]
+    assert paths == ["/reports", "/reports/latest/{domain}",
+                     "/reports/latest/{domain}/{kind}", "/reports/{run_id}",
+                     "/reports/{run_id}/{kind}"]   # latest before {run_id}

@@ -68,15 +68,24 @@ class Settings:
 
     # Report store (Step 6 Data Quality Report). Every run's artefacts
     # (interactive HTML, PDF, print-ready HTML, metadata) are kept so the
-    # app can serve the interactive edition at ``/reports/<run_id>`` - the
-    # link SharePoint gets instead of the .html file it would sanitise.
-    #   local  -> files under ``<store_dir>/reports/`` (default)
-    #   volume -> a Unity Catalog Volume (``DQS_REPORT_VOLUME`` path) via
-    #             the Databricks Files API - survives app restarts
-    #   off    -> nothing is stored; /reports/<run_id> always 404s
+    # app can serve the interactive edition at ``/reports/<run_id>`` and
+    # the fixed ``/reports/latest/<DOMAIN>`` link - what SharePoint / an
+    # Airtable button get instead of the .html file SharePoint sanitises.
+    #   local     -> files under ``<store_dir>/reports/`` (default)
+    #   workspace -> a folder of Databricks workspace files
+    #                (``DQS_REPORT_WORKSPACE_DIR``) via the Workspace API;
+    #                the owner shares the folder with the app's service
+    #                principal ("Can Edit") - no UC admin needed
+    #   volume    -> a Unity Catalog Volume (``DQS_REPORT_VOLUME`` path) via
+    #                the Files API - needs CREATE VOLUME + GRANT by an admin
+    #   off       -> nothing is stored; /reports/<run_id> always 404s
     report_store: str = os.getenv("DQS_REPORT_STORE", "local").lower()
+    # e.g. /Workspace/Users/<owner>/dq_reports
+    report_workspace_dir: str = os.getenv("DQS_REPORT_WORKSPACE_DIR", "")
     # e.g. /Volumes/entai_sandbox_catalog/data_quality_scorecards/dq_reports
     report_volume_path: str = os.getenv("DQS_REPORT_VOLUME", "")
+    # Retention: newest N runs kept per domain after every write (0 = all).
+    report_keep_runs: int = int(os.getenv("DQS_REPORT_KEEP_RUNS", "30"))
     # PDF edition: headless Chromium binary used for HTML -> PDF when the
     # Playwright package is not installed (or as an explicit override).
     # Empty = auto-detect (Playwright first, then well-known Chrome paths).

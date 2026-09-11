@@ -11,17 +11,29 @@ one ``run_id`` as four objects:
 - ``<run_id>.print.html`` print-ready HTML (the PDF edition's source)
 - ``<run_id>.json``      metadata (publisher columns, filenames)
 
-Three interchangeable backends selected by ``SETTINGS.report_store``
+Four interchangeable backends selected by ``SETTINGS.report_store``
 (``DQS_REPORT_STORE``):
 
-- ``local``  - files under ``<store_dir>/reports/`` (default; what local
+- ``local``     - files under ``<store_dir>/reports/`` (default; what local
   development and tests use).
-- ``volume`` - a Unity Catalog Volume (``SETTINGS.report_volume_path``,
+- ``workspace`` - a folder of Databricks **workspace files**
+  (``SETTINGS.report_workspace_dir``, e.g.
+  ``/Workspace/Users/<you>/dq_reports``) through the Workspace API. The
+  production backend when no Unity Catalog admin is available: the folder
+  owner creates it and shares it with the app's service principal ("Can
+  Edit") - no GRANT, no Volume. Files show up in the workspace browser, a
+  scheduled job writes there with plain file I/O. Per-file cap: 10 MB
+  (Workspace import API).
+- ``volume``    - a Unity Catalog Volume (``SETTINGS.report_volume_path``,
   e.g. ``/Volumes/<catalog>/<schema>/dq_reports``) through the Databricks
-  Files API, with the same headless identity as the SQL client. This is
-  the production backend: the app container's disk does not survive
-  restarts, a Volume does.
-- ``off``    - nothing is stored; every read returns ``None``.
+  Files API - needs ``CREATE VOLUME`` + ``GRANT`` by a UC admin.
+- ``off``       - nothing is stored; every read returns ``None``.
+
+Retention: after every write :func:`prune_reports` keeps only the newest
+``SETTINGS.report_keep_runs`` runs per domain (0 = keep everything).
+``latest_run_id(domain)`` backs the fixed ``/reports/latest/<DOMAIN>``
+link, so a static link (an Airtable button, a SharePoint page) always
+opens the newest run.
 
 **Fire-and-forget contract** for writes: :func:`save_artifacts` catches
 storage exceptions, logs them and returns ``False`` - a broken store
@@ -96,6 +108,109 @@ class LocalReportStore:
             if is_valid_run_id(p.name[:-len(suffix)])
         )
 
+    def delete(self, run_id: str, kind: str) -> None:
+        path = self.root / _object_name(run_id, kind)
+        if path.is_file():
+            path.unlink()
+
+
+class WorkspaceReportStore:
+    """A folder of Databricks workspace files via the Workspace API.
+
+    ``directory`` is the folder as shown in the workspace browser
+    (``/Workspace/Users/<owner>/dq_reports`` or the API form without the
+    ``/Workspace`` prefix). Identity is resolved by ``databricks.sdk``
+    like the SQL client; the folder owner shares it with that identity
+    ("Can Edit") - a user-level action, no admin involved.
+
+    Uploads use ``ImportFormat.AUTO`` so ``.html`` / ``.pdf`` / ``.json``
+    land as plain workspace files (not notebooks); downloads use
+    ``ExportFormat.AUTO`` which returns their raw bytes.
+    """
+
+    MAX_BYTES = 10 * 1024 * 1024  # Workspace import API limit per file
+
+    def __init__(self, directory: str, client: Any = None) -> None:
+        api_path = _workspace_api_path(directory)
+        if not api_path:
+            raise ValueError(
+                "DQS_REPORT_WORKSPACE_DIR must be a workspace folder "
+                "(/Workspace/Users/<owner>/<folder>, /Workspace/Shared/<folder> "
+                "or the same without the /Workspace prefix)"
+            )
+        self.directory = api_path
+        self._client = client
+        self._dir_ready = False
+
+    def _ws(self):
+        if self._client is None:
+            from databricks.sdk import WorkspaceClient  # type: ignore
+
+            self._client = WorkspaceClient()
+        return self._client.workspace
+
+    def _path(self, run_id: str, kind: str) -> str:
+        return f"{self.directory}/{_object_name(run_id, kind)}"
+
+    def put(self, run_id: str, kind: str, data: bytes) -> None:
+        from databricks.sdk.service.workspace import ImportFormat  # type: ignore
+
+        if len(data) > self.MAX_BYTES:
+            raise ValueError(
+                f"{_object_name(run_id, kind)} is {len(data) / 1024 / 1024:.1f} MB; "
+                "workspace files are limited to 10 MB per upload")
+        ws = self._ws()
+        if not self._dir_ready:
+            ws.mkdirs(self.directory)
+            self._dir_ready = True
+        ws.upload(self._path(run_id, kind), io.BytesIO(data),
+                  format=ImportFormat.AUTO, overwrite=True)
+
+    def get(self, run_id: str, kind: str) -> Optional[bytes]:
+        from databricks.sdk.errors import NotFound  # type: ignore
+        from databricks.sdk.service.workspace import ExportFormat  # type: ignore
+
+        try:
+            handle = self._ws().download(self._path(run_id, kind),
+                                         format=ExportFormat.AUTO)
+        except NotFound:
+            return None
+        return handle.read() if hasattr(handle, "read") else bytes(handle)
+
+    def list_run_ids(self) -> List[str]:
+        from databricks.sdk.errors import NotFound  # type: ignore
+
+        suffix = KINDS["metadata"]["suffix"]
+        try:
+            entries = list(self._ws().list(self.directory))
+        except NotFound:
+            return []
+        out = []
+        for entry in entries:
+            name = str(getattr(entry, "path", "") or "").rsplit("/", 1)[-1]
+            if name.endswith(suffix) and is_valid_run_id(name[:-len(suffix)]):
+                out.append(name[:-len(suffix)])
+        return sorted(out)
+
+    def delete(self, run_id: str, kind: str) -> None:
+        from databricks.sdk.errors import NotFound  # type: ignore
+
+        try:
+            self._ws().delete(self._path(run_id, kind))
+        except NotFound:
+            pass
+
+
+def _workspace_api_path(directory: str) -> str:
+    """``/Workspace/Users/x/y`` -> ``/Users/x/y`` (the Workspace API form);
+    empty string when ``directory`` is not a workspace folder."""
+    path = (directory or "").strip().rstrip("/")
+    if path.startswith("/Workspace/"):
+        path = path[len("/Workspace"):]
+    if path.startswith(("/Users/", "/Shared/", "/Repos/")) and len(path.split("/")) >= 3:
+        return path
+    return ""
+
 
 class VolumeReportStore:
     """A Unity Catalog Volume directory via the Databricks Files API.
@@ -153,6 +268,14 @@ class VolumeReportStore:
                 out.append(name[:-len(suffix)])
         return sorted(out)
 
+    def delete(self, run_id: str, kind: str) -> None:
+        from databricks.sdk.errors import NotFound  # type: ignore
+
+        try:
+            self._files().delete(self._path(run_id, kind))
+        except NotFound:
+            pass
+
 
 class NullReportStore:
     """``DQS_REPORT_STORE=off``: store nothing, serve nothing."""
@@ -166,6 +289,9 @@ class NullReportStore:
     def list_run_ids(self) -> List[str]:
         return []
 
+    def delete(self, run_id: str, kind: str) -> None:
+        pass
+
 
 _STORE: Optional[object] = None
 
@@ -174,7 +300,8 @@ def get_report_store():
     """Process-wide store singleton for ``SETTINGS.report_store``.
 
     Unknown backend values fall back to ``local`` with a warning; a
-    ``volume`` backend without a Volume path degrades to ``off``.
+    ``volume`` / ``workspace`` backend without a valid path degrades to
+    ``off``.
     """
     global _STORE
     if _STORE is not None:
@@ -182,6 +309,13 @@ def get_report_store():
     backend = (SETTINGS.report_store or "local").lower()
     if backend == "off":
         _STORE = NullReportStore()
+    elif backend == "workspace":
+        try:
+            _STORE = WorkspaceReportStore(SETTINGS.report_workspace_dir)
+        except ValueError:
+            logger.warning("DQS_REPORT_STORE=workspace without a valid "
+                           "DQS_REPORT_WORKSPACE_DIR; reports are not stored")
+            _STORE = NullReportStore()
     elif backend == "volume":
         try:
             _STORE = VolumeReportStore(SETTINGS.report_volume_path)
@@ -242,11 +376,38 @@ def save_artifacts(artifacts) -> bool:
     try:
         for kind, data in objects:
             store.put(run_id, kind, data)
-        return True
     except Exception:
         logger.warning("Report store write failed (run_id=%s)", run_id,
                        exc_info=True)
         return False
+    prune_reports()
+    return True
+
+
+def prune_reports(keep: Optional[int] = None) -> List[str]:
+    """Delete every run beyond the newest ``keep`` per domain
+    (``SETTINGS.report_keep_runs`` by default; 0 = keep everything).
+    Best effort: failures are logged, never raised. Returns the run ids
+    removed."""
+    keep = SETTINGS.report_keep_runs if keep is None else keep
+    if keep <= 0:
+        return []
+    removed: List[str] = []
+    try:
+        store = get_report_store()
+        seen: Dict[str, int] = {}
+        for meta in list_reports():                 # newest first
+            domain = str(meta.get("domain_code") or "").lower()
+            seen[domain] = seen.get(domain, 0) + 1
+            if seen[domain] <= keep:
+                continue
+            run_id = str(meta.get("run_id"))
+            for kind in KINDS:
+                store.delete(run_id, kind)
+            removed.append(run_id)
+    except Exception:
+        logger.warning("Report store pruning failed", exc_info=True)
+    return removed
 
 
 def load_report(run_id: str, kind: str = "html") -> Optional[bytes]:
@@ -292,7 +453,27 @@ def list_reports() -> List[Dict[str, Any]]:
     return out
 
 
+def latest_run_id(domain_code: str) -> Optional[str]:
+    """The newest stored run of ``domain_code`` (case-insensitive), or
+    ``None``."""
+    wanted = (domain_code or "").strip().lower()
+    if not wanted:
+        return None
+    for meta in list_reports():
+        if str(meta.get("domain_code") or "").lower() == wanted:
+            run_id = meta.get("run_id")
+            return run_id if is_valid_run_id(run_id) else None
+    return None
+
+
 def report_url(run_id: str, kind: str = "html") -> str:
     """Path of the served artefact (relative to the app origin)."""
     base = f"/reports/{run_id}"
+    return base if kind == "html" else f"{base}/{kind}"
+
+
+def latest_url(domain_code: str, kind: str = "html") -> str:
+    """The fixed path that always resolves to the newest run of a domain
+    (``/reports/latest/<DOMAIN>[/<kind>]``)."""
+    base = f"/reports/latest/{(domain_code or '').upper()}"
     return base if kind == "html" else f"{base}/{kind}"

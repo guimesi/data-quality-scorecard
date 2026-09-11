@@ -43,14 +43,22 @@ env:
   - name: DQS_REVERIFY_HOURS
     value: "24"
   # Report store: every run's Data Quality Report (interactive HTML, PDF,
-  # print-ready HTML, metadata) is written to this Unity Catalog Volume
-  # (create it once with deploy/databricks/03_report_volume.sql) and served
-  # by the app at /reports/<run_id> - the link to paste in SharePoint.
-  # Switch to "off" to disable hosting (downloads keep working).
+  # print-ready HTML, metadata) is written to a folder of workspace files
+  # and served by the app at /reports/<run_id> and at the fixed link
+  # /reports/latest/<DOMAIN> - what SharePoint pages / Airtable buttons
+  # point at. Create the folder in your workspace and share it with the
+  # app's service principal ("Can Edit"); no admin or Unity Catalog
+  # object is involved. Replace <owner> with the workspace user (email)
+  # who owns the folder. Alternatives: "volume" (+ DQS_REPORT_VOLUME, needs
+  # a UC admin, see deploy/databricks/03_report_volume.sql) or "off".
   - name: DQS_REPORT_STORE
-    value: "volume"
-  - name: DQS_REPORT_VOLUME
-    value: "/Volumes/entai_sandbox_catalog/data_quality_scorecards/dq_reports"
+    value: "workspace"
+  - name: DQS_REPORT_WORKSPACE_DIR
+    value: "/Workspace/Users/<owner>/dq_reports"
+  # Newest N runs kept per domain (older ones are deleted after each
+  # write); 0 keeps everything.
+  - name: DQS_REPORT_KEEP_RUNS
+    value: "30"
   # Airtable write-back (Step 6 "Send to Airtable"). The token comes from
   # the app secret resource with key "airtable-token" (scope dq-scorecard);
   # the base id is plain config. The button stays hidden until BOTH are

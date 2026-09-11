@@ -47,14 +47,25 @@ resource mapping).
 5. **(Optional) Airtable write-back**: add `AIRTABLE_TOKEN` (as an app
    secret) and `AIRTABLE_BASE_ID` to the app's environment. Leave unset
    to hide the feature.
-5b. **Report store (hosted Data Quality Reports)**: run
-   `databricks/03_report_volume.sql` (creates the `dq_reports` Volume and
-   grants `READ VOLUME` / `WRITE VOLUME` to the app's service principal).
-   `app.yaml` sets `DQS_REPORT_STORE=volume` and `DQS_REPORT_VOLUME` to
-   that path; the app then serves every run at
-   `https://<app-url>/reports/<run_id>` (index at `/reports`) - the link
-   to paste in SharePoint next to the PDF. Set `DQS_REPORT_STORE=off` to
-   disable hosting (downloads keep working).
+5b. **Report store (hosted Data Quality Reports)** - no admin needed:
+   1. In the workspace browser create a folder, e.g.
+      `Workspace → Users → <you> → dq_reports`.
+   2. On that folder choose **Share** and add the app's service principal
+      (the `app-xxxx ...` identity shown on the app page) with **Can
+      Edit**. That is the only permission the store needs.
+   3. In `app.yaml` set `DQS_REPORT_WORKSPACE_DIR` to the folder
+      (`/Workspace/Users/<you>/dq_reports`); `DQS_REPORT_STORE` is already
+      `workspace`.
+   The app then serves every run at `https://<app-url>/reports/<run_id>`
+   (index at `/reports`) and the newest run of a domain at the fixed link
+   `https://<app-url>/reports/latest/<DOMAIN>` (`/pdf` for the PDF) - what
+   to paste in SharePoint or behind an Airtable button. Files also appear
+   in the folder, so the PDF can be downloaded from the workspace browser.
+   Retention: `DQS_REPORT_KEEP_RUNS` newest runs per domain (default 30).
+   Per-file limit of the Workspace API: 10 MB.
+   Alternative with a Unity Catalog admin: `DQS_REPORT_STORE=volume` +
+   `DQS_REPORT_VOLUME`, after `databricks/03_report_volume.sql`. Set
+   `DQS_REPORT_STORE=off` to disable hosting (downloads keep working).
 5c. **(Optional) PDF edition**: the PDF is rendered by headless Chromium.
    The Apps container has none by default, so the app offers the
    print-ready HTML instead (Ctrl+P in Chrome/Edge produces the same PDF).
@@ -123,8 +134,10 @@ resource mapping).
 - [ ] SharePoint publishing (optional): Entra app registration with
       `Sites.Selected`, write grant on the target site, secret resource
       `sharepoint-client-secret`, `SHAREPOINT_*` values in `app.yaml`
-- [ ] Run `03_report_volume.sql` (Volume for the hosted Data Quality
-      Reports; or set `DQS_REPORT_STORE=off`)
+- [ ] Report store: create the `dq_reports` workspace folder, share it
+      with the app's service principal (Can Edit), set
+      `DQS_REPORT_WORKSPACE_DIR` (or `03_report_volume.sql` + `volume`,
+      or `DQS_REPORT_STORE=off`)
 - [ ] Decide on the PDF edition: print-ready HTML (default) or a
       Chromium in the container (optional)
 - [ ] Grant *Can use* on the app to the intended user groups

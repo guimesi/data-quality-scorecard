@@ -16,10 +16,12 @@ from src import report_store as rs
 from ui.step_06.report.models import ReportArtifacts
 
 
-def _artifacts(run_id: str = "run_20260910_120000_ab12", pdf=b"%PDF-1.7 x"):
+def _artifacts(run_id: str = "run_20260910_120000_ab12", pdf=b"%PDF-1.7 x",
+               domain_code: str = "cost_estimate",
+               generated_at: str = "2026-09-10T12:00:00Z"):
     return ReportArtifacts(
-        run_id=run_id, domain_code="cost_estimate",
-        generated_at="2026-09-10T12:00:00Z",
+        run_id=run_id, domain_code=domain_code,
+        generated_at=generated_at,
         html=b"<!DOCTYPE html><html>interactive</html>", pdf=pdf,
         pdf_html=b"<!DOCTYPE html><html>print</html>",
         metadata={"dp_codes": ["EPT"], "overall_scores": {"EPT": 81.5},
@@ -239,3 +241,175 @@ def test_volume_store_is_selected_by_settings(monkeypatch):
         assert rs.load_report("run_20260910_120000_ab12") is None
     finally:
         rs.reset_report_store()
+
+
+# ============================================================ workspace files
+
+
+class _WsObj:
+    def __init__(self, path):
+        self.path = path
+        self.object_type = "FILE"
+
+
+class _FakeWorkspace:
+    """Just enough of ``WorkspaceClient().workspace`` for the store."""
+
+    def __init__(self):
+        self.objects = {}
+        self.dirs = []
+        self.uploads = []
+
+    def mkdirs(self, path):
+        self.dirs.append(path)
+
+    def upload(self, path, content, format=None, overwrite=False):
+        assert overwrite is True and format is not None and format.value == "AUTO"
+        self.uploads.append(path)
+        self.objects[path] = content.read()
+
+    def download(self, path, format=None):
+        from databricks.sdk.errors import NotFound
+        assert format is not None and format.value == "AUTO"
+        if path not in self.objects:
+            raise NotFound("nope")
+        return io.BytesIO(self.objects[path])
+
+    def list(self, path):
+        from databricks.sdk.errors import NotFound
+        if path not in self.dirs:
+            raise NotFound("nope")
+        return [_WsObj(p) for p in self.objects if p.startswith(path + "/")]
+
+    def delete(self, path, recursive=None):
+        from databricks.sdk.errors import NotFound
+        if path not in self.objects:
+            raise NotFound("nope")
+        del self.objects[path]
+
+
+class _FakeWsClient:
+    def __init__(self):
+        self.workspace = _FakeWorkspace()
+
+
+@pytest.mark.parametrize("given, api_path", [
+    ("/Workspace/Users/ana@corp.com/dq_reports", "/Users/ana@corp.com/dq_reports"),
+    ("/Users/ana@corp.com/dq_reports/", "/Users/ana@corp.com/dq_reports"),
+    ("/Workspace/Shared/dq_reports", "/Shared/dq_reports"),
+])
+def test_workspace_store_accepts_browser_and_api_paths(given, api_path):
+    assert rs.WorkspaceReportStore(given, client=_FakeWsClient()).directory == api_path
+
+
+@pytest.mark.parametrize("bad", ["", "/tmp/x", "/Volumes/c/s/v", "/Users", "Users/x/y"])
+def test_workspace_store_rejects_non_workspace_paths(bad):
+    with pytest.raises(ValueError):
+        rs.WorkspaceReportStore(bad, client=_FakeWsClient())
+
+
+def test_workspace_store_roundtrip_via_workspace_api():
+    client = _FakeWsClient()
+    store = rs.WorkspaceReportStore("/Workspace/Users/ana@corp.com/dq_reports",
+                                    client=client)
+    art = _artifacts()
+    store.put(art.run_id, "html", art.html)
+    store.put(art.run_id, "metadata", json.dumps({"run_id": art.run_id}).encode())
+    assert client.workspace.dirs == ["/Users/ana@corp.com/dq_reports"]  # mkdirs once
+    assert client.workspace.uploads[0] == \
+        "/Users/ana@corp.com/dq_reports/run_20260910_120000_ab12.html"
+    assert store.get(art.run_id, "html") == art.html
+    assert store.get(art.run_id, "pdf") is None
+    assert store.list_run_ids() == [art.run_id]
+    store.delete(art.run_id, "html")
+    store.delete(art.run_id, "html")            # already gone: no error
+    assert store.get(art.run_id, "html") is None
+
+
+def test_workspace_store_refuses_files_over_the_api_limit():
+    store = rs.WorkspaceReportStore("/Users/ana@corp.com/dq_reports",
+                                    client=_FakeWsClient())
+    with pytest.raises(ValueError, match="10 MB"):
+        store.put("run_1", "pdf", b"x" * (rs.WorkspaceReportStore.MAX_BYTES + 1))
+
+
+def test_workspace_backend_selected_and_failures_swallowed(monkeypatch):
+    monkeypatch.setattr(rs, "SETTINGS", Settings(
+        data_source="mock", report_store="workspace",
+        report_workspace_dir="/Workspace/Users/ana@corp.com/dq_reports"))
+    rs.reset_report_store()
+    try:
+        store = rs.get_report_store()
+        assert isinstance(store, rs.WorkspaceReportStore)
+        store._client = _FakeWsClient()
+        assert rs.save_artifacts(_artifacts()) is True
+        assert rs.load_report("run_20260910_120000_ab12") == _artifacts().html
+        assert rs.latest_run_id("cost_estimate") == "run_20260910_120000_ab12"
+
+        def explode(*a, **k):
+            raise RuntimeError("no network")
+        store._client.workspace.upload = explode
+        assert rs.save_artifacts(_artifacts(run_id="run_other")) is False
+    finally:
+        rs.reset_report_store()
+
+
+def test_workspace_backend_without_dir_degrades_to_off(monkeypatch):
+    monkeypatch.setattr(rs, "SETTINGS", Settings(
+        data_source="mock", report_store="workspace", report_workspace_dir=""))
+    rs.reset_report_store()
+    try:
+        assert isinstance(rs.get_report_store(), rs.NullReportStore)
+        assert rs.is_enabled() is False
+    finally:
+        rs.reset_report_store()
+
+
+# ================================================================ retention
+
+
+def _stored(monkeypatch, tmp_path, keep):
+    monkeypatch.setattr(rs, "SETTINGS", Settings(
+        data_source="mock", report_store="local", store_dir=str(tmp_path),
+        report_keep_runs=keep))
+    rs.reset_report_store()
+
+
+def test_prune_keeps_newest_n_per_domain(monkeypatch, tmp_path):
+    _stored(monkeypatch, tmp_path, keep=2)
+    try:
+        for i, (domain, stamp) in enumerate([
+            ("cost_estimate", "2026-09-01T10:00:00Z"),
+            ("cost_estimate", "2026-09-02T10:00:00Z"),
+            ("quality", "2026-09-02T11:00:00Z"),
+            ("cost_estimate", "2026-09-03T10:00:00Z"),
+        ]):
+            rs.save_artifacts(_artifacts(run_id=f"run_{i}", domain_code=domain,
+                                         generated_at=stamp))
+        ids = {m["run_id"] for m in rs.list_reports()}
+        assert ids == {"run_1", "run_3", "run_2"}        # run_0 pruned
+        assert rs.load_report("run_0") is None
+        assert not (tmp_path / "reports" / "run_0.pdf").exists()
+        assert rs.latest_run_id("COST_ESTIMATE") == "run_3"
+        assert rs.latest_run_id("quality") == "run_2"
+        assert rs.latest_run_id("nope") is None
+    finally:
+        rs.reset_report_store()
+
+
+def test_prune_disabled_with_zero(monkeypatch, tmp_path):
+    _stored(monkeypatch, tmp_path, keep=0)
+    try:
+        for i in range(3):
+            rs.save_artifacts(_artifacts(run_id=f"run_{i}",
+                                         generated_at=f"2026-09-0{i + 1}T10:00:00Z"))
+        assert len(rs.list_reports()) == 3
+        assert rs.prune_reports() == []
+        assert rs.prune_reports(keep=1) == ["run_1", "run_0"]
+    finally:
+        rs.reset_report_store()
+
+
+def test_latest_url_shapes():
+    assert rs.latest_url("cost_estimate") == "/reports/latest/COST_ESTIMATE"
+    assert rs.latest_url("cost_estimate", "pdf") == "/reports/latest/COST_ESTIMATE/pdf"

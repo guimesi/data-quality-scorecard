@@ -8,6 +8,9 @@ Mounted next to Streamlit by ``server.py`` (``st.App(routes=...)``):
 - ``GET /reports/{run_id}/pdf``    the PDF edition (``application/pdf``)
 - ``GET /reports/{run_id}/pdf_html``  the print-ready HTML
 - ``GET /reports/{run_id}/metadata``  the run metadata (JSON)
+- ``GET /reports/latest/{domain}[/{kind}]``  redirects (302, uncached) to
+  the newest stored run of that domain - the fixed link for an Airtable
+  button or a SharePoint page.
 
 Authentication is the app's own: in Databricks Apps every request is
 authenticated by the platform before it reaches this process, so a link
@@ -23,6 +26,7 @@ imports Streamlit at module level.
 from __future__ import annotations
 
 import html as _html
+import re
 from typing import Any, Dict, List, Optional
 
 from starlette.concurrency import run_in_threadpool
@@ -31,6 +35,7 @@ from starlette.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
+    RedirectResponse,
     Response,
 )
 from starlette.routing import Route
@@ -47,6 +52,7 @@ _CACHE = "private, max-age=3600"
 
 _KIND_EXT = {"html": ".html", "pdf": ".pdf", "pdf_html": "_print.html",
              "metadata": ".json"}
+_DOMAIN_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _esc(value: object) -> str:
@@ -93,6 +99,24 @@ async def get_report(request: Request) -> Response:
     return _secure(response, csp)
 
 
+async def get_latest(request: Request) -> Response:
+    """Redirect to the newest stored run of ``domain`` (optionally one
+    ``kind`` of it). Never cached, so the fixed link follows new runs."""
+    domain = request.path_params.get("domain", "")
+    kind = request.path_params.get("kind", "html")
+    if not _DOMAIN_RE.match(domain) or kind not in report_store.KINDS:
+        return _secure(PlainTextResponse("Not found", status_code=404))
+    run_id = await run_in_threadpool(report_store.latest_run_id, domain)
+    if run_id is None:
+        response = _secure(PlainTextResponse(
+            f"No stored report for domain {domain!r} yet.", status_code=404))
+    else:
+        response = _secure(RedirectResponse(
+            report_store.report_url(run_id, kind), status_code=302))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def _index_html(reports: List[Dict[str, Any]]) -> str:
     rows = []
     for m in reports:
@@ -127,7 +151,9 @@ def _index_html(reports: List[Dict[str, Any]]) -> str:
         "uppercase;color:#64748b}code{font-size:.9em;background:#f1f5f9;"
         "padding:.1em .4em;border-radius:4px}a{color:#3b4d8f}</style></head>"
         "<body><h1>Data Quality Reports</h1><p>Every stored run, newest first. "
-        "Links open the report served by this app.</p>"
+        "Links open the report served by this app. The newest run of a domain "
+        "is always at <code>/reports/latest/&lt;DOMAIN&gt;</code> "
+        "(<code>/pdf</code> for the PDF edition).</p>"
         "<table><thead><tr><th>Generated (UTC)</th><th>Domain</th>"
         "<th>Data Products</th><th>By</th><th>Editions</th><th>Run</th></tr>"
         f"</thead><tbody>{body}</tbody></table></body></html>"
@@ -145,6 +171,9 @@ def report_routes() -> List[Route]:
     """The Starlette routes to mount alongside Streamlit."""
     return [
         Route("/reports", list_reports, methods=["GET"]),
+        # ``latest`` routes first: "latest" would otherwise match {run_id}.
+        Route("/reports/latest/{domain}", get_latest, methods=["GET"]),
+        Route("/reports/latest/{domain}/{kind}", get_latest, methods=["GET"]),
         Route("/reports/{run_id}", get_report, methods=["GET"]),
         Route("/reports/{run_id}/{kind}", get_report, methods=["GET"]),
     ]
