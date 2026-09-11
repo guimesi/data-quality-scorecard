@@ -59,3 +59,19 @@ env:
     valueFrom: "airtable-token"
   - name: AIRTABLE_BASE_ID
     value: "appgjMHJvvPRfGaM2"
+  # SharePoint publishing (Step 6 "Publish to SharePoint"): Entra ID app
+  # registration with Sites.Selected on the target site. The client secret
+  # comes from the app secret resource with key "sharepoint-client-secret";
+  # the rest is plain config. The button stays hidden until all four
+  # required values are non-empty at runtime. Fill in the tenant, client
+  # and site once IT provides the app registration.
+  - name: SHAREPOINT_TENANT_ID
+    value: ""
+  - name: SHAREPOINT_CLIENT_ID
+    value: ""
+  - name: SHAREPOINT_CLIENT_SECRET
+    valueFrom: "sharepoint-client-secret"
+  - name: SHAREPOINT_SITE
+    value: ""
+  - name: SHAREPOINT_FOLDER
+    value: "DQ Reports"

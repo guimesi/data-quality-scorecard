@@ -282,9 +282,18 @@ production) and `server.py` (`st.App`) serves them at
 `GET /reports/<run_id>` (plus `/reports/<run_id>/pdf` and an index at
 `/reports`) - the link to paste next to the PDF in SharePoint. The
 `ReportArtifacts(html, pdf, pdf_html, metadata, filenames)` contract is
-what a future SharePoint publisher consumes. The **Send to Airtable**
-button pushes scores only (one record per Data Product: score, status,
-timestamp, user) - no report file travels to Airtable.
+what the publishers consume:
+
+- **Publish to SharePoint** (`src/sharepoint_push.py`, Microsoft Graph
+  with an Entra ID app registration holding `Sites.Selected` on the
+  target site; hidden until `SHAREPOINT_*` is configured, see
+  `deploy/README.md`) uploads the PDF, the interactive HTML (download-only
+  there) and a metadata `.json` carrying the hosted link, under
+  `<folder>/<DOMAIN>/`, and refreshes fixed-name `_latest` copies so a
+  static link (an Airtable button, a SharePoint page) always opens the
+  newest report.
+- **Send to Airtable** pushes scores only (one record per Data Product:
+  score, status, timestamp, user) - no report file travels to Airtable.
 
 `python scripts/build_sample_report.py` generates both editions from
 mock data (`output/dq_report/`).

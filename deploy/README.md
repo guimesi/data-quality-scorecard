@@ -63,6 +63,31 @@ resource mapping).
    `playwright install chromium` in a custom start command, with
    `PLAYWRIGHT_BROWSERS_PATH` on a writable path), or point
    `DQS_CHROMIUM_PATH` at a Chromium binary available in the image.
+5d. **(Optional) SharePoint publishing** (Step 6 "Publish to SharePoint",
+   `src/sharepoint_push.py`): the app uploads each run's PDF, interactive
+   HTML and a metadata `.json` (with the hosted `/reports/<run_id>` link)
+   to a document library through Microsoft Graph, under
+   `<SHAREPOINT_FOLDER>/<DOMAIN>/`, plus fixed-name `_latest` copies for
+   static links. IT steps (Entra ID + SharePoint admin):
+   1. Register an application in Entra ID (*App registrations → New*),
+      note the **Tenant ID** and **Application (client) ID**, create a
+      **client secret** (note its expiry - it must be rotated).
+   2. API permissions → *Microsoft Graph → Application permissions* →
+      **`Sites.Selected`** → *Grant admin consent*. This permission alone
+      gives access to no site.
+   3. Grant the app **write** on the target site only, e.g. with PnP
+      PowerShell: `Grant-PnPAzureADAppSitePermission -AppId <client-id>
+      -DisplayName "DQ Scorecard" -Site https://<host>.sharepoint.com/sites/<name>
+      -Permissions Write`, or `POST /sites/{site-id}/permissions` in Graph
+      by a site owner.
+   4. On the app: store the secret in the app secret resource
+      **`sharepoint-client-secret`** and fill `SHAREPOINT_TENANT_ID`,
+      `SHAREPOINT_CLIENT_ID`, `SHAREPOINT_SITE`
+      (`<host>.sharepoint.com:/sites/<name>` or the Graph site id) and,
+      optionally, `SHAREPOINT_DRIVE_ID` / `SHAREPOINT_FOLDER` in `app.yaml`.
+      The button stays hidden until the four required values are set.
+   Outbound HTTPS to `login.microsoftonline.com` and
+   `graph.microsoft.com` is all the network needs.
 6. **Deploy the code**: from the repo root either
    ```bash
    databricks sync --watch . /Workspace/Users/<you>/dq-scorecard   # dev loop
@@ -95,6 +120,9 @@ resource mapping).
 - [ ] Run `02_persistence_tables.sql`, then `01_grants.sql` (needs the
       app's service principal id)
 - [ ] Configure Airtable secrets on the app (optional feature)
+- [ ] SharePoint publishing (optional): Entra app registration with
+      `Sites.Selected`, write grant on the target site, secret resource
+      `sharepoint-client-secret`, `SHAREPOINT_*` values in `app.yaml`
 - [ ] Run `03_report_volume.sql` (Volume for the hosted Data Quality
       Reports; or set `DQS_REPORT_STORE=off`)
 - [ ] Decide on the PDF edition: print-ready HTML (default) or a

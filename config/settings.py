@@ -95,6 +95,22 @@ class Settings:
     airtable_key_field: str = os.getenv("AIRTABLE_KEY_FIELD", "Name")
     airtable_system_field: str = os.getenv("AIRTABLE_SYSTEM_FIELD", "System")
 
+    # SharePoint publishing (Step 6 "Publish to SharePoint"): Microsoft
+    # Graph with an Entra ID app registration (client credentials,
+    # application permission Sites.Selected granted on the target site).
+    # Any of the four required values empty = not configured: the button
+    # is hidden and nothing is sent. See deploy/README.md for the IT steps.
+    sharepoint_tenant_id: str = os.getenv("SHAREPOINT_TENANT_ID", "")
+    sharepoint_client_id: str = os.getenv("SHAREPOINT_CLIENT_ID", "")
+    sharepoint_client_secret: str = os.getenv("SHAREPOINT_CLIENT_SECRET", "")
+    # Graph site id, or "<host>.sharepoint.com:/sites/<name>".
+    sharepoint_site: str = os.getenv("SHAREPOINT_SITE", "")
+    # Optional: a specific document library (Graph drive id). Empty = the
+    # site's default library ("Documents").
+    sharepoint_drive_id: str = os.getenv("SHAREPOINT_DRIVE_ID", "")
+    # Folder inside the library; one sub-folder per domain is created.
+    sharepoint_folder: str = os.getenv("SHAREPOINT_FOLDER", "DQ Reports")
+
     # Scorecard thresholds
     threshold_green: float = float(os.getenv("THRESHOLD_GREEN", "80"))
     threshold_yellow: float = float(os.getenv("THRESHOLD_YELLOW", "60"))

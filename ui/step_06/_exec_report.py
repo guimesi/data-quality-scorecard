@@ -14,8 +14,10 @@ This module only:
 - renders the download buttons (telemetry event unchanged for the
   interactive edition: ``export`` / ``{"format": "executive_html"}``)
   and the hosted link;
-- renders the Send-to-Airtable button (scores only - no report file is
-  sent to Airtable).
+- renders the Publish-to-SharePoint button (PDF + interactive HTML +
+  metadata to the configured library via Microsoft Graph, see
+  :mod:`src.sharepoint_push`) and the Send-to-Airtable button (scores
+  only - no report file is sent to Airtable).
 
 Every button of this panel is rendered with ``width="stretch"`` so they
 line up at the same width inside their column.
@@ -234,14 +236,64 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
             "print-ready HTML produces the same document."
         )
 
-    if stored:
-        url = _hosted_url(artifacts.run_id)
+    hosted_url = _hosted_url(artifacts.run_id) if stored else None
+    if hosted_url:
         st.caption(
-            f"Hosted copy: [{url}]({url}) - the link to paste in SharePoint "
-            "(opens for users entitled to this app). "
+            f"Hosted copy: [{hosted_url}]({hosted_url}) - the link to paste "
+            "in SharePoint (opens for users entitled to this app). "
             f"Run `{artifacts.run_id}`."
         )
+    _render_sharepoint_push(domain_code, artifacts, hosted_url)
     _render_airtable_push(domain_code, scorecards)
+
+
+def _render_sharepoint_push(domain_code: str, artifacts: ReportArtifacts,
+                            hosted_url: Optional[str]) -> None:
+    """Publish-to-SharePoint button. Hidden unless SHAREPOINT_* is
+    configured; the result of a successful publish is kept in the run's
+    cache entry so the links survive dashboard reruns; failures surface
+    as an inline error, never a crash."""
+    from src.sharepoint_push import (
+        SharePointPushError,
+        is_configured,
+        publish_report,
+    )
+
+    if not is_configured():
+        return
+    cache = st.session_state.get(_CACHE_KEY) or {}
+    if st.button(
+        "☁️ Publish to SharePoint",
+        key="btn_sharepoint_publish",
+        width="stretch",
+        help="Uploads this run's PDF, interactive HTML and metadata (with "
+             "the hosted link) to the configured SharePoint library, under "
+             "one folder per domain, and refreshes the fixed-name "
+             "'_latest' copies used by static links.",
+    ):
+        with st.spinner("☁️ Publishing to SharePoint..."):
+            try:
+                result = publish_report(artifacts, hosted_url)
+            except SharePointPushError as exc:
+                st.error(f"SharePoint publish failed: {exc}")
+                return
+        cache["sharepoint"] = {
+            "folder": result.folder_path,
+            "files": [(f.name, f.web_url) for f in result.files],
+        }
+        st.session_state[_CACHE_KEY] = cache
+        log_event("export", {"format": "sharepoint_publish",
+                             "folder": result.folder_path,
+                             "files": [f.name for f in result.files]},
+                  domain_code)
+    published = cache.get("sharepoint")
+    if published:
+        links = ", ".join(
+            f"[{name}]({url})" if url else name for name, url in published["files"]
+        )
+        st.success(
+            f"Published to SharePoint folder `{published['folder']}`: {links}"
+        )
 
 
 def _render_airtable_push(domain_code: str,
