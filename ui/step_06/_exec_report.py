@@ -14,8 +14,11 @@ This module only:
 - renders the download buttons (telemetry event unchanged for the
   interactive edition: ``export`` / ``{"format": "executive_html"}``)
   and the hosted link;
-- renders the Send-to-Airtable button (attachment contract unchanged -
-  the Airtable push receives the interactive HTML bytes as before).
+- renders the Send-to-Airtable button (scores only - no report file is
+  sent to Airtable).
+
+Every button of this panel is rendered with ``width="stretch"`` so they
+line up at the same width inside their column.
 
 ``_build_executive_report_html`` keeps the previous builder's
 name/signature for existing imports and tests.
@@ -32,12 +35,7 @@ from config.settings import SETTINGS
 from src import report_store
 from src.persistence import current_username, log_event
 from src.run_history import config_fingerprint, result_fingerprint
-from ui.step_06.report import (
-    ReportArtifacts,
-    ReportContext,
-    build_report,
-    split_zip,
-)
+from ui.step_06.report import ReportArtifacts, ReportContext, build_report
 from ui.step_06.report import (
     build_executive_report_html as _pure_build_executive_report_html,
 )
@@ -198,26 +196,12 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
         file_name=artifacts.filenames["interactive"],
         mime="text/html",
         key="dl_exec_report",
+        width="stretch",
         help="Self-contained, interactive snapshot of this run - scores, "
              "DQRs with reasons, failing rows, history, drift and the exact "
              "configuration. Works offline from file://.",
     ):
         log_event("export", {"format": "executive_html"}, domain_code)
-
-    if st.download_button(
-        "📦 Data Quality Report (HTML + CSS + JS, zip)",
-        data=split_zip(artifacts),
-        file_name=artifacts.filenames["split_zip"],
-        mime="application/zip",
-        key="dl_exec_report_split",
-        help="The same interactive report as three files that reference "
-             "each other by name - for SharePoint, which strips inline "
-             "styles and scripts from .html files. Unzip the three files "
-             "into one folder and link the .html (file names carry no "
-             "timestamp, so a fixed link keeps pointing at the latest "
-             "upload).",
-    ):
-        log_event("export", {"format": "executive_split_zip"}, domain_code)
 
     if artifacts.pdf is not None:
         if st.download_button(
@@ -226,6 +210,7 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
             file_name=artifacts.filenames["pdf"],
             mime="application/pdf",
             key="dl_exec_report_pdf",
+            width="stretch",
             help="Complete paginated edition (cover, executive summary, one "
                  "chapter per Data Product, configuration) - the file to "
                  "publish in SharePoint.",
@@ -238,6 +223,7 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
             file_name=artifacts.filenames["pdf_html"],
             mime="text/html",
             key="dl_exec_report_print",
+            width="stretch",
             help="The paginated PDF edition as HTML: open it in Chrome or "
                  "Edge and press Ctrl+P → Save as PDF (A4, backgrounds on).",
         ):
@@ -255,37 +241,34 @@ def _render_executive_report_download(scorecards: Dict[str, object]) -> None:
             "(opens for users entitled to this app). "
             f"Run `{artifacts.run_id}`."
         )
-    _render_airtable_push(domain_code, scorecards, artifacts.html)
+    _render_airtable_push(domain_code, scorecards)
 
 
-def _render_airtable_push(domain_code: str, scorecards: Dict[str, object],
-                          html_bytes: bytes) -> None:
-    """Send-to-Airtable button (phase 5). Hidden unless AIRTABLE_* is
-    configured; failures surface as an inline error, never a crash."""
-    from src.airtable_push import (
-        AirtablePushError,
-        is_configured,
-        push_executive_report,
-    )
+def _render_airtable_push(domain_code: str,
+                          scorecards: Dict[str, object]) -> None:
+    """Send-to-Airtable button (phase 5): scores only. Hidden unless
+    AIRTABLE_* is configured; failures surface as an inline error, never
+    a crash."""
+    from src.airtable_push import AirtablePushError, is_configured, push_results
 
     if not is_configured():
         return
     if st.button(
         "📤 Send to Airtable",
         key="btn_airtable_push",
-        help="Upserts this domain's record in the Airtable results table "
-             "(score, status, per-DP breakdown) and attaches the interactive "
-             "HTML report, giving data owners the full picture in Airtable.",
+        width="stretch",
+        help="Upserts one record per Data Product in the Airtable results "
+             "table (overall score, status, run timestamp, run by). No "
+             "report file is sent.",
     ):
         try:
-            record_ids = push_executive_report(domain_code, scorecards,
-                                               html_bytes)
+            record_ids = push_results(domain_code, scorecards)
         except AirtablePushError as exc:
             st.error(f"Airtable push failed: {exc}")
         else:
             log_event("export", {"format": "airtable_push",
                                  "record_ids": record_ids}, domain_code)
             st.success(
-                f"Results sent to Airtable - {len(record_ids)} system "
-                "record(s) updated, executive report attached to each."
+                f"Results sent to Airtable - {len(record_ids)} Data Product "
+                "record(s) updated."
             )

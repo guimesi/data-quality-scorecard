@@ -4,9 +4,6 @@
 text nodes AND attribute values (``title``, ``data-*``, ``aria-label``).
 ``document`` assembles the final self-contained page: inline CSS, body,
 the JSON payload island and the inline script - no external references.
-``document_split`` is the three-file variant (HTML + ``.css`` + ``.js``
-side by side) for hosts that strip inline ``<style>``/``<script>``
-from ``.html`` files but serve separate assets untouched (SharePoint).
 """
 from __future__ import annotations
 
@@ -59,25 +56,3 @@ def document(*, title: str, css: str, body: str, data_json: str,
         "</body></html>"
     )
 
-
-def document_split(*, title: str, body: str, css_href: str,
-                   js_href: str) -> str:
-    """The HTML of the split edition: same body, but the stylesheet and
-    the script are referenced by *relative* file name instead of being
-    inlined, so the three files only need to sit in the same folder.
-
-    The script tag stays at the end of ``<body>`` (like the inline one)
-    so the DOM exists when it runs; the ``.js`` file carries the JSON
-    payload itself (see :func:`ui.step_06.report.interactivity.split_js`).
-    """
-    return (
-        "<!DOCTYPE html>\n"
-        '<html lang="en"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{esc(title)}</title>\n"
-        f'<link rel="stylesheet" href="{esc(css_href)}"></head>\n'
-        "<body>\n"
-        f"{body}\n"
-        f'<script src="{esc(js_href)}"></script>\n'
-        "</body></html>"
-    )

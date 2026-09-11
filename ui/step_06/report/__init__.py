@@ -7,11 +7,6 @@ objects (plus the run metadata in :class:`ReportContext`) into a
 - the **interactive HTML** - ONE standalone ``.html`` (no CDN, no fonts,
   no Plotly, no external JS/CSS) that works from ``file:///`` and is
   hosted by the app at ``/reports/<run_id>``;
-- the **split edition** - the same interactive report as three files
-  (``.html`` + ``.css`` + ``.js`` referencing each other by relative
-  name, shipped as one ``.zip``) for hosts such as SharePoint that strip
-  inline ``<style>``/``<script>`` from ``.html`` files but serve the
-  side-car assets untouched;
 - the **PDF edition** - a paginated A4 HTML (``pdf_html``, print-ready
   in any Chromium browser) converted with headless Chromium into
   ``pdf`` bytes when a converter is available (see
@@ -24,7 +19,6 @@ Pipeline::
             ▼
     collect.build_model()  ──►  ReportModel
             ├── render_interactive(model) ─► html
-            ├── render_interactive_split(model) ─► {html, css, js} ─► zip
             └── pdf.render_pdf_html(model) ─► pdf_html ─► convert.html_to_pdf() ─► pdf
 
 ``build_executive_report_html`` is the backwards-compatible alias
@@ -35,22 +29,16 @@ contract). The builder never touches Streamlit -
 """
 from __future__ import annotations
 
-import io
 import logging
 import uuid
-import zipfile
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 
 from ui.step_06.report import collect, sections
 from ui.step_06.report.convert import PdfConversionUnavailable, html_to_pdf
-from ui.step_06.report.html import document, document_split
-from ui.step_06.report.interactivity import (
-    REPORT_JS,
-    safe_json_for_script,
-    split_js,
-)
+from ui.step_06.report.html import document
+from ui.step_06.report.interactivity import REPORT_JS, safe_json_for_script
 from ui.step_06.report.models import (
     ReportArtifact,
     ReportArtifacts,
@@ -74,9 +62,7 @@ __all__ = [
     "build_report",
     "filenames_for",
     "render_interactive",
-    "render_interactive_split",
     "render_pdf_html",
-    "split_zip",
 ]
 
 build_model = collect.build_model
@@ -96,27 +82,13 @@ def _stamp(ctx: ReportContext) -> str:
         return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
-def split_basename(ctx: ReportContext) -> str:
-    """``dq_scorecard_report_<DOMAIN>`` - the split edition's files carry
-    no timestamp on purpose: each upload overwrites the previous one in
-    the hosting folder, so a fixed link (an Airtable button, a SharePoint
-    page) keeps pointing at the latest report."""
-    return f"dq_scorecard_report_{(ctx.domain_code or 'report').upper()}"
-
-
 def filenames_for(ctx: ReportContext) -> Dict[str, str]:
-    """``dq_scorecard_report_<DOMAIN>_<YYYYMMDD_HHMMSS>.<ext>`` per artefact
-    (the split edition's three files use :func:`split_basename`)."""
+    """``dq_scorecard_report_<DOMAIN>_<YYYYMMDD_HHMMSS>.<ext>`` per artefact."""
     base = f"dq_scorecard_report_{(ctx.domain_code or 'report').upper()}_{_stamp(ctx)}"
-    split = split_basename(ctx)
     return {
         "interactive": f"{base}.html",
         "pdf": f"{base}.pdf",
         "pdf_html": f"{base}_print.html",
-        "split_html": f"{split}.html",
-        "split_css": f"{split}.css",
-        "split_js": f"{split}.js",
-        "split_zip": f"{base}_split.zip",
     }
 
 
@@ -159,39 +131,6 @@ def _interactive_title(ctx: ReportContext) -> str:
     return sections.report_title(ctx) + (f" · {date}" if date else "")
 
 
-def render_interactive_split(model: ReportModel) -> Dict[str, str]:
-    """The interactive edition as three files: ``{"html", "css", "js"}``.
-
-    Same body, same stylesheet, same runtime as :func:`render_interactive`;
-    the HTML references ``<basename>.css`` / ``<basename>.js`` by
-    relative name and the JSON payload travels inside the ``.js`` file.
-    Drop the three files in one folder (SharePoint library, web server,
-    local disk) and open the ``.html``.
-    """
-    names = filenames_for(model.ctx)
-    return {
-        "html": document_split(
-            title=_interactive_title(model.ctx),
-            body=_interactive_body(model),
-            css_href=names["split_css"],
-            js_href=names["split_js"],
-        ),
-        "css": REPORT_CSS,
-        "js": split_js(safe_json_for_script(model.data)),
-    }
-
-
-def split_zip(artifacts: ReportArtifacts) -> bytes:
-    """One ``.zip`` with the split edition's three files (names from
-    ``artifacts.filenames``), ready to upload as-is."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for kind in ("html", "css", "js"):
-            zf.writestr(artifacts.filenames[f"split_{kind}"],
-                        artifacts.split[kind])
-    return buf.getvalue()
-
-
 def build_report(ctx: ReportContext, scorecards: Dict[str, object],
                  dps: Dict[str, object], configs: Dict[str, object], *,
                  want_pdf: bool = True,
@@ -211,8 +150,6 @@ def build_report(ctx: ReportContext, scorecards: Dict[str, object],
     ctx = _ensure_run_id(ctx)
     model = build_model(ctx, scorecards, dps, configs)
     html_text = render_interactive(model)
-    split = {k: v.encode("utf-8")
-             for k, v in render_interactive_split(model).items()}
     pdf_html = render_pdf_html(model)
 
     pdf_bytes: Optional[bytes] = None
@@ -274,7 +211,6 @@ def build_report(ctx: ReportContext, scorecards: Dict[str, object],
         pdf_html=pdf_html.encode("utf-8"),
         metadata=metadata,
         filenames=filenames_for(ctx),
-        split=split,
     )
 
 

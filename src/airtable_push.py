@@ -1,18 +1,16 @@
 """Write-back of scorecard results to Airtable (Step 6, phase 5).
 
 Data owners manage rules and CDEs in an Airtable base; this module closes
-the loop by pushing each run's outcome back there so they get the full
-project view without opening Streamlit:
+the loop by pushing each run's outcome back there so they get the
+project view without opening Streamlit: one **upsert** per (domain,
+system) in the results table (``PATCH /v0/{base}/{table}`` with
+``performUpsert`` merging on the key field + system field, so an EPT run
+never overwrites the ADR row), carrying that system's overall score,
+status, timestamp and the user who ran it.
 
-1. **Upsert** one record per (domain, system) in the results table
-   (``PATCH /v0/{base}/{table}`` with ``performUpsert`` merging on the
-   key field + system field, so an EPT run never overwrites the ADR row),
-   carrying that system's overall score, status, timestamp and the user
-   who ran it.
-2. **Attach** the self-contained executive HTML report to each upserted
-   record via Airtable's direct upload endpoint
-   (``POST content.airtable.com/v0/{base}/{record}/{field}/uploadAttachment``,
-   base64 payload, hard 5 MB API limit).
+Scores only: no report file travels to Airtable. The Data Quality Report
+(interactive HTML / PDF) is downloaded from Step 6, hosted by the app at
+``/reports/<run_id>`` and published to SharePoint.
 
 Configuration lives in ``config.settings`` (AIRTABLE_* env vars); with no
 token/base configured the feature is invisible in the UI. Errors never
@@ -20,14 +18,11 @@ crash the dashboard: every HTTP/transport failure is normalized into
 :class:`AirtablePushError` with a short actionable message.
 
 Databricks Apps note: apps have outbound internet access by default, so
-no extra network configuration is needed for ``api.airtable.com`` /
-``content.airtable.com``; transport failures still surface here as
-:class:`AirtablePushError`.
+no extra network configuration is needed for ``api.airtable.com``;
+transport failures still surface here as :class:`AirtablePushError`.
 """
 from __future__ import annotations
 
-import base64
-import time
 from datetime import datetime
 from typing import Any, Dict, List
 from urllib.parse import quote
@@ -39,16 +34,7 @@ from src.persistence import current_username
 from utils.helpers import score_label
 
 API_ROOT = "https://api.airtable.com/v0"
-CONTENT_ROOT = "https://content.airtable.com/v0"
-# Airtable's uploadAttachment endpoint rejects payloads above 5 MB.
-MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 _TIMEOUT_S = 30
-# content.airtable.com may lag behind api.airtable.com: uploading to a
-# record the upsert JUST created can 403 with the generic
-# INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND until the record propagates, so
-# the upload retries a few times before giving up.
-_UPLOAD_ATTEMPTS = 4
-_UPLOAD_RETRY_WAIT_S = 2.0
 
 
 class AirtablePushError(RuntimeError):
@@ -67,9 +53,8 @@ def _headers() -> Dict[str, str]:
 
 
 def _request(method: str, url: str, payload: dict, step: str) -> dict:
-    """``step`` names the call in errors ("record upsert" / "report
-    upload") - essential to tell an Airtable rejection from a corporate
-    proxy blocking one of the two hosts or payload sizes."""
+    """``step`` names the call in errors - essential to tell an Airtable
+    rejection from a corporate proxy blocking the host."""
     try:
         resp = requests.request(
             method, url, json=payload, headers=_headers(), timeout=_TIMEOUT_S,
@@ -92,9 +77,9 @@ def _request(method: str, url: str, payload: dict, step: str) -> dict:
 
 def build_record_fields(domain_code: str, dp_code: str,
                         result: Any) -> Dict[str, object]:
-    """One system's upsert payload minus the attachment (pure,
-    unit-testable). Status uses the thresholds the scorecard was actually
-    computed with, matching the dashboard pill."""
+    """One system's upsert payload (pure, unit-testable). Status uses
+    the thresholds the scorecard was actually computed with, matching
+    the dashboard pill."""
     return {
         SETTINGS.airtable_key_field: domain_code,
         SETTINGS.airtable_system_field: dp_code,
@@ -130,75 +115,8 @@ def _upsert_records(records: List[Dict[str, object]]) -> List[str]:
             f"Unexpected Airtable upsert response: {data}") from exc
 
 
-def _upload_report(record_id: str, filename: str, html_bytes: bytes) -> dict:
-    if len(html_bytes) > MAX_ATTACHMENT_BYTES:
-        raise AirtablePushError(
-            f"Report is {len(html_bytes) / 1024 / 1024:.1f} MB - Airtable "
-            "attachments are limited to 5 MB."
-        )
-    url = (
-        f"{CONTENT_ROOT}/{SETTINGS.airtable_base_id}/{record_id}/"
-        f"{quote(SETTINGS.airtable_attachment_field)}/uploadAttachment"
-    )
-    payload = {
-        # Deliberately NOT text/html: the org's Airtable policy rejects
-        # text/html uploads with a generic 403 (confirmed by A/B tests -
-        # the .html filename itself is fine). Declared as text/plain the
-        # upload passes, and the downloaded .html still opens normally
-        # in a browser; only Airtable's inline preview shows source.
-        "contentType": "text/plain",
-        "filename": filename,
-        "file": base64.b64encode(html_bytes).decode("ascii"),
-    }
-    for attempt in range(1, _UPLOAD_ATTEMPTS + 1):
-        try:
-            return _request("POST", url, payload, step="report upload")
-        except AirtablePushError as exc:
-            # Only a 403 right after the upsert smells like propagation
-            # lag; anything else (401, 404, 413, transport) is final.
-            if "403" not in str(exc) or attempt == _UPLOAD_ATTEMPTS:
-                raise
-            time.sleep(_UPLOAD_RETRY_WAIT_S)
-    return {}  # unreachable; keeps the signature honest
-
-
-def _prune_old_reports(record_id: str, upload_data: dict,
-                       filename: str) -> None:
-    """Keep only the report just uploaded in the attachment field.
-
-    The upload endpoint APPENDS, so without this every push stacks one
-    more file while the score fields get replaced - inconsistent. The
-    upload response carries the record's full attachment list; keep the
-    entry matching ``filename`` (ours, newest-last) and PATCH the field
-    down to it."""
-    fields = (upload_data or {}).get("fields") or {}
-    attachments = fields.get(SETTINGS.airtable_attachment_field)
-    if not isinstance(attachments, list):
-        # Field configured by id (fld...): the response keys by name, so
-        # find the single attachment-shaped list instead.
-        candidates = [
-            v for v in fields.values()
-            if isinstance(v, list) and v
-            and isinstance(v[0], dict) and "filename" in v[0]
-        ]
-        attachments = candidates[0] if len(candidates) == 1 else None
-    if not attachments or len(attachments) <= 1:
-        return  # nothing stacked
-    ours = [a for a in attachments if a.get("filename") == filename]
-    keep_id = (ours[-1] if ours else attachments[-1]).get("id")
-    if not keep_id:
-        return
-    url = (f"{API_ROOT}/{SETTINGS.airtable_base_id}/"
-           f"{quote(SETTINGS.airtable_table)}/{record_id}")
-    _request("PATCH", url, {
-        "fields": {SETTINGS.airtable_attachment_field: [{"id": keep_id}]},
-    }, step="old report cleanup")
-
-
-def push_executive_report(domain_code: str, scorecards: Dict[str, Any],
-                          html_bytes: bytes) -> List[str]:
-    """Upsert one result record per system in ``scorecards`` and attach
-    the executive report to each.
+def push_results(domain_code: str, scorecards: Dict[str, Any]) -> List[str]:
+    """Upsert one result record per system in ``scorecards``.
 
     Returns the Airtable record ids (useful for the UI success message).
     Raises :class:`AirtablePushError` on any failure, including when the
@@ -211,22 +129,7 @@ def push_executive_report(domain_code: str, scorecards: Dict[str, Any],
         )
     if not scorecards:
         raise AirtablePushError("No scorecard results to send.")
-    codes = list(scorecards)
-    record_ids = _upsert_records(
+    return _upsert_records(
         [build_record_fields(domain_code, code, scorecards[code])
-         for code in codes]
+         for code in scorecards]
     )
-    stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    for code, record_id in zip(codes, record_ids):
-        filename = (
-            f"dq_scorecard_{domain_code or 'report'}_{code}_{stamp}.html"
-        )
-        upload_data = _upload_report(record_id, filename, html_bytes)
-        if not SETTINGS.airtable_keep_old_reports:
-            try:
-                _prune_old_reports(record_id, upload_data, filename)
-            except AirtablePushError:
-                # Stacked old reports are cosmetic; never fail a push
-                # whose report was already delivered over the cleanup.
-                pass
-    return record_ids
