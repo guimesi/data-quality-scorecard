@@ -210,6 +210,7 @@ _A4_EQUIPMENT_PAIRS = frozenset({
     ("EstimateHorizontalDrum", "drums"),
     ("EstimateTankage", "tanks"),
     ("EstimateTankage", "order quantity"),
+    ("EstimateTankage", "m³"),
     ("EstimateHairpinExchanger", "hairpin exchangers"),
     ("EstimatePlateExchanger", "plate exchangers"),
     ("EstimatePlateExchanger", "plate exchanger units"),
@@ -243,11 +244,19 @@ _A4_MODULE_UOMS = frozenset({
     "module", "modules", "each", "ea", "unit", "units",
 })
 
-# Length / volume / weight UOMs used by A4's classifiers. Reuses the
+# Length / volume / weight / area UOMs used by A4's classifiers. Reuses the
 # A8 alias map (defined further down) so ``CY`` ↔ ``yd³`` etc.
+# The steel and concrete sets are unit-system-neutral: they accept any
+# physical measurement (imperial or metric) that represents the
+# discipline's quantity, not just the historically predominant UOM.
 _A4_LENGTH_UOMS = frozenset({"ft", "m"})
+_A4_AREA_UOMS = frozenset({"ft²", "m²", "yd²"})
 _A4_VOLUME_UOMS = frozenset({"yd³", "m³"})
 _A4_WEIGHT_UOMS = frozenset({"t", "t,sht"})
+# Steel: weight (original) + length + area (metric fix).
+_A4_STEEL_UOMS = _A4_WEIGHT_UOMS | _A4_LENGTH_UOMS | _A4_AREA_UOMS
+# Concrete: volume (original) + weight + area (metric fix).
+_A4_CONCRETE_UOMS = _A4_VOLUME_UOMS | _A4_WEIGHT_UOMS | _A4_AREA_UOMS
 
 # A5: Design details present when quantity exists.
 #
@@ -430,6 +439,7 @@ _A8_UOM_ALIASES: Dict[str, str] = {
     "ft^3": "ft³",
     "m^2": "m²",
     "ft^2": "ft²",
+    "yd^2": "yd²",
 }
 
 # UOM sets used by the discipline classifier (post-normalisation).
@@ -1006,13 +1016,13 @@ def _classify_a4_quantity(
 
     if (
         ("SteelStructure" in it or "Piperack" in it)
-        and uom_norm in _A4_WEIGHT_UOMS
+        and uom_norm in _A4_STEEL_UOMS
     ):
         return "STEEL_TONS"
 
     if (
         ("Foundation" in it or "Concrete" in it)
-        and uom_norm in _A4_VOLUME_UOMS
+        and uom_norm in _A4_CONCRETE_UOMS
     ):
         return "CONCRETE_CY"
 
@@ -1107,8 +1117,8 @@ def check_adr_a4(df: pd.DataFrame) -> pd.Series:
     # Population detection - qty must be positive AND the row's
     # (item_type, uom) pattern matches the category's classification.
     has_piping = qty_pos & is_piping & uom_norm.isin(_A4_LENGTH_UOMS)
-    has_steel = qty_pos & is_steel & uom_norm.isin(_A4_WEIGHT_UOMS)
-    has_concrete = qty_pos & is_concrete & uom_norm.isin(_A4_VOLUME_UOMS)
+    has_steel = qty_pos & is_steel & uom_norm.isin(_A4_STEEL_UOMS)
+    has_concrete = qty_pos & is_concrete & uom_norm.isin(_A4_CONCRETE_UOMS)
     has_cable = qty_pos & is_cable & uom_norm.isin(_A4_LENGTH_UOMS)
     has_transmitter = qty_pos & is_transmitter & uom_lower.isin(
         _A4_TRANSMITTER_UOMS

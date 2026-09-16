@@ -357,18 +357,27 @@ _AC4_MODULE_DESC_PATTERNS = ("MODULE", "MODULAR")
 # normalization, the lists carry the canonical spellings the SQL spec
 # matches against (both the unicode ``M³`` and ASCII ``M3`` / ``YD3``
 # forms are listed where they appear in production extracts).
+# The steel and concrete sets are unit-system-neutral (mirrors ADR A4):
+# they accept any physical measurement (imperial or metric) that
+# represents the discipline's quantity, not just the historically
+# predominant UOM.
 _AC4_LENGTH_UOMS = frozenset({"FEET", "FT", "M", "METERS", "LF"})
+_AC4_AREA_UOMS = frozenset({"FT2", "FT²", "SF", "M2", "M²", "YD2", "YD²", "SY"})
 _AC4_VOLUME_UOMS = frozenset({"CY", "M3", "YD3", "YDS", "M³"})
 _AC4_WEIGHT_UOMS = frozenset({"TONS", "TONNE", "TON", "T"})
 _AC4_COUNT_UOMS = frozenset({"EACH", "EA", "ITEM(S)", "ITEM", "ITEMS"})
+# Steel: weight (original) + length + area (metric fix).
+_AC4_STEEL_UOMS = _AC4_WEIGHT_UOMS | _AC4_LENGTH_UOMS | _AC4_AREA_UOMS
+# Concrete: volume (original) + weight + area (metric fix).
+_AC4_CONCRETE_UOMS = _AC4_VOLUME_UOMS | _AC4_WEIGHT_UOMS | _AC4_AREA_UOMS
 
 # Drives both the vectorized check and the scalar classifiers. Each
 # entry pairs a core type with its DESCRIPTION allow-list (``None`` for
 # the MODULE substring match) and its UOM set.
 _AC4_CATEGORY_SPECS: Tuple[Tuple[str, object, frozenset], ...] = (
     ("PIPING_LF", _AC4_PIPING_DESCRIPTIONS, _AC4_LENGTH_UOMS),
-    ("CONCRETE_CY", _AC4_CONCRETE_DESCRIPTIONS, _AC4_VOLUME_UOMS),
-    ("STEEL_TONS", _AC4_STEEL_DESCRIPTIONS, _AC4_WEIGHT_UOMS),
+    ("CONCRETE_CY", _AC4_CONCRETE_DESCRIPTIONS, _AC4_CONCRETE_UOMS),
+    ("STEEL_TONS", _AC4_STEEL_DESCRIPTIONS, _AC4_STEEL_UOMS),
     ("CABLE_LENGTH", _AC4_CABLE_DESCRIPTIONS, _AC4_LENGTH_UOMS),
     ("TRANSMITTER_COUNT", _AC4_INSTRUMENT_DESCRIPTIONS, _AC4_COUNT_UOMS),
     ("EQUIPMENT_COUNT", _AC4_EQUIPMENT_DESCRIPTIONS, _AC4_COUNT_UOMS),

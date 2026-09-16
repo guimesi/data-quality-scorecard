@@ -2523,10 +2523,18 @@ def test_ac4_quantity_classifier_returns_correct_category_per_pattern():
         ("CONCRETE",          "YD3",   "CONCRETE_CY"),
         ("CONCRETE",          "CY",    "CONCRETE_CY"),
         ("FOUNDATION ACCESSORIES", "M3", "CONCRETE_CY"),
+        # CONCRETE_CY also accepts weight and area (unit-system-neutral)
+        ("CONCRETE",          "T",     "CONCRETE_CY"),
+        ("CONCRETE",          "M2",    "CONCRETE_CY"),
+        ("CONCRETE",          "SY",    "CONCRETE_CY"),
         # STEEL_TONS
         ("STEEL",             "T",     "STEEL_TONS"),
         ("STEEL STRUCTURES",  "TONS",  "STEEL_TONS"),
         ("STEEL",             "TONNE", "STEEL_TONS"),
+        # STEEL_TONS also accepts length and area (unit-system-neutral)
+        ("STEEL",             "FT",    "STEEL_TONS"),
+        ("STEEL STRUCTURES",  "M",     "STEEL_TONS"),
+        ("STEEL",             "FT2",   "STEEL_TONS"),
         # CABLE_LENGTH
         ("ELECTRICAL",        "FT",    "CABLE_LENGTH"),
         ("CABLE TRAYS",       "M",     "CABLE_LENGTH"),
@@ -2559,11 +2567,15 @@ def test_ac4_quantity_classifier_reads_other_slot():
 
 def test_ac4_quantity_classifier_rejects_off_pattern_uom_for_each_category():
     """Each category requires a specific UOM family - a piping row in
-    tons doesn't classify as steel (or as anything else)."""
+    tons doesn't classify as steel (or as anything else). Steel and
+    concrete are unit-system-neutral (weight / length / area /
+    volume), so their off-pattern UOM is a count, not a different
+    physical dimension."""
     from src.custom_dqr_engine import _classify_ac4_quantity_acce
     assert _classify_ac4_quantity_acce("PIPING", "T", None, 10.0, None) is None
-    assert _classify_ac4_quantity_acce("STEEL", "FT", None, 10.0, None) is None
-    assert _classify_ac4_quantity_acce("CONCRETE", "FT", None, 10.0, None) is None
+    assert _classify_ac4_quantity_acce("STEEL", "EA", None, 10.0, None) is None
+    assert _classify_ac4_quantity_acce("STEEL", "CY", None, 10.0, None) is None
+    assert _classify_ac4_quantity_acce("CONCRETE", "EA", None, 10.0, None) is None
     assert _classify_ac4_quantity_acce("ELECTRICAL", "T", None, 10.0, None) is None
     assert _classify_ac4_quantity_acce(
         "CENTRIFUGAL PUMPS", "T", None, 10.0, None
@@ -2739,7 +2751,7 @@ def test_acce_ac4_passes_rows_with_blank_planview_id():
     from src.custom_dqr_engine import check_acce_ac4
     df = _make_ac4_df([
         _ac4_row(None, "PIPING", 100.0, "T"),        # wrong UOM
-        _ac4_row("P-BAD", "CONCRETE", 10.0, "T"),    # wrong UOM
+        _ac4_row("P-BAD", "CONCRETE", 10.0, "EA"),   # wrong UOM
     ])
     result = check_acce_ac4(df).tolist()
     assert result[0] is True
@@ -2769,8 +2781,8 @@ def test_acce_ac4_fails_when_one_of_seven_expected_scopes_unpopulated():
     from src.custom_dqr_engine import check_acce_ac4
     rows = [
         _ac4_row("P1", "PIPING", 1000.0, "FT"),
-        # Concrete scope is implied but the row uses tons.
-        _ac4_row("P1", "CONCRETE", 50.0, "T"),
+        # Concrete scope is implied but the row uses a count UOM.
+        _ac4_row("P1", "CONCRETE", 50.0, "EA"),
     ]
     df = _make_ac4_df(rows)
     assert check_acce_ac4(df).tolist() == [False, False]
@@ -5546,9 +5558,17 @@ def test_a4_quantity_classifier_returns_correct_category_per_pattern():
         ("EstimateFoundation", "yd³", "", "CONCRETE_CY"),
         ("EstimateFoundation", "CY", "", "CONCRETE_CY"),
         ("EstimateMiscellaneousConcrete", "m³", "", "CONCRETE_CY"),
+        # CONCRETE_CY also accepts weight and area (unit-system-neutral)
+        ("EstimateFoundation", "t", "", "CONCRETE_CY"),
+        ("EstimateFoundation", "yd²", "", "CONCRETE_CY"),
+        ("EstimateFoundation", "yd^2", "", "CONCRETE_CY"),
         # STEEL_TONS
         ("EstimateSteelStructure", "t", "", "STEEL_TONS"),
         ("EstimatePiperack", "t,sht", "", "STEEL_TONS"),
+        # STEEL_TONS also accepts length and area (unit-system-neutral)
+        ("EstimateSteelStructure", "ft", "", "STEEL_TONS"),
+        ("EstimateSteelStructure", "m", "", "STEEL_TONS"),
+        ("EstimatePiperack", "m²", "", "STEEL_TONS"),
         # CABLE_LENGTH
         ("EstimateElectricalPowerGroup", "ft", "", "CABLE_LENGTH"),
         # TRANSMITTER_COUNT
@@ -5559,6 +5579,7 @@ def test_a4_quantity_classifier_returns_correct_category_per_pattern():
         # EQUIPMENT_COUNT - exact pair from the allow-list
         ("EstimatePump", "Parallel Pumps", "", "EQUIPMENT_COUNT"),
         ("EstimateTankage", "Order Quantity", "", "EQUIPMENT_COUNT"),
+        ("EstimateTankage", "m³", "", "EQUIPMENT_COUNT"),
         ("EstimateAirCooledExchanger", "Air-Fins", "", "EQUIPMENT_COUNT"),
         ("EstimateShellAndTubeExchanger", "Shells", "", "EQUIPMENT_COUNT"),
         ("EstimateVerticalPressureVessel", "Vertical Drum Sections", "",
@@ -5575,12 +5596,16 @@ def test_a4_quantity_classifier_returns_correct_category_per_pattern():
 
 
 def test_a4_quantity_classifier_rejects_off_pattern_uom_for_each_category():
-    """Each category requires a specific UOM - a foundation row with
-    UOM=t doesn't classify as concrete (or as anything else)."""
+    """Each category requires a UOM from its own physical-measurement
+    set - a foundation row with UOM=EA doesn't classify as concrete
+    (or as anything else). Steel and concrete are unit-system-neutral
+    (weight / length / area / volume), so the off-pattern UOM for
+    them is a count, not a different physical dimension."""
     from src.custom_dqr_engine import _classify_a4_quantity
     # Scope-matching ITEM_TYPEs with the *wrong* UOM → None.
-    assert _classify_a4_quantity("EstimateFoundation", "t", "") is None
-    assert _classify_a4_quantity("EstimateSteelStructure", "ft", "") is None
+    assert _classify_a4_quantity("EstimateFoundation", "EA", "") is None
+    assert _classify_a4_quantity("EstimateSteelStructure", "EA", "") is None
+    assert _classify_a4_quantity("EstimateSteelStructure", "yd³", "") is None
     assert _classify_a4_quantity(
         "EstimateAbovegroundInstrumentPiping", "yd³", ""
     ) is None
@@ -5788,7 +5813,7 @@ def test_adr_a4_passes_rows_with_blank_planview_id():
         {"PLANVIEW_ID": "P-BAD",
          "ITEM_TYPE": "EstimateFoundation",
          "ITEM_DESCRIPTION": "",
-         "QTY_QUANTITY": 10.0, "QTY_UOM": "t"},
+         "QTY_QUANTITY": 10.0, "QTY_UOM": "EA"},   # wrong UOM
     ])
     result = check_adr_a4(df).tolist()
     assert result[0] is True
@@ -5848,11 +5873,12 @@ def test_adr_a4_fails_when_one_of_seven_expected_scopes_unpopulated():
          "ITEM_DESCRIPTION": "",
          "QTY_QUANTITY": 1000.0, "QTY_UOM": "ft"},
         # CONCRETE scope is implied, but the only foundation row has
-        # the wrong UOM (t instead of yd³). HAS_CONCRETE_CY = False.
+        # the wrong UOM (EA instead of yd³ / t / yd²). HAS_CONCRETE_CY
+        # = False.
         {"PLANVIEW_ID": "P1",
          "ITEM_TYPE": "EstimateFoundation",
          "ITEM_DESCRIPTION": "",
-         "QTY_QUANTITY": 50.0, "QTY_UOM": "t"},
+         "QTY_QUANTITY": 50.0, "QTY_UOM": "EA"},
     ]
     df = _make_a4_df(rows)
     assert check_adr_a4(df).tolist() == [False, False]

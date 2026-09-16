@@ -208,11 +208,14 @@ ADR_RULES = [
             "Validates that each ADR project has its applicable "
             "core quantity types populated, and that the project's "
             "total quantity is not negative. The seven core types "
-            "(piping LF, concrete CY, steel tons, cable length, "
-            "transmitter / instrument count, equipment count, "
-            "module count) are evaluated relative to the project "
-            "scope - only types implied by the project's "
-            "``ITEM_TYPE`` / ``ITEM_DESCRIPTION`` are required."
+            "(piping length, concrete quantity, steel quantity, "
+            "cable length, transmitter / instrument count, "
+            "equipment count, module count) are evaluated relative "
+            "to the project scope - only types implied by the "
+            "project's ``ITEM_TYPE`` / ``ITEM_DESCRIPTION`` are "
+            "required. Classification is unit-system-neutral: both "
+            "Imperial and Metric UOM variants are accepted for every "
+            "category."
         ),
         notes=(
             "Project-level rule with row-level verdict: every row "
@@ -230,11 +233,12 @@ ADR_RULES = [
             "(corrections / reversals); only a project-wide "
             "negative total fails. Rows with null/blank "
             "``PLANVIEW_ID`` pass - they cannot be assigned to a "
-            "project group. The classifier intentionally uses a "
-            "conservative allow-list for EQUIPMENT_COUNT (specific "
-            "(ITEM_TYPE, UOM) pairs) and for piping / cable / "
-            "transmitter to avoid counting subcomponents or "
-            "off-discipline UOMs."
+            "project group. Steel accepts weight (t, t,sht), "
+            "length (ft, m), and area (ft², m², yd²) UOMs. "
+            "Concrete accepts volume (yd³, m³), weight (t, t,sht), "
+            "and area (ft², m², yd²) UOMs. Equipment uses a "
+            "conservative allow-list of (ITEM_TYPE, UOM) pairs "
+            "including metric entries (e.g. EstimateTankage + m³)."
         ),
         required_columns=dict(ADR_A4_REQUIRED_COLUMNS),
         blocking=False,

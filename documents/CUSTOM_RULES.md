@@ -974,10 +974,12 @@ verdict**. For each `PLANVIEW_ID` it asks two questions: (a) of the seven
 core quantity types this project's scope implies, is each one actually
 populated? and (b) is the project's *total* `QTY_QUANTITY` non-negative?
 
-The seven core quantity types are: piping LF, concrete CY, steel tons,
-cable length, transmitter / instrument count, equipment count, module
-count. The rule does *not* require every project to carry all seven -
-completeness is judged **relative to the project's own scope**.
+The seven core quantity types are: piping length, concrete quantity,
+steel quantity, cable length, transmitter / instrument count, equipment
+count, module count. The rule does *not* require every project to carry
+all seven - completeness is judged **relative to the project's own
+scope**. Classification is unit-system-neutral: both Imperial and Metric
+UOM variants are accepted for every category.
 
 ### Algorithm
 
@@ -1024,16 +1026,16 @@ populated quantity for that scope".
 | Core type           | Scope detection (`ITEM_TYPE` / `ITEM_DESCRIPTION`)                                              | Population detection (`ITEM_TYPE`, `QTY_UOM`)                                                                |
 |---------------------|------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
 | `PIPING_LF`         | `ITEM_TYPE` ∈ { `EstimateAbovegroundInstrumentPiping`, `EstimatePipingUnderground`, `EstimatePipingPneumatic` } | scope match AND UOM ∈ { `ft`, `m` }                                                                          |
-| `CONCRETE_CY`       | `ITEM_TYPE` contains `Foundation` or `Concrete`                                                 | scope match AND UOM ∈ { `yd³`, `m³` } (`CY`, `yds³` aliased)                                                 |
-| `STEEL_TONS`        | `ITEM_TYPE` contains `SteelStructure` or `Piperack`                                             | scope match AND UOM ∈ { `t`, `t,sht` }                                                                       |
+| `CONCRETE_CY`       | `ITEM_TYPE` contains `Foundation` or `Concrete`                                                 | scope match AND UOM ∈ volume { `yd³`, `m³` } ∪ weight { `t`, `t,sht` } ∪ area { `ft²`, `m²`, `yd²` } (`CY`, `yds³`, `yd^2` aliased) |
+| `STEEL_TONS`        | `ITEM_TYPE` contains `SteelStructure` or `Piperack`                                             | scope match AND UOM ∈ weight { `t`, `t,sht` } ∪ length { `ft`, `m` } ∪ area { `ft²`, `m²`, `yd²` }          |
 | `CABLE_LENGTH`      | `ITEM_TYPE` contains `Electrical` (intentionally not `FieldInstrument`, see notes)             | scope match AND UOM ∈ { `ft`, `m` }                                                                          |
 | `TRANSMITTER_COUNT` | `ITEM_TYPE` contains `FieldInstrument`                                                          | scope match AND UOM ∈ { `transmitter`, `transmitters`, `pressure gauges`, `thermowells`, `thermocouples`, `control valves`, `flow elements`, `level gauges`, `level switches`, `pressure switches`, `junction boxes`, `i/p transducers`, `solenoid valves` } |
-| `EQUIPMENT_COUNT`   | `ITEM_TYPE` ∈ the major-equipment allow-list (`EstimatePump`, `EstimateGasTurbine`, `EstimateTankage`, …) | exact (`ITEM_TYPE`, `UOM`) pair on the allow-list (e.g. `EstimatePump + parallel pumps`, `EstimateTankage + tanks`) |
+| `EQUIPMENT_COUNT`   | `ITEM_TYPE` ∈ the major-equipment allow-list (`EstimatePump`, `EstimateGasTurbine`, `EstimateTankage`, …) | exact (`ITEM_TYPE`, `UOM`) pair on the allow-list (e.g. `EstimatePump + parallel pumps`, `EstimateTankage + tanks`, `EstimateTankage + m³`) |
 | `MODULE_COUNT`      | `ITEM_TYPE` *or* `ITEM_DESCRIPTION` contains `Module` or `Modular`                              | scope match AND UOM ∈ { `module`, `modules`, `each`, `ea`, `unit`, `units` }                                  |
 
 UOM matching is case-insensitive after stripping. The A8 alias map
-(`CY` ↔ `yd³`, `yds³` ↔ `yd³`, `m^3` ↔ `m³`, …) is reused so the
-classifier is robust to source-system spelling variation.
+(`CY` ↔ `yd³`, `yds³` ↔ `yd³`, `m^3` ↔ `m³`, `yd^2` ↔ `yd²`, …) is
+reused so the classifier is robust to source-system spelling variation.
 
 ### Why scope ≠ population (the asymmetry)
 
@@ -2067,11 +2069,12 @@ core quantity types this project's scope implies, is each one actually
 populated? and (b) is the project's combined quantity total
 (`SUM(QTY_KEY_QTY) + SUM(QTY_OTHER_QTY)`) non-negative?
 
-The seven core quantity types are: piping LF, concrete CY, steel
-tons, cable length, transmitter / instrument count, equipment count,
-module count. The rule does *not* require every project to carry all
-seven - completeness is judged **relative to the project's own
-scope**.
+The seven core quantity types are: piping length, concrete quantity,
+steel quantity, cable length, transmitter / instrument count, equipment
+count, module count. The rule does *not* require every project to carry
+all seven - completeness is judged **relative to the project's own
+scope**. Classification is unit-system-neutral (mirrors A4): both
+Imperial and Metric UOM variants are accepted for every category.
 
 ### Algorithm
 
@@ -2118,8 +2121,8 @@ an exact list.
 | Core type | Scope detection (`DESCRIPTION`) | Population detection (`DESCRIPTION` + UOM + qty) |
 |---|---|---|
 | `PIPING_LF` | `DESCRIPTION` ∈ piping list (`PIPING`, `CS PIPE ERECTION`, `FIREWATER PIPING`, …) | scope match AND UOM ∈ { `FEET`, `FT`, `M`, `METERS`, `LF` } |
-| `CONCRETE_CY` | `DESCRIPTION` ∈ concrete list (`CONCRETE`, `CONCRETE POUR AND FINISH`, `FOUNDATION ACCESSORIES`, `OTHER EQUIP. CONCRETE`) | scope match AND UOM ∈ { `CY`, `M3`, `YD3`, `YDS`, `M³` } |
-| `STEEL_TONS` | `DESCRIPTION` ∈ steel list (`STEEL`, `STEEL STRUCTURES`, `PIPERACK STEEL`, …) | scope match AND UOM ∈ { `TONS`, `TONNE`, `TON`, `T` } |
+| `CONCRETE_CY` | `DESCRIPTION` ∈ concrete list (`CONCRETE`, `CONCRETE POUR AND FINISH`, `FOUNDATION ACCESSORIES`, `OTHER EQUIP. CONCRETE`) | scope match AND UOM ∈ volume { `CY`, `M3`, `YD3`, `YDS`, `M³` } ∪ weight { `TONS`, `TONNE`, `TON`, `T` } ∪ area { `FT2`, `FT²`, `SF`, `M2`, `M²`, `YD2`, `YD²`, `SY` } |
+| `STEEL_TONS` | `DESCRIPTION` ∈ steel list (`STEEL`, `STEEL STRUCTURES`, `PIPERACK STEEL`, …) | scope match AND UOM ∈ weight { `TONS`, `TONNE`, `TON`, `T` } ∪ length { `FEET`, `FT`, `M`, `METERS`, `LF` } ∪ area { `FT2`, `FT²`, `SF`, `M2`, `M²`, `YD2`, `YD²`, `SY` } |
 | `CABLE_LENGTH` | `DESCRIPTION` ∈ cable / electrical list (`ELECTRICAL`, `WIRE/CABLE - LV`, `CONDUIT`, `CABLE TRAYS`, …) | scope match AND UOM ∈ { `FEET`, `FT`, `M`, `METERS`, `LF` } |
 | `TRANSMITTER_COUNT` | `DESCRIPTION` ∈ instrument list (`INSTRUMENTATION`, `FLOW INSTRUMENTS`, `PRESSURE INSTRUMENTS`, …) | scope match AND UOM ∈ { `EACH`, `EA`, `ITEM(S)`, `ITEM`, `ITEMS` } |
 | `EQUIPMENT_COUNT` | `DESCRIPTION` ∈ equipment list (`CENTRIFUGAL PUMPS`, `S&T EXCHANGER`, `HORZ. VESSELS`, `GAS TURBINES`, …) | scope match AND UOM ∈ { `EACH`, `EA`, `ITEM(S)`, `ITEM`, `ITEMS` } |

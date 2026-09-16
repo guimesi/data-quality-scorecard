@@ -218,11 +218,13 @@ ACCE_RULES = [
             "Validates that each ACCE project has its applicable "
             "core quantity types populated, and that the project's "
             "total quantity is not negative. The seven core types "
-            "(piping LF, concrete CY, steel tons, cable length, "
-            "transmitter / instrument count, equipment count, "
-            "module count) are evaluated relative to the project "
-            "scope - only types implied by the project's "
-            "``DESCRIPTION`` are required."
+            "(piping length, concrete quantity, steel quantity, "
+            "cable length, transmitter / instrument count, "
+            "equipment count, module count) are evaluated relative "
+            "to the project scope - only types implied by the "
+            "project's ``DESCRIPTION`` are required. Classification "
+            "is unit-system-neutral: both Imperial and Metric UOM "
+            "variants are accepted for every category."
         ),
         notes=(
             "Project-level rule with row-level verdict. Both scope "
@@ -246,7 +248,11 @@ ACCE_RULES = [
             "total fails. Every row of a failing project inherits "
             "the FAIL. Schema-level missing column → all rows fail. "
             "Rows lacking ``PLANVIEW_ID`` pass - they can't be "
-            "attached to a project group."
+            "attached to a project group. Steel accepts weight "
+            "(TONS, TONNE, TON, T), length (FEET, FT, M, METERS, LF), "
+            "and area (FT2, SF, M2, YD2, SY) UOMs. Concrete accepts "
+            "volume (CY, M3, YD3, YDS), weight (TONS, TONNE, TON, T), "
+            "and area (FT2, SF, M2, YD2, SY) UOMs."
         ),
         required_columns=dict(ACCE_AC4_REQUIRED_COLUMNS),
         blocking=False,
