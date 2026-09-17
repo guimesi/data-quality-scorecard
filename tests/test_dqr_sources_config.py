@@ -34,18 +34,24 @@ def test_ept_catalog_includes_e1_e2_e3_e4_e5_e6_e7():
     assert [r.id for r in rules] == ["E1", "E2", "E3", "E4", "E5", "E6", "E7"]
 
 
-def test_adr_catalog_includes_a1_through_a8():
-    """ADR exposes DQ-ADR-1 (Completeness - ISO COR + SAB lookup), DQ-ADR-2
-    / DQ-ADR-4 (Completeness & Validity), DQ-ADR-3 (Statistical Outlier - WBC-to-ISO mapping
-    aggregation), DQ-ADR-5 / DQ-ADR-6 (Consistency - design detail / construction
-    hours vs. quantity), DQ-ADR-7 (Statistical Outlier - within-discipline
-    hours-per-quantity), and DQ-ADR-8 (Statistical Outlier - cross-discipline
-    quantity ratios at the project level)."""
+def test_adr_catalog_active_and_inactive_rules():
+    """ADR exposes DQ-ADR-1 (Completeness - ISO COR + SAB lookup), DQ-ADR-4
+    (Completeness & Validity), DQ-ADR-5 / DQ-ADR-6 (Consistency - design
+    detail / construction hours vs. quantity) and DQ-ADR-9 (Validity -
+    MFC vs EMMA) as *active* rules; DQ-ADR-3 (Statistical Outlier -
+    WBC-to-ISO mapping aggregation) stays in the catalog as *inactive*.
+    DQ-ADR-2 / DQ-ADR-7 / DQ-ADR-8 are retired (see the dedicated test)."""
     rules = get_available_custom_dqr_rules("ADR")
     assert [r.id for r in rules] == [
-        "DQ-ADR-1", "DQ-ADR-2", "DQ-ADR-3", "DQ-ADR-4", "DQ-ADR-5", "DQ-ADR-6", "DQ-ADR-7", "DQ-ADR-8", "DQ-ADR-9"
+        "DQ-ADR-1", "DQ-ADR-4", "DQ-ADR-5", "DQ-ADR-6", "DQ-ADR-9"
+    ]
+    assert all(r.active for r in rules)
+    rules = get_available_custom_dqr_rules("ADR", include_inactive=True)
+    assert [r.id for r in rules] == [
+        "DQ-ADR-1", "DQ-ADR-3", "DQ-ADR-4", "DQ-ADR-5", "DQ-ADR-6", "DQ-ADR-9"
     ]
     by_id = {r.id: r for r in rules}
+    assert by_id["DQ-ADR-3"].active is False
 
     a1 = by_id["DQ-ADR-1"]
     assert a1.type == "Completeness"
@@ -58,19 +64,6 @@ def test_adr_catalog_includes_a1_through_a8():
         "source_column": "COMPLETE_WBC",
         "reference_column": "ICARUS_COA",
         "lookup_column": "ISO_COR / SAB",
-    }
-
-    a2 = by_id["DQ-ADR-2"]
-    assert a2.type == "Completeness & Validity"
-    assert a2.required_columns == {
-        "Estimate Basis Date": "COST_UPDATE",
-        "Project Key": "PLANVIEW_ID",
-    }
-    assert a2.reference == {
-        "reference_dataset": "VWS_GP_STANDARD_SHARE",
-        "source_column": "PLANVIEW_ID",
-        "reference_column": "PROJECT_ID",
-        "lookup_column": "COUNTRY",
     }
 
     a3 = by_id["DQ-ADR-3"]
@@ -117,25 +110,26 @@ def test_adr_catalog_includes_a1_through_a8():
     }
     assert a6.reference is None
 
-    a7 = by_id["DQ-ADR-7"]
-    assert a7.type == "Statistical Outlier"
-    assert a7.required_columns == {
-        "Item Type": "ITEM_TYPE",
-        "Quantity": "QTY_QUANTITY",
-        "Quantity UOM": "QTY_UOM",
-        "Construction Hours": "COST_TOTAL_HOURS",
-    }
-    assert a7.reference is None
 
-    a8 = by_id["DQ-ADR-8"]
-    assert a8.type == "Statistical Outlier"
-    assert a8.required_columns == {
-        "Item Type": "ITEM_TYPE",
-        "Root Item Name": "ROOT_ITEM_NAME",
-        "Quantity": "QTY_QUANTITY",
-        "Quantity UOM": "QTY_UOM",
-    }
-    assert a8.reference is None
+
+def test_adr_retired_rules_keep_their_definitions_outside_the_catalog():
+    """DQ-ADR-2 / 7 / 8 were retired on 2026-09-17: gone from every
+    catalog view, but their definitions (and check functions) stay in
+    ``ADR_RETIRED_RULES`` so historical runs can still be read."""
+    from config.custom_dqr._adr_catalog import ADR_RETIRED_RULES
+    from config.custom_dqr_catalog import RETIRED_CUSTOM_DQR_RULES
+    from src.custom_dqr_engine import (
+        ADR_A2_REQUIRED_COLUMNS, ADR_A7_REQUIRED_COLUMNS, ADR_A8_REQUIRED_COLUMNS,
+    )
+    assert RETIRED_CUSTOM_DQR_RULES["ADR"] is ADR_RETIRED_RULES
+    retired = {r.id: r for r in ADR_RETIRED_RULES}
+    assert list(retired) == ["DQ-ADR-2", "DQ-ADR-7", "DQ-ADR-8"]
+    assert retired["DQ-ADR-2"].required_columns == ADR_A2_REQUIRED_COLUMNS
+    assert retired["DQ-ADR-2"].reference["reference_dataset"] == "VWS_GP_STANDARD_SHARE"
+    assert retired["DQ-ADR-7"].required_columns == ADR_A7_REQUIRED_COLUMNS
+    assert retired["DQ-ADR-8"].required_columns == ADR_A8_REQUIRED_COLUMNS
+    listed = {r.id for r in get_available_custom_dqr_rules("ADR", include_inactive=True)}
+    assert not listed & set(retired)
 
 
 def test_acce_exposes_ac1():

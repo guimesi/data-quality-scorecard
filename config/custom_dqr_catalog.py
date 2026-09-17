@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from config.custom_dqr._acce_catalog import ACCE_RULES
-from config.custom_dqr._adr_catalog import ADR_RULES
+from config.custom_dqr._adr_catalog import ADR_RETIRED_RULES, ADR_RULES
 from config.custom_dqr._ept_catalog import EPT_RULES
 from config.custom_dqr._shared import (
     LEGACY_CUSTOM_RULE_IDS,
@@ -43,10 +43,27 @@ CUSTOM_DQR_RULES: Dict[str, List[CustomRuleDef]] = {
     "ACCE": ACCE_RULES,
 }
 
+# Rules withdrawn from the catalog. Their definitions (and check
+# functions) are kept for reference and for reading historical runs, but
+# they are not registered anywhere the user can select them.
+RETIRED_CUSTOM_DQR_RULES: Dict[str, List[CustomRuleDef]] = {
+    "ADR": ADR_RETIRED_RULES,
+}
 
-def get_available_custom_dqr_rules(data_product: str) -> List[CustomRuleDef]:
-    """Return the list of custom rules configured for ``data_product`` in
-    the *active domain*.
+
+def get_available_custom_dqr_rules(
+    data_product: str, include_inactive: bool = False
+) -> List[CustomRuleDef]:
+    """Return the custom rules configured for ``data_product`` in the
+    *active domain*.
+
+    By default only **active** rules are returned - the ones a user can
+    select in Step 4.2, that One-click applies and that Step 3 hints at.
+    Pass ``include_inactive=True`` when the caller resolves an id that
+    may belong to an inactive rule (rendering the greyed-out card, naming
+    a lingering assignment in Step 5 / Step 6 / reports, the dispatcher's
+    "not evaluated" reason). Retired rules are never returned; see
+    :data:`RETIRED_CUSTOM_DQR_RULES`.
 
     The legacy ``CUSTOM_DQR_RULES`` dict in this module continues to be
     the source of truth for the Cost Estimate domain (it's reused
@@ -60,11 +77,15 @@ def get_available_custom_dqr_rules(data_product: str) -> List[CustomRuleDef]:
     from config.domains import get_active_domain
 
     domain_rules = get_active_domain().custom_rules
-    return list(domain_rules.get(data_product, []))
+    rules = list(domain_rules.get(data_product, []))
+    if include_inactive:
+        return rules
+    return [r for r in rules if r.active]
 
 
 __all__ = [
     "CUSTOM_DQR_RULES",
+    "RETIRED_CUSTOM_DQR_RULES",
     "LEGACY_CUSTOM_RULE_IDS",
     "canonical_custom_rule_id",
     "CustomRuleDef",

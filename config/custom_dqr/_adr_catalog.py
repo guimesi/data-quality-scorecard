@@ -44,6 +44,7 @@ from src.custom_dqr_engine import (
     ADR_A8_THRESHOLD_CHOICES,
     ADR_A8_THRESHOLD_PARAM,
     ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
+    ADR_A9_LOCATION_REFERENCE,
     ADR_A9_PERIOD_POLICY,
     ADR_A9_PERIOD_POLICY_CHOICES,
     ADR_A9_PERIOD_POLICY_PARAM,
@@ -63,7 +64,7 @@ from src.custom_dqr_engine import (
     check_adr_a9,
 )
 
-ADR_RULES = [
+_ADR_RULE_DEFS = [
     CustomRuleDef(
         id="DQ-ADR-1",
         name="ISO Code of Account present (COR + SAB)",
@@ -164,6 +165,9 @@ ADR_RULES = [
         required_columns=dict(ADR_A3_REQUIRED_COLUMNS),
         check=check_adr_a3,
         reference=dict(ADR_A3_REFERENCE),
+        # Inactive since Sep-2026 (business decision): kept in the catalog,
+        # visible but not selectable. Flip to True to reinstate.
+        active=False,
         select_options=[
             _percentile_threshold_option(
                 ADR_A3_THRESHOLD_PARAM,
@@ -555,6 +559,9 @@ ADR_RULES = [
         required_columns=dict(ADR_A9_REQUIRED_COLUMNS),
         check=check_adr_a9,
         reference=dict(ADR_A9_REFERENCE),
+        extra_reference_datasets=(
+            ADR_A9_LOCATION_REFERENCE["reference_dataset"],
+        ),
         select_options=[
             CustomRuleSelectOption(
                 key=ADR_A9_TOLERANCE_PARAM,
@@ -631,3 +638,14 @@ ADR_RULES = [
         ],
     ),
 ]
+
+# Retired on 2026-09-17 (business decision): DQ-ADR-2 (location + estimate
+# date), DQ-ADR-7 (within-discipline hours / quantity outlier) and DQ-ADR-8
+# (cross-discipline quantity ratios) are withdrawn from the catalog. Their
+# definitions stay here - and their check functions in ``_adr_rules`` -
+# so historical runs can still be read and the rules can be reinstated by
+# moving the id back out of this set.
+ADR_RETIRED_RULE_IDS = frozenset({"DQ-ADR-2", "DQ-ADR-7", "DQ-ADR-8"})
+
+ADR_RETIRED_RULES = [r for r in _ADR_RULE_DEFS if r.id in ADR_RETIRED_RULE_IDS]
+ADR_RULES = [r for r in _ADR_RULE_DEFS if r.id not in ADR_RETIRED_RULE_IDS]

@@ -50,7 +50,7 @@ def custom_rule_rows(system_code: str, cfg, result) -> List[Dict]:
     ``rule`` is the :class:`CustomRuleDef` from the catalog (or ``None``
     for an unknown id - the row degrades to the id, like the dashboard).
     """
-    catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code)}
+    catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code, include_inactive=True)}
     rows: List[Dict] = []
     for a in cfg.custom_assignments:
         rule = catalog.get(a.rule_id)

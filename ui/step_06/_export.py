@@ -64,7 +64,7 @@ def _rule_column_specs(system_code: str, config, std_flags: pd.DataFrame,
             f"STD · {a.cde_column} · {a.dimension} (w={a.weight:.1f}%)",
         ))
     if config.custom_assignments:
-        catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code)}
+        catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code, include_inactive=True)}
         for a in config.custom_assignments:
             if a.rule_id not in cust_flags.columns:
                 continue
@@ -157,7 +157,7 @@ def _reference_columns_for_export(dp, config) -> pd.DataFrame:
     if not config.custom_assignments:
         return out
 
-    catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code)}
+    catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code, include_inactive=True)}
     seen_datasets: set[str] = set()
     for a in config.custom_assignments:
         rule = catalog.get(a.rule_id)

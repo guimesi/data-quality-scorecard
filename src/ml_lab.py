@@ -211,7 +211,7 @@ def build_rule_flag_matrix(dp, config) -> Tuple[pd.DataFrame, Dict[str, Dict[str
         )
         try:
             from config.custom_dqr_catalog import get_available_custom_dqr_rules
-            catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code)}
+            catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code, include_inactive=True)}
         except Exception:  # pragma: no cover - defensive
             catalog = {}
         for a in config.custom_assignments:
@@ -1523,7 +1523,7 @@ def explain_row_score(
             get_available_custom_dqr_rules,
         )
         try:
-            catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code)}
+            catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code, include_inactive=True)}
         except Exception:  # pragma: no cover
             catalog = {}
         for a in cust_assigns:

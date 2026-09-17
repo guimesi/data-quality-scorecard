@@ -177,7 +177,7 @@ def _render_custom_weights(system_code: str, cfg) -> float:
         st.caption("No Custom DQRs selected for this Data Product.")
         return 0.0
 
-    catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code)}
+    catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code, include_inactive=True)}
 
     # Custom rule weights start blank (0%) so the user explicitly assigns
     # them, same UX as the Standard rules section. Use the "Distribute

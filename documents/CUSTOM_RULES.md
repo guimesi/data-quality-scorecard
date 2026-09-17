@@ -108,9 +108,9 @@ the check callable.
 |------|-----------|-----------------------------------|------------------|
 | **E3** | `threshold_percentile` | P75, **P90**, P95, P99 | `EPT_E3_PERCENTILE = 0.90` |
 | **E6** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `EPT_E6_MILD_IQR_MULTIPLIER = 1.5` |
-| **DQ-ADR-3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ADR_A3_PERCENTILE = 0.90` |
-| **DQ-ADR-7** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A7_MILD_IQR_MULTIPLIER = 1.5` |
-| **DQ-ADR-8** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A8_MILD_IQR_MULTIPLIER = 1.5` |
+| **DQ-ADR-3** *(inactive)* | `threshold_percentile` | P75, **P90**, P95, P99 | `ADR_A3_PERCENTILE = 0.90` |
+| **DQ-ADR-7** *(retired 2026-09)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A7_MILD_IQR_MULTIPLIER = 1.5` |
+| **DQ-ADR-8** *(retired 2026-09)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A8_MILD_IQR_MULTIPLIER = 1.5` |
 | **DQ-ADR-9** | `tolerance_pct` | **±10%**, ±15%, ±20%, ±25% (calibration) | `ADR_A9_TOLERANCE = 0.10` |
 | **DQ-ADR-9** | `period_policy` | **nearest EMMA period**, exact only | `ADR_A9_PERIOD_POLICY = "nearest"` |
 | **AC3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ACCE_AC3_PERCENTILE = 0.90` |
@@ -171,16 +171,27 @@ inputs are missing, that would hide the gap in the score.
 
 ## Quick reference (ADR)
 
+**Rule status (since 2026-09-17).** Active: DQ-ADR-1, 4, 5, 6, 9.
+**Inactive**: DQ-ADR-3 - stays in the catalog (`active=False`), its card
+is rendered greyed-out in Step 4.2 but cannot be selected; One-click and
+Step 3 hints skip it and a lingering assignment is reported as "Not
+evaluated". **Retired**: DQ-ADR-2, 7, 8 - withdrawn from the catalog
+(`ADR_RETIRED_RULES` in `config/custom_dqr/_adr_catalog.py`); the
+definitions, check functions and this documentation are kept so
+historical runs can be read and a rule can be reinstated by moving its
+id out of `ADR_RETIRED_RULE_IDS`.
+
+
 | Rule | Name | Type | Required columns | Reference data | Options |
 |------|------|------|------------------|----------------|---------|
 | **DQ-ADR-1** | ISO Code of Account present (COR + SAB)                | Completeness         | `PLANVIEW_ID`, `COMPLETE_WBC` | `ACCE_COA_MASTER` (`SPLIT_PART(COMPLETE_WBC, '.', 1) → ICARUS_COA`, lookup `ISO_COR` + `SAB`) | - |
-| **DQ-ADR-2** | Location + estimate date present & valid               | Completeness & Validity | `COST_UPDATE`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
-| **DQ-ADR-3** | Statistical WBC-to-ISO mapping ratio                   | Statistical Outlier  | `PLANVIEW_ID`, `COMPLETE_WBC`, `COST_TOTAL_HOURS`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `project_scoped` (bool), `detect_uniform_mapping` (bool) |
+| **DQ-ADR-2** *(retired 2026-09)* | Location + estimate date present & valid               | Completeness & Validity | `COST_UPDATE`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
+| **DQ-ADR-3** *(inactive)* | Statistical WBC-to-ISO mapping ratio                   | Statistical Outlier  | `PLANVIEW_ID`, `COMPLETE_WBC`, `COST_TOTAL_HOURS`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `project_scoped` (bool), `detect_uniform_mapping` (bool) |
 | **DQ-ADR-4** | Core quantities populated & non-negative project totals | Completeness & Validity | `PLANVIEW_ID`, `ITEM_TYPE`, `ITEM_DESCRIPTION`, `QTY_QUANTITY`, `QTY_UOM` | - | - |
 | **DQ-ADR-5** | Key design details present when quantity exists        | Consistency          | `QTY_QUANTITY`, `ITEM_TYPE`, `DESIGN_KEY_PARAMETER_NAMES` (derived by the builder) | - | - |
 | **DQ-ADR-6** | Construction hours present when quantity exists        | Consistency          | `QTY_QUANTITY`, `COST_TOTAL_HOURS`, `COST_DB_TOTAL_HOURS` | - | - |
-| **DQ-ADR-7** | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  | `ITEM_TYPE`, `QTY_QUANTITY`, `QTY_UOM`, `COST_TOTAL_HOURS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
-| **DQ-ADR-8** | Cross-discipline quantity ratios                       | Statistical Outlier  | `ITEM_TYPE`, `ROOT_ITEM_NAME`, `QTY_QUANTITY`, `QTY_UOM` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **DQ-ADR-7** *(retired 2026-09)* | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  | `ITEM_TYPE`, `QTY_QUANTITY`, `QTY_UOM`, `COST_TOTAL_HOURS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **DQ-ADR-8** *(retired 2026-09)* | Cross-discipline quantity ratios                       | Statistical Outlier  | `ITEM_TYPE`, `ROOT_ITEM_NAME`, `QTY_QUANTITY`, `QTY_UOM` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 | **DQ-ADR-9** | Base material factor validation (MFC vs EMMA)          | Validity             | `PLANVIEW_ID`, `COST_UPDATE`, `COST_BASE_MATERIAL_MFC`, `COST_VENDOR_SHOP_FAB_MFC`, `COST_BASE_MATERIAL_COST`, `COST_DB_BASE_MATERIAL_COST`, `COST_VENDOR_SHOP_FAB_COST`, `COST_DB_VENDOR_SHOP_FAB_COST` | `MFC` (EMMA: `CODE`, `LOCATION_CODE`, `PERIOD`, `FACTOR_VALUE`) + `VWS_GP_STANDARD_SHARE` (`PLANVIEW_ID → PROJECT_ID`, lookup `COUNTRY`) | `tolerance_pct` (select, default ±10%), `period_policy` (select, default nearest), `fail_without_reference` (bool) |
 
 ## Quick reference (ACCE)
@@ -730,6 +741,8 @@ Hence DQ-ADR-1 is **critical**.
 
 ## DQ-ADR-2: Location + Estimate Date Present & Valid (ADR)
 
+> **Status: retired (2026-09-17).** Not in the catalog; kept for reference in `ADR_RETIRED_RULES`.
+
 - **Type:** Completeness & Validity · **Data product:** ADR
 - **Implementation:** `check_adr_a2` (uses `_is_filled` for completeness +
   a `str.fullmatch` against `ADR_A2_DATE_PATTERN` for validity + a join
@@ -777,6 +790,8 @@ period for EMMA normalization. COST_UPDATE is the *estimate basis date*
 ---
 
 ## DQ-ADR-3: Statistical WBC-to-ISO mapping ratio (ADR)
+
+> **Status: inactive (2026-09-17).** In the catalog with `active=False`: visible in Step 4.2, not selectable, not scored.
 
 - **Type:** Statistical Outlier · **Data product:** ADR
 - **Implementation:** `check_adr_a3` (with `_resolve_coa_master_lookups`
@@ -1316,6 +1331,8 @@ which is the primary reason ADR estimates are consumed downstream.
 
 ## DQ-ADR-7: Within-discipline quantity / hour ratio outlier (ADR)
 
+> **Status: retired (2026-09-17).** Not in the catalog; kept for reference in `ADR_RETIRED_RULES`.
+
 - **Type:** Statistical Outlier · **Data product:** ADR
 - **Implementation:** `check_adr_a7`.
 - **Optional reference dataset:** `VWS_GP_STANDARD_SHARE`
@@ -1505,6 +1522,8 @@ feature, one IQR per `(ITEM_TYPE, QTY_UOM)` across the dataset.
 ---
 
 ## DQ-ADR-8: Cross-discipline quantity ratios (ADR)
+
+> **Status: retired (2026-09-17).** Not in the catalog; kept for reference in `ADR_RETIRED_RULES`.
 
 - **Type:** Statistical Outlier · **Data product:** ADR
 - **Implementation:** `check_adr_a8` (with `_classify_a8_category` for

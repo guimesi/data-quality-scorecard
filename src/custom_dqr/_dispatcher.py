@@ -33,7 +33,9 @@ def evaluate_custom_rules(
     evaluated" and logged, never propagated - otherwise a single bad rule
     would crash the whole Step 6 dashboard.
 
-    Rules unknown for the ``data_product`` in the catalog are skipped silently.
+    Rules unknown for the ``data_product`` in the catalog (including retired
+    ones) are skipped silently; an assignment to an *inactive* rule is
+    reported as "Not evaluated" so the user sees why it contributes nothing.
     """
     # Imported lazily to avoid a circular import (catalog imports check fns
     # from this module).
@@ -43,10 +45,19 @@ def evaluate_custom_rules(
     not_evaluated: Dict[str, str] = {}
     if not assignments:
         return out, not_evaluated
-    catalog = {r.id: r for r in get_available_custom_dqr_rules(data_product)}
+    catalog = {
+        r.id: r
+        for r in get_available_custom_dqr_rules(data_product, include_inactive=True)
+    }
     for a in assignments:
         rule = catalog.get(a.rule_id)
         if rule is None:
+            continue
+        if not rule.active:
+            not_evaluated[a.rule_id] = (
+                f"Custom DQR {a.rule_id} is inactive in the catalog; deselect "
+                "it in Step 4.2 or reinstate the rule."
+            )
             continue
         try:
             if _check_supports_params(rule.check):

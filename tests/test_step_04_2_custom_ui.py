@@ -13,6 +13,23 @@ from unittest.mock import MagicMock, patch
 from tests.test_ui_units import _make_fake_st
 
 
+def _a3_as_active():
+    """DQ-ADR-3 is inactive in the catalog; these option-persistence tests
+    exercise its widgets as if it were active (the option plumbing is the
+    same for every rule)."""
+    import dataclasses
+    from config.custom_dqr_catalog import get_available_custom_dqr_rules
+    a3 = next(
+        r for r in get_available_custom_dqr_rules("ADR", include_inactive=True)
+        if r.id == "DQ-ADR-3"
+    )
+    return dataclasses.replace(a3, active=True)
+
+
+def _catalog_with_active_a3(code, include_inactive=False):
+    return [_a3_as_active()] if code == "ADR" else []
+
+
 def test_dp_block_preserves_existing_weight_for_selected_rule():
     """When a rule card is checked AND was previously selected with a weight,
     that weight survives the re-render (covers the prev-weight branch)."""
@@ -739,10 +756,10 @@ def test_every_statistical_outlier_rule_exposes_threshold_select_option():
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
     ept = {r.id: r for r in get_available_custom_dqr_rules("EPT")}
-    adr = {r.id: r for r in get_available_custom_dqr_rules("ADR")}
+    adr = {r.id: r for r in get_available_custom_dqr_rules("ADR", include_inactive=True)}
     for code, by_id, rule_ids in (
         ("EPT", ept, ("E3", "E6")),
-        ("ADR", adr, ("DQ-ADR-3", "DQ-ADR-7", "DQ-ADR-8")),
+        ("ADR", adr, ("DQ-ADR-3",)),
     ):
         for rid in rule_ids:
             rule = by_id[rid]
@@ -826,7 +843,7 @@ def test_render_rule_card_a3_persists_user_picked_percentile():
         ADR_A3_THRESHOLD_PARAM,
     )
 
-    a3 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-3")
+    a3 = _a3_as_active()
     p95_label = dict(ADR_A3_THRESHOLD_CHOICES)[0.95]
     fake_st = _make_fake_st(
         checkboxes={"custom_ADR_DQ-ADR-3_enabled": True},
@@ -862,7 +879,7 @@ def test_render_rule_card_a3_persists_project_scope_toggle_on():
         ADR_A3_THRESHOLD_PARAM,
     )
 
-    a3 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-3")
+    a3 = _a3_as_active()
     fake_st = _make_fake_st(
         checkboxes={"custom_ADR_DQ-ADR-3_enabled": True},
         toggles={f"custom_ADR_DQ-ADR-3_opt_{ADR_A3_PROJECT_SCOPED_PARAM}": True},
@@ -902,7 +919,8 @@ def test_dp_block_a3_project_scope_flags_planview_id_gap_when_not_a_cde():
         checkboxes={"custom_ADR_DQ-ADR-3_enabled": True},
         toggles={f"custom_ADR_DQ-ADR-3_opt_{ADR_A3_PROJECT_SCOPED_PARAM}": True},
     )
-    with patch.object(s4_2, "st", fake_st):
+    with patch.object(s4_2, "st", fake_st), \
+            patch.object(s4_2, "get_available_custom_dqr_rules", _catalog_with_active_a3):
         valid, gaps = s4_2._render_dp_block("ADR", cfg)
 
     assert valid is False
@@ -915,7 +933,8 @@ def test_render_rule_card_a7_threshold_selectbox_hidden_when_unticked():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    a7 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-7")
+    from config.custom_dqr._adr_catalog import ADR_RETIRED_RULES
+    a7 = next(r for r in ADR_RETIRED_RULES if r.id == "DQ-ADR-7")
     fake_st = _make_fake_st(checkboxes={"custom_ADR_DQ-ADR-7_enabled": False})
     fake_st.selectbox = MagicMock()
     with patch.object(s4_2, "st", fake_st):
@@ -956,7 +975,8 @@ def test_dp_block_round_trips_existing_threshold_param_to_widget():
 
     fake_st = _make_fake_st(checkboxes={"custom_ADR_DQ-ADR-3_enabled": True})
     fake_st.selectbox = capture_selectbox
-    with patch.object(s4_2, "st", fake_st):
+    with patch.object(s4_2, "st", fake_st), \
+            patch.object(s4_2, "get_available_custom_dqr_rules", _catalog_with_active_a3):
         s4_2._render_dp_block("ADR", cfg)
 
     widget_key = f"custom_ADR_DQ-ADR-3_sel_{ADR_A3_THRESHOLD_PARAM}"
@@ -1048,7 +1068,8 @@ def test_dp_block_falls_back_to_default_when_stored_value_not_in_choices():
 
     fake_st = _make_fake_st(checkboxes={"custom_ADR_DQ-ADR-3_enabled": True})
     fake_st.selectbox = capture_selectbox
-    with patch.object(s4_2, "st", fake_st):
+    with patch.object(s4_2, "st", fake_st), \
+            patch.object(s4_2, "get_available_custom_dqr_rules", _catalog_with_active_a3):
         s4_2._render_dp_block("ADR", cfg)
 
     widget_key = f"custom_ADR_DQ-ADR-3_sel_{ADR_A3_THRESHOLD_PARAM}"
@@ -1066,3 +1087,64 @@ def test_dp_block_falls_back_to_default_when_stored_value_not_in_choices():
         ADR_A3_PROJECT_SCOPED_PARAM: False,
         ADR_A3_DETECT_UNIFORM_MAPPING_PARAM: False,
     }
+
+
+# ----- inactive rules in Step 4.2 -----------------------------------------------
+
+def test_inactive_rule_card_is_rendered_disabled_and_never_selected():
+    """DQ-ADR-3 (inactive) shows its card with an Inactive tag and a
+    disabled, unticked Apply checkbox - even when a saved project still
+    carries the assignment - and never yields an assignment."""
+    import ui.step_04_2_custom_dqr as s4_2
+    from config.custom_dqr_catalog import get_available_custom_dqr_rules
+    a3 = next(r for r in get_available_custom_dqr_rules("ADR", include_inactive=True)
+              if r.id == "DQ-ADR-3")
+    assert a3.active is False
+    checkbox_calls = []
+    fake_st = _make_fake_st(checkboxes={"custom_ADR_DQ-ADR-3_enabled": True})
+    real_checkbox = fake_st.checkbox
+
+    def spy_checkbox(label, value=False, key=None, **kwargs):
+        checkbox_calls.append((key, kwargs.get("disabled", False)))
+        return real_checkbox(label, value=value, key=key, **kwargs)
+
+    fake_st.checkbox = spy_checkbox
+    fake_st.selectbox = MagicMock()
+    with patch.object(s4_2, "st", fake_st):
+        selected, params = s4_2._render_rule_card(
+            "ADR", a3, selected=True, selected_cdes=["PLANVIEW_ID"],
+        )
+    assert selected is False and params == {}
+    assert checkbox_calls == [("custom_ADR_DQ-ADR-3_enabled", True)]
+    assert fake_st.session_state["custom_ADR_DQ-ADR-3_enabled"] is False
+    fake_st.selectbox.assert_not_called()
+    markdowns = " ".join(str(c.args[0]) for c in fake_st.markdown.call_args_list)
+    assert "tag-inactive" in markdowns and "Inactive" in markdowns
+
+
+def test_dp_block_drops_saved_assignment_to_inactive_rule_and_counts_active_only():
+    """A saved project carrying DQ-ADR-3 loses that assignment on render;
+    the header counts only active rules and the Select-all button only
+    ticks active ones."""
+    import ui.step_04_2_custom_dqr as s4_2
+    from src.models import CustomDQRAssignment, DataProductConfig
+    cfg = DataProductConfig(
+        system_code="ADR", cdes=["PLANVIEW_ID", "COMPLETE_WBC"],
+        custom_assignments=[
+            CustomDQRAssignment(rule_id="DQ-ADR-3", weight=50.0),
+            CustomDQRAssignment(rule_id="DQ-ADR-1", weight=50.0),
+        ],
+    )
+    fake_st = _make_fake_st(
+        checkboxes={"custom_ADR_DQ-ADR-3_enabled": True, "custom_ADR_DQ-ADR-1_enabled": True},
+        button_returns={"custom_select_all_ADR": True},
+    )
+    with patch.object(s4_2, "st", fake_st):
+        s4_2._render_dp_block("ADR", cfg)
+    ids = [a.rule_id for a in cfg.custom_assignments]
+    assert "DQ-ADR-3" not in ids and "DQ-ADR-1" in ids
+    assert fake_st.session_state.get("custom_ADR_DQ-ADR-3_enabled") is False
+    for rid in ("DQ-ADR-1", "DQ-ADR-4", "DQ-ADR-5", "DQ-ADR-6", "DQ-ADR-9"):
+        assert fake_st.session_state.get(f"custom_ADR_{rid}_enabled") is True
+    markdowns = " ".join(str(c.args[0]) for c in fake_st.markdown.call_args_list)
+    assert "5 rule(s) available" in markdowns and "1 inactive" in markdowns

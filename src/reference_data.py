@@ -274,9 +274,11 @@ def required_reference_datasets_for_systems(systems: Iterable[str]) -> List[str]
     seen: List[str] = []
     for system in systems:
         for rule in get_available_custom_dqr_rules(system):
-            if rule.reference is None:
-                continue
-            ref_name = rule.reference.get("reference_dataset")
-            if ref_name and ref_name not in seen:
-                seen.append(ref_name)
+            names: List[str] = []
+            if rule.reference is not None:
+                names.append(rule.reference.get("reference_dataset") or "")
+            names.extend(rule.extra_reference_datasets)
+            for ref_name in names:
+                if ref_name and ref_name not in seen:
+                    seen.append(ref_name)
     return seen

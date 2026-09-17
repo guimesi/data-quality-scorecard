@@ -165,9 +165,15 @@ def test_get_available_surfaces_every_ept_rule():
 
 
 def test_get_available_surfaces_every_adr_rule():
+    """Default view = the active rules of the catalog list, in catalog
+    order; ``include_inactive`` surfaces the whole list (DQ-ADR-3 is
+    inactive since 2026-09-17)."""
     surfaced_ids = [r.id for r in get_available_custom_dqr_rules("ADR")]
-    catalog_ids = [r.id for r in ADR_RULES]
-    assert surfaced_ids == catalog_ids
+    assert surfaced_ids == [r.id for r in ADR_RULES if r.active]
+    assert "DQ-ADR-3" not in surfaced_ids
+    all_ids = [r.id for r in get_available_custom_dqr_rules("ADR", include_inactive=True)]
+    assert all_ids == [r.id for r in ADR_RULES]
+    assert "DQ-ADR-3" in all_ids
 
 
 def test_get_available_surfaces_every_acce_rule():

@@ -889,14 +889,14 @@ def test_step4_2_renders_ac1_card_for_acce():
     assert any("AC1" in m and "ISO Code of Account" in m for m in markdowns)
 
 
-def test_step4_2_renders_a2_card_for_adr():
-    """ADR ships DQ-ADR-2 (Location + estimate date present), the rule card is
-    rendered when ADR opts into the Custom source."""
+def test_step4_2_renders_adr_cards_without_retired_rules():
+    """ADR renders its active rule cards (DQ-ADR-1 first) and the inactive
+    DQ-ADR-3 card, but never the retired DQ-ADR-2 / 7 / 8."""
     from src.models import DataProductConfig
     dp = _build_data_product_for("ADR")
     cfg = DataProductConfig(
         system_code="ADR",
-        cdes=["PLANVIEW_ID", "COST_UPDATE"],
+        cdes=["PLANVIEW_ID", "COMPLETE_WBC"],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
@@ -907,7 +907,12 @@ def test_step4_2_renders_a2_card_for_adr():
         configs={"ADR": cfg},
     )
     markdowns = [m.value for m in at.markdown]
-    assert any("DQ-ADR-2" in m and "Location" in m for m in markdowns)
+    assert any("DQ-ADR-1" in m and "ISO Code" in m for m in markdowns)
+    assert any("DQ-ADR-3" in m and "Inactive" in m for m in markdowns)
+    # Card headers only - other cards' notes may still mention the retired
+    # ids in prose ("DQ-ADR-2 already covers ...").
+    headers = [m for m in markdowns if 'class="rule-id"' in m]
+    assert not any(f'rule-id">DQ-ADR-{n}<' in m for m in headers for n in ("2", "7", "8"))
 
 
 def test_step4_2_when_no_dp_uses_custom_shows_info():
@@ -1200,7 +1205,8 @@ def test_step2_prefetches_acce_reference_datasets():
 
 
 def test_step2_prefetches_planview_share_for_adr():
-    """ADR now ships DQ-ADR-2, which depends on VWS_GP_STANDARD_SHARE, the
+    """ADR's DQ-ADR-9 resolves the project location through
+    VWS_GP_STANDARD_SHARE (declared as an extra reference dataset), so the
     Step 2 prefetch must seed the same reference dataset as for EPT."""
     from src.reference_data import _SESSION_STATE_KEY
 

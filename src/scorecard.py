@@ -279,7 +279,7 @@ def compute_scorecard(
             effective_required_columns,
             get_available_custom_dqr_rules,
         )
-        catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code)}
+        catalog = {r.id: r for r in get_available_custom_dqr_rules(dp.system_code, include_inactive=True)}
         for a in config.custom_assignments:
             rule = catalog.get(a.rule_id)
             if rule is None:

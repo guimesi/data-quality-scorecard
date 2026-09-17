@@ -174,6 +174,10 @@ def _render_rule_card(
     the assignment so the engine's dispatcher can route them to the
     rule's ``check`` callable."""
     current_params = dict(current_params or {})
+    inactive_tag = (
+        "" if rule.active
+        else '<span class="rule-tag tag-inactive">⏸ Inactive</span>'
+    )
     with st.container(border=True):
         header_cols = st.columns([6, 1])
         with header_cols[0]:
@@ -185,23 +189,42 @@ def _render_rule_card(
                 </div>
                 <div style="margin-bottom: 0.4em;">
                     <span class="rule-tag tag-type">type: {html.escape(str(rule.type))}</span>
+                    {inactive_tag}
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
             st.markdown(rule.description)
+            if not rule.active:
+                st.caption(
+                    "This rule is inactive: it stays documented but cannot be "
+                    "selected and does not contribute to the score."
+                )
         with header_cols[1]:
             # Lazy-init session_state and drop ``value=`` so the
             # "value was overridden by session state" warning never fires
             # when the Select-all-Custom-DQRs handler pre-sets this key.
             checkbox_key = f"custom_{system_code}_{rule.id}_enabled"
-            if checkbox_key not in st.session_state:
-                st.session_state[checkbox_key] = selected
-            new_state = st.checkbox(
-                "Apply",
-                key=checkbox_key,
-                label_visibility="visible",
-            )
+            if not rule.active:
+                # An inactive rule can never be applied - force the widget
+                # off (also clears a stale tick from a saved project) and
+                # disable it.
+                st.session_state[checkbox_key] = False
+                st.checkbox(
+                    "Apply",
+                    key=checkbox_key,
+                    label_visibility="visible",
+                    disabled=True,
+                )
+                new_state = False
+            else:
+                if checkbox_key not in st.session_state:
+                    st.session_state[checkbox_key] = selected
+                new_state = st.checkbox(
+                    "Apply",
+                    key=checkbox_key,
+                    label_visibility="visible",
+                )
 
         new_params: Dict[str, Any] = dict(current_params)
         if new_state:
@@ -246,7 +269,8 @@ def _render_dp_block(
     ``(rule_id, missing_columns)`` for every selected rule whose required
     columns are not fully covered by ``cfg.cdes``. ``is_valid`` is True when
     ``gaps`` is empty (no selection → nothing to block on)."""
-    rules = get_available_custom_dqr_rules(system_code)
+    rules = get_available_custom_dqr_rules(system_code, include_inactive=True)
+    active_rules = [r for r in rules if r.active]
     _dp_card_header(system_code)
 
     if not rules:
@@ -267,7 +291,7 @@ def _render_dp_block(
     action_col, _ = st.columns([2, 3])
     with action_col:
         if st.button(
-            f"✓ Select all Custom DQRs ({len(rules)})",
+            f"✓ Select all Custom DQRs ({len(active_rules)})",
             key=select_all_key,
             help=(
                 "Apply every Custom DQR available for this data product. "
@@ -276,13 +300,15 @@ def _render_dp_block(
             ),
             width="stretch",
         ):
-            for rule in rules:
+            for rule in active_rules:
                 st.session_state[f"custom_{system_code}_{rule.id}_enabled"] = True
 
     st.markdown(
         f"<div style='font-size:0.85em; color:rgba(49,51,63,0.65); margin:0.4em 0;'>"
-        f"📋 {len(rules)} rule(s) available for this Data Product"
-        f"</div>",
+        f"📋 {len(active_rules)} rule(s) available for this Data Product"
+        + (f" · {len(rules) - len(active_rules)} inactive"
+           if len(rules) != len(active_rules) else "")
+        + "</div>",
         unsafe_allow_html=True,
     )
 

@@ -739,13 +739,13 @@ out of the box. Full per-rule documentation lives in
 | EPT | E6 | Cost-to-hours ratio outlier check                      | Statistical Outlier  |
 | EPT | E7 | Project Key linkage                                    | Referential Integrity|
 | ADR | DQ-ADR-1 | ISO Code of Account present (COR + SAB)                | Completeness         |
-| ADR | DQ-ADR-2 | Location + estimate date present & valid               | Completeness & Validity |
-| ADR | DQ-ADR-3 | Statistical WBC-to-ISO mapping ratio                   | Statistical Outlier  |
+| ADR | DQ-ADR-2 | Location + estimate date present & valid *(retired 2026-09)*               | Completeness & Validity |
+| ADR | DQ-ADR-3 | Statistical WBC-to-ISO mapping ratio *(inactive)*                   | Statistical Outlier  |
 | ADR | DQ-ADR-4 | Core quantities populated & non-negative project totals | Completeness & Validity |
 | ADR | DQ-ADR-5 | Design details present when quantity exists           | Consistency          |
 | ADR | DQ-ADR-6 | Construction hours present when quantity exists       | Consistency          |
-| ADR | DQ-ADR-7 | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  |
-| ADR | DQ-ADR-8 | Cross-discipline quantity ratios                       | Statistical Outlier  |
+| ADR | DQ-ADR-7 | Within-discipline quantity / hour ratio outlier *(retired 2026-09)*        | Statistical Outlier  |
+| ADR | DQ-ADR-8 | Cross-discipline quantity ratios *(retired 2026-09)*                       | Statistical Outlier  |
 | ACCE | AC1 | ISO Code of Account present (COR + SAB) - `COA[:3]` lookup    | Completeness |
 | ACCE | AC2 | Location + estimate date present & valid (uses `JOB_NO`)   | Completeness & Validity |
 | ACCE | AC3 | Statistical COA-to-ISO mapping ratio                       | Statistical Outlier |

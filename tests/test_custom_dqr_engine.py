@@ -10,6 +10,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from config.custom_dqr._adr_catalog import ADR_RETIRED_RULES
+from src.custom_dqr_engine import (  # noqa: E402 - used by the retired-rule dispatch tests
+    check_adr_a2, check_adr_a3, check_adr_a7, check_adr_a8,
+)
 from config.custom_dqr_catalog import get_available_custom_dqr_rules
 from src.custom_dqr_engine import (
     EPT_E1_REQUIRED_COLUMNS,
@@ -4653,9 +4657,9 @@ def test_acce_ac8_segmented_fails_when_planview_id_column_missing(monkeypatch):
 # =============================================================================
 
 def test_adr_has_custom_rule_a2_available():
-    """ADR catalog exposes DQ-ADR-2 with the documented Planview reference metadata.
+    """ADR retired list keeps DQ-ADR-2 with the documented Planview reference metadata.
     Mirrors EPT E2 but swaps CENTROID_DATE for COST_UPDATE."""
-    rules = get_available_custom_dqr_rules("ADR")
+    rules = ADR_RETIRED_RULES
     by_id = {r.id: r for r in rules}
     assert "DQ-ADR-2" in by_id
     rule = by_id["DQ-ADR-2"]
@@ -4694,6 +4698,7 @@ def test_adr_a2_passes_when_cost_update_and_country_present(
         "PLANVIEW_ID": ["PV-00001", "PV-00002"],
         "COST_UPDATE": ["2Q2019", "4Q2015"],
     })
+    from src.custom_dqr_engine import check_adr_a2
     assert check_adr_a2(df).tolist() == [True, True]
 
 
@@ -4847,9 +4852,11 @@ def test_evaluate_custom_rules_dispatches_to_a2(_a2_reference_with_countries):
     })
     assignments = [CustomDQRAssignment(rule_id="DQ-ADR-2", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "DQ-ADR-2" in out.columns
-    assert out["DQ-ADR-2"].tolist() == [True, True]
+    # Retired rule: the assignment is skipped silently (no column, no
+    # "not evaluated" entry) - the check itself still works directly.
+    assert "DQ-ADR-2" not in out.columns
     assert not_evaluated == {}
+    assert check_adr_a2(df).tolist() == [True, True]
 
 
 def test_required_reference_datasets_for_adr_includes_planview_share():
@@ -4943,7 +4950,7 @@ def _a3_baseline_population(
 def test_adr_has_custom_rule_a3_available():
     """ADR catalog exposes DQ-ADR-3 as a Statistical Outlier
     rule with the COA-master reference linkage."""
-    rules = get_available_custom_dqr_rules("ADR")
+    rules = get_available_custom_dqr_rules("ADR", include_inactive=True)
     by_id = {r.id: r for r in rules}
     assert "DQ-ADR-3" in by_id
     rule = by_id["DQ-ADR-3"]
@@ -4963,7 +4970,7 @@ def test_adr_has_custom_rule_a3_available():
 def test_adr_a3_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A3_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-3"
+        r for r in get_available_custom_dqr_rules("ADR", include_inactive=True) if r.id == "DQ-ADR-3"
     )
     assert rule.required_columns == ADR_A3_REQUIRED_COLUMNS
 
@@ -4986,6 +4993,7 @@ def test_adr_a3_passes_when_every_bucket_below_p90(_a3_coa_master_with_populatio
     P90 = 1, no bucket strictly exceeds the threshold → every row PASS."""
     from src.custom_dqr_engine import check_adr_a3
     df = _make_a3_df(_a3_baseline_population(rows_per_bucket=1))
+    from src.custom_dqr_engine import check_adr_a3
     assert check_adr_a3(df).all()
 
 
@@ -5209,11 +5217,14 @@ def test_evaluate_custom_rules_dispatches_to_a3(_a3_coa_master_with_population):
     df = _make_a3_df(rows)
     assignments = [CustomDQRAssignment(rule_id="DQ-ADR-3", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "DQ-ADR-3" in out.columns
+    # Inactive rule: the dispatcher reports it instead of scoring it. The
+    # check itself still works directly.
+    assert "DQ-ADR-3" not in out.columns
+    assert "inactive" in not_evaluated["DQ-ADR-3"]
+    result = check_adr_a3(df)
     is_outlier = df["COMPLETE_WBC"].fillna("").str.startswith("313.")
-    assert (~out["DQ-ADR-3"][is_outlier]).all()
-    assert out["DQ-ADR-3"][~is_outlier].all()
-    assert not_evaluated == {}
+    assert (~result[is_outlier]).all()
+    assert result[~is_outlier].all()
 
 
 def test_adr_a3_reuses_acce_coa_master_reference():
@@ -6572,8 +6583,8 @@ def _a7_segment_with_outlier(
 
 
 def test_adr_has_custom_rule_a7_available():
-    """ADR catalog exposes DQ-ADR-7 as a Statistical Outlier rule."""
-    rules = get_available_custom_dqr_rules("ADR")
+    """ADR retired list keeps DQ-ADR-7 as a Statistical Outlier rule."""
+    rules = ADR_RETIRED_RULES
     by_id = {r.id: r for r in rules}
     assert "DQ-ADR-7" in by_id
     rule = by_id["DQ-ADR-7"]
@@ -6590,7 +6601,7 @@ def test_adr_has_custom_rule_a7_available():
 def test_adr_a7_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A7_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-7"
+        r for r in ADR_RETIRED_RULES if r.id == "DQ-ADR-7"
     )
     assert rule.required_columns == ADR_A7_REQUIRED_COLUMNS
 
@@ -6616,6 +6627,7 @@ def test_adr_a7_flags_outlier_in_well_populated_segment():
     df = _a7_segment_with_outlier(
         n_baseline=12, baseline_ratio=5.0, outlier_ratio=50.0
     )
+    from src.custom_dqr_engine import check_adr_a7
     result = check_adr_a7(df).tolist()
     assert result[:-1] == [True] * 12   # baseline rows pass
     assert result[-1] is False          # outlier row fails
@@ -6836,9 +6848,11 @@ def test_evaluate_custom_rules_dispatches_to_a7():
     )
     assignments = [CustomDQRAssignment(rule_id="DQ-ADR-7", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "DQ-ADR-7" in out.columns
-    assert out["DQ-ADR-7"].tolist() == [True] * 12 + [False]
+    # Retired rule: skipped silently by the dispatcher; the check itself
+    # still works directly.
+    assert "DQ-ADR-7" not in out.columns
     assert not_evaluated == {}
+    assert check_adr_a7(df).tolist() == [True] * 12 + [False]
 
 
 def test_adr_a7_does_not_add_reference_dataset_to_prefetch():
@@ -6910,7 +6924,7 @@ def test_adr_a7_segment_param_constants_match_catalog():
     PLANVIEW_ID as a required-when-enabled column."""
     from src.custom_dqr_engine import ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-7"
+        r for r in ADR_RETIRED_RULES if r.id == "DQ-ADR-7"
     )
     by_key = {opt.key: opt for opt in rule.options}
     assert ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM in by_key
@@ -7202,8 +7216,8 @@ def _a8_steel_concrete_population(
 # ----- Catalog metadata ------------------------------------------------------
 
 def test_adr_has_custom_rule_a8_available():
-    """ADR catalog exposes DQ-ADR-8 as a Statistical Outlier rule."""
-    rules = get_available_custom_dqr_rules("ADR")
+    """ADR retired list keeps DQ-ADR-8 as a Statistical Outlier rule."""
+    rules = ADR_RETIRED_RULES
     by_id = {r.id: r for r in rules}
     assert "DQ-ADR-8" in by_id
     rule = by_id["DQ-ADR-8"]
@@ -7220,7 +7234,7 @@ def test_adr_has_custom_rule_a8_available():
 def test_adr_a8_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A8_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-8"
+        r for r in ADR_RETIRED_RULES if r.id == "DQ-ADR-8"
     )
     assert rule.required_columns == ADR_A8_REQUIRED_COLUMNS
 
@@ -7323,6 +7337,7 @@ def test_adr_a8_flags_outlier_project_in_well_populated_population():
         outlier_steel=100.0,
         outlier_concrete=5.0,   # ratio = 20 - far above Q3 + 1.5*IQR
     )
+    from src.custom_dqr_engine import check_adr_a8
     result = check_adr_a8(df)
     is_outlier = df["ROOT_ITEM_NAME"] == outlier_project
     assert (~result[is_outlier]).all()
@@ -7498,10 +7513,14 @@ def test_evaluate_custom_rules_dispatches_to_a8():
     df, outlier_project = _a8_steel_concrete_population(outlier_concrete=5.0)
     assignments = [CustomDQRAssignment(rule_id="DQ-ADR-8", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "DQ-ADR-8" in out.columns
+    # Retired rule: skipped silently by the dispatcher; the check itself
+    # still works directly.
+    assert "DQ-ADR-8" not in out.columns
+    assert not_evaluated == {}
+    result = check_adr_a8(df)
     is_outlier = df["ROOT_ITEM_NAME"] == outlier_project
-    assert (~out["DQ-ADR-8"][is_outlier]).all()
-    assert out["DQ-ADR-8"][~is_outlier].all()
+    assert (~result[is_outlier]).all()
+    assert result[~is_outlier].all()
     assert not_evaluated == {}
 
 
@@ -7584,7 +7603,7 @@ def test_adr_a8_segment_param_constants_match_catalog():
     PLANVIEW_ID as a required-when-enabled column."""
     from src.custom_dqr_engine import ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-8"
+        r for r in ADR_RETIRED_RULES if r.id == "DQ-ADR-8"
     )
     by_key = {opt.key: opt for opt in rule.options}
     assert ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM in by_key
@@ -9442,11 +9461,13 @@ def test_evaluate_custom_rules_downgrades_unexpected_exception(monkeypatch):
 
     class _BoomRule:
         id = "BOOM"
+        active = True
 
         def check(self, df):  # no ``params`` kwarg -> called as check(df)
             raise ValueError("kaboom")
 
-    monkeypatch.setattr(cat, "get_available_custom_dqr_rules", lambda dp: [_BoomRule()])
+    monkeypatch.setattr(cat, "get_available_custom_dqr_rules",
+                        lambda dp, include_inactive=False: [_BoomRule()])
 
     df = pd.DataFrame({"X": [1, 2, 3]})
     out, not_evaluated = evaluate_custom_rules(
@@ -9891,3 +9912,28 @@ def test_adr_a9_mock_data_product_exercises_every_outcome():
     assert {"WITHIN_TOLERANCE", "DEVIATION_GT_TOLERANCE", "UNKNOWN_CODE", "VALUE_80_NO_FACTOR"} <= reasons
     result = check_adr_a9(df)
     assert result.any() and (~result).any()
+
+
+# =============================================================================
+# Rule lifecycle: inactive / retired rules and extra reference datasets
+# =============================================================================
+
+def test_required_reference_datasets_include_extra_references():
+    """DQ-ADR-9 declares Planview as an extra reference on top of MFC, so
+    Step 2 keeps prefetching VWS_GP_STANDARD_SHARE for ADR even though the
+    rules that used it directly are retired / inactive."""
+    from src.reference_data import required_reference_datasets_for_systems
+    refs = required_reference_datasets_for_systems(["ADR"])
+    assert set(refs) == {"ACCE_COA_MASTER", "MFC", "VWS_GP_STANDARD_SHARE"}
+
+
+def test_dispatcher_reports_inactive_rule_and_skips_retired_ones():
+    df = pd.DataFrame({"COMPLETE_WBC": ["313.1.10.10"], "PLANVIEW_ID": ["P1"]})
+    assignments = [
+        CustomDQRAssignment(rule_id="DQ-ADR-3", weight=50.0),
+        CustomDQRAssignment(rule_id="DQ-ADR-7", weight=50.0),
+    ]
+    out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
+    assert list(out.columns) == []
+    assert set(not_evaluated) == {"DQ-ADR-3"}
+    assert "inactive" in not_evaluated["DQ-ADR-3"]

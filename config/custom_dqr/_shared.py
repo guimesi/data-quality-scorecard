@@ -77,6 +77,17 @@ class CustomRuleDef:
     # surfaces the reference dataset + source/reference column mapping in
     # the rule card's expandable details.
     reference: Optional[Dict[str, str]] = None
+    # Additional reference datasets the check reads besides ``reference``
+    # (e.g. A9 resolves the project location through the Planview share
+    # on top of the EMMA table). Step 2 prefetches these too.
+    extra_reference_datasets: Tuple[str, ...] = ()
+    # Lifecycle flag. An inactive rule stays in the catalog - its card is
+    # rendered greyed-out in Step 4.2 and its documentation stays - but it
+    # cannot be selected, is skipped by One-click and Step 3 hints, and any
+    # lingering assignment is reported as "Not evaluated" by the
+    # dispatcher. Retired rules are removed from the catalog list instead
+    # (see ``config/custom_dqr/_adr_catalog.py::ADR_RETIRED_RULES``).
+    active: bool = True
     # Per-rule toggleable options. Empty by default; Step 4.2 only renders
     # the option block for rules that declare at least one entry.
     options: List[CustomRuleOption] = field(default_factory=list)

@@ -73,7 +73,7 @@ def _custom_rule_meta(cfg, system_code: str) -> Dict[str, Tuple[List[str], str]]
     """
     if not cfg.custom_assignments:
         return {}
-    catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code)}
+    catalog = {r.id: r for r in get_available_custom_dqr_rules(system_code, include_inactive=True)}
     meta: Dict[str, Tuple[List[str], str]] = {}
     for a in cfg.custom_assignments:
         rule = catalog.get(a.rule_id)
