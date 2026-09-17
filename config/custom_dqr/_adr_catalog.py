@@ -4,6 +4,7 @@ from __future__ import annotations
 from config.custom_dqr._shared import (
     CustomRuleDef,
     CustomRuleOption,
+    CustomRuleSelectOption,
     _iqr_threshold_option,
     _percentile_threshold_option,
     _uniform_mapping_option,
@@ -42,6 +43,15 @@ from src.custom_dqr_engine import (
     ADR_A8_SEGMENT_REQUIRED_COLUMNS,
     ADR_A8_THRESHOLD_CHOICES,
     ADR_A8_THRESHOLD_PARAM,
+    ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
+    ADR_A9_PERIOD_POLICY,
+    ADR_A9_PERIOD_POLICY_CHOICES,
+    ADR_A9_PERIOD_POLICY_PARAM,
+    ADR_A9_REFERENCE,
+    ADR_A9_REQUIRED_COLUMNS,
+    ADR_A9_TOLERANCE,
+    ADR_A9_TOLERANCE_CHOICES,
+    ADR_A9_TOLERANCE_PARAM,
     check_adr_a1,
     check_adr_a2,
     check_adr_a3,
@@ -50,6 +60,7 @@ from src.custom_dqr_engine import (
     check_adr_a6,
     check_adr_a7,
     check_adr_a8,
+    check_adr_a9,
 )
 
 ADR_RULES = [
@@ -504,6 +515,126 @@ ADR_RULES = [
                 ),
                 required_columns_when_enabled=dict(
                     ADR_A8_SEGMENT_REQUIRED_COLUMNS
+                ),
+            ),
+        ],
+    ),
+    CustomRuleDef(
+        id="A9",
+        name="Base material factor validation (MFC vs EMMA)",
+        type="Validity",
+        description=(
+            "Ensures estimation records use the correct base material "
+            "factor from EMMA Market Analysis. For each material factor "
+            "code (``BASE_MATERIAL_MFC``, ``VENDOR_SHOP_FAB_MFC``) the "
+            "rule derives the factor actually applied to the estimate "
+            "(``COST / DB_COST``) and compares it with the EMMA factor "
+            "published for that code at the project's location and "
+            "cost-update period. Codes of 0 or 80 (no factor available) "
+            "and codes unknown to EMMA fail; items whose location and "
+            "period have no EMMA reference are identified separately."
+        ),
+        notes=(
+            "Row-level Validity rule on the ADR cost results (1:1 per "
+            "ROW_ID). ``BASE_MATERIAL_MFC`` / ``VENDOR_SHOP_FAB_MFC`` "
+            "carry EMMA codes such as ``313.01`` (matched after rounding "
+            "to 2 decimals). The effective factor is "
+            "``COST_BASE_MATERIAL_COST / COST_DB_BASE_MATERIAL_COST`` "
+            "(and the vendor-shop pair): production medians per code "
+            "fall inside the EMMA factor range, confirming the ratio is "
+            "the applied factor. Location: ``PLANVIEW_ID`` → Planview "
+            "``COUNTRY`` → ISO-2 prefix of EMMA ``locationCode``; every "
+            "site of the country is a candidate and the closest factor "
+            "wins. Period: ``COST_UPDATE`` (``2Q2019``) matched to the "
+            "nearest EMMA period by default (EMMA currently starts at "
+            "2Q2024), or exact-only via the card option. Per field: "
+            "null code → not applicable; code 0 / 80 → FAIL; code "
+            "absent from EMMA in any location / period → FAIL; "
+            "unresolvable location / period or no EMMA row for the "
+            "(code, location, period) → NO_REFERENCE (passes unless the "
+            "toggle below is on); DB cost null / non-positive → not "
+            "applicable; closest EMMA factor deviating more than the "
+            "tolerance (default ±10%, per the data owner) → FAIL. A row "
+            "fails when any field fails. ``SPEC_S_C_MFC`` is excluded: "
+            "specialty contractor cost is estimated from labour hours "
+            "and its MFC is not used. Raises ``CustomRuleNotEvaluated`` "
+            "when the ``MFC`` or Planview reference is unavailable."
+        ),
+        required_columns=dict(ADR_A9_REQUIRED_COLUMNS),
+        blocking=False,
+        check=check_adr_a9,
+        reference=dict(ADR_A9_REFERENCE),
+        select_options=[
+            CustomRuleSelectOption(
+                key=ADR_A9_TOLERANCE_PARAM,
+                label="Deviation tolerance",
+                choices=ADR_A9_TOLERANCE_CHOICES,
+                default=ADR_A9_TOLERANCE,
+                help=(
+                    "Maximum relative deviation between the applied "
+                    "factor and the closest EMMA factor before the row "
+                    "fails. ±10% is the data owner's recommendation."
+                ),
+                description=(
+                    "**How this option works**\n\n"
+                    "The applied factor (`COST / DB_COST`) is compared "
+                    "with the EMMA factor of the same code at the "
+                    "project's location and period. MFCs are often "
+                    "adjusted for project specifics, so small "
+                    "differences are expected; a deviation above this "
+                    "tolerance flags the row for investigation. "
+                    "**±10%** is the recommended baseline; **±25%** "
+                    "matches the gap observed between EMMA and the "
+                    "estimates and is meant for calibration runs."
+                ),
+            ),
+            CustomRuleSelectOption(
+                key=ADR_A9_PERIOD_POLICY_PARAM,
+                label="EMMA period matching",
+                choices=ADR_A9_PERIOD_POLICY_CHOICES,
+                default=ADR_A9_PERIOD_POLICY,
+                help=(
+                    "Nearest: compare with the EMMA period closest to "
+                    "the item's COST_UPDATE. Exact: only when the same "
+                    "period is published; otherwise NO_REFERENCE."
+                ),
+                description=(
+                    "**How this option works**\n\n"
+                    "**Nearest (default):** the EMMA period closest to "
+                    "the estimate's `COST_UPDATE` is used (ties go to "
+                    "the earlier period). EMMA currently starts at "
+                    "2Q2024 while ADR estimates run 2Q2015-4Q2023, so "
+                    "every item is compared with 2Q2024 today; older "
+                    "estimates will naturally sit below the published "
+                    "factor.\n\n"
+                    "**Exact:** only a published EMMA period equal to "
+                    "`COST_UPDATE` is accepted. Faithful to the rule "
+                    "text, but with the current EMMA coverage every "
+                    "item is NO_REFERENCE."
+                ),
+            ),
+        ],
+        options=[
+            CustomRuleOption(
+                key=ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
+                label="Fail rows without an EMMA reference",
+                default=False,
+                help=(
+                    "When on, items whose location / period has no "
+                    "EMMA factor for their code fail instead of passing "
+                    "as NO_REFERENCE."
+                ),
+                description=(
+                    "**How this option works**\n\n"
+                    "**Off (default):** an item whose (code, location, "
+                    "period) has no published EMMA factor - unresolved "
+                    "country, country without EMMA sites, or period "
+                    "outside EMMA coverage in exact mode - is "
+                    "NO_REFERENCE and passes; the count is visible in "
+                    "the drill-down so those estimations can be "
+                    "identified.\n\n"
+                    "**On:** the same items fail, so the score reflects "
+                    "estimations that cannot be validated."
                 ),
             ),
         ],

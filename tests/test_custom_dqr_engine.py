@@ -1186,7 +1186,7 @@ def test_required_reference_datasets_for_adr_now_includes_coa_master():
     must prefetch both."""
     from src.reference_data import required_reference_datasets_for_systems
     refs = required_reference_datasets_for_systems(["ADR"])
-    assert set(refs) == {"VWS_GP_STANDARD_SHARE", "ACCE_COA_MASTER"}
+    assert set(refs) == {"VWS_GP_STANDARD_SHARE", "ACCE_COA_MASTER", "MFC"}
 
 
 def test_acce_coa_master_loader_resolves_in_mock_mode():
@@ -1693,8 +1693,8 @@ def test_required_reference_datasets_for_acce_now_includes_planview_share():
     ``ACCE_COA_MASTER`` for ACCE. Step 2 must prefetch both."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "ACCE_COA_MASTER",
         "VWS_GP_STANDARD_SHARE",
+        "ACCE_COA_MASTER",
     }
 
 
@@ -2856,8 +2856,8 @@ def test_acce_ac4_does_not_add_reference_dataset_to_prefetch():
     list is the same one AC1 + AC2 already require."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "ACCE_COA_MASTER",
         "VWS_GP_STANDARD_SHARE",
+        "ACCE_COA_MASTER",
     }
 
 
@@ -3071,8 +3071,8 @@ def test_acce_ac5_does_not_add_reference_dataset_to_prefetch():
     is unchanged."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "ACCE_COA_MASTER",
         "VWS_GP_STANDARD_SHARE",
+        "ACCE_COA_MASTER",
     }
 
 
@@ -3287,8 +3287,8 @@ def test_acce_ac6_does_not_add_reference_dataset_to_prefetch():
     is unchanged."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "ACCE_COA_MASTER",
         "VWS_GP_STANDARD_SHARE",
+        "ACCE_COA_MASTER",
     }
 
 
@@ -3666,8 +3666,8 @@ def test_acce_ac7_does_not_add_reference_dataset_to_prefetch():
     a cached reference when it runs."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "ACCE_COA_MASTER",
         "VWS_GP_STANDARD_SHARE",
+        "ACCE_COA_MASTER",
     }
 
 
@@ -4368,8 +4368,8 @@ def test_acce_ac8_does_not_add_reference_dataset_to_prefetch():
     a cached reference when it runs."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "ACCE_COA_MASTER",
         "VWS_GP_STANDARD_SHARE",
+        "ACCE_COA_MASTER",
     }
 
 
@@ -4872,6 +4872,7 @@ def test_required_reference_datasets_for_adr_includes_planview_share():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
 
 
@@ -5235,6 +5236,7 @@ def test_adr_a3_reuses_acce_coa_master_reference():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
 
 
@@ -5965,6 +5967,7 @@ def test_adr_a4_does_not_add_reference_dataset_to_prefetch():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
 
 
@@ -6288,6 +6291,7 @@ def test_adr_a5_does_not_add_reference_dataset_to_prefetch():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
 
 
@@ -6530,6 +6534,7 @@ def test_adr_a6_does_not_add_reference_dataset_to_prefetch():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
 
 
@@ -6860,6 +6865,7 @@ def test_adr_a7_does_not_add_reference_dataset_to_prefetch():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
 
 
@@ -7524,6 +7530,7 @@ def test_adr_a8_does_not_add_reference_dataset_to_prefetch():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
 
 
@@ -8778,19 +8785,22 @@ def test_required_reference_datasets_collects_unique_names():
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "ACCE_COA_MASTER",
         "VWS_GP_STANDARD_SHARE",
+        "ACCE_COA_MASTER",
     }
     # No duplicates across systems that share a reference.
     assert set(required_reference_datasets_for_systems(["EPT", "ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
     assert set(required_reference_datasets_for_systems(["ADR", "ACCE"])) == {
         "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
+        "MFC",
     }
     assert required_reference_datasets_for_systems(["EPT", "EPT"]) == [
         "VWS_GP_STANDARD_SHARE"
@@ -9494,3 +9504,412 @@ def test_evaluate_custom_rules_records_segmented_rule_not_evaluated(monkeypatch)
     assert "E6" not in out.columns
     assert "E6" in not_evaluated
     assert not_evaluated["E6"]  # a human-readable reason was recorded
+
+
+# =============================================================================
+# A9: Base material factor validation - MFC vs EMMA (ADR; validity rule)
+# =============================================================================
+
+_A9_COLS = [
+    "PLANVIEW_ID", "COST_UPDATE",
+    "COST_BASE_MATERIAL_MFC", "COST_VENDOR_SHOP_FAB_MFC",
+    "COST_BASE_MATERIAL_COST", "COST_DB_BASE_MATERIAL_COST",
+    "COST_VENDOR_SHOP_FAB_COST", "COST_DB_VENDOR_SHOP_FAB_COST",
+]
+
+
+def _make_a9_df(rows):
+    completed = [{**{c: None for c in _A9_COLS}, **r} for r in rows]
+    return pd.DataFrame(completed, columns=_A9_COLS)
+
+
+def _a9_row(
+    pv="PV-US", period="2Q2019",
+    bm=None, bm_cost=None, bm_db=None,
+    vsf=None, vsf_cost=None, vsf_db=None,
+):
+    return {
+        "PLANVIEW_ID": pv, "COST_UPDATE": period,
+        "COST_BASE_MATERIAL_MFC": bm,
+        "COST_BASE_MATERIAL_COST": bm_cost,
+        "COST_DB_BASE_MATERIAL_COST": bm_db,
+        "COST_VENDOR_SHOP_FAB_MFC": vsf,
+        "COST_VENDOR_SHOP_FAB_COST": vsf_cost,
+        "COST_DB_VENDOR_SHOP_FAB_COST": vsf_db,
+    }
+
+
+def _a9_mfc_reference():
+    """EMMA rows: code 313.01 at two US sites (6.0 / 6.5) and one GB site
+    (6.6) for 2Q2024 and 4Q2024 (+2%); code 348.01 only at US.HPY.P.
+    ``mfc.code`` float noise is reproduced on one row."""
+    rows = []
+    for period, mult in (("2Q2024", 1.0), ("4Q2024", 1.02)):
+        rows += [
+            {"CODE": "313.01", "LOCATION_CODE": "US.HPY.P", "PERIOD": period, "FACTOR_VALUE": 6.0 * mult},
+            {"CODE": "313.01", "LOCATION_CODE": "US.CRP.F", "PERIOD": period, "FACTOR_VALUE": 6.5 * mult},
+            {"CODE": "313.01", "LOCATION_CODE": "GB.FAW.P", "PERIOD": period, "FACTOR_VALUE": 6.6 * mult},
+            {"CODE": "348.00999999", "LOCATION_CODE": "US.HPY.P", "PERIOD": period, "FACTOR_VALUE": 2.4 * mult},
+        ]
+    df = pd.DataFrame(rows)
+    df["DESCRIPTION"] = "x"
+    return df
+
+
+def _a9_planview_reference():
+    return pd.DataFrame({
+        "PROJECT_ID": ["PV-US", "PV-GB", "PV-NAME", "PV-NL", "PV-NOCOUNTRY", "PV-BADCOUNTRY"],
+        "COUNTRY": ["US", "UK", "United States", "NL", None, "Atlantis"],
+    })
+
+
+@pytest.fixture
+def _a9_references(monkeypatch):
+    import src.reference_data as ref_mod
+    refs = {"MFC": _a9_mfc_reference(), "VWS_GP_STANDARD_SHARE": _a9_planview_reference()}
+    monkeypatch.setattr(ref_mod, "get_reference_dataset", lambda name: refs.get(name))
+    monkeypatch.setattr(ref_mod, "get_reference_dataset_error", lambda name: None)
+    return refs
+
+
+# ----- catalog ---------------------------------------------------------------
+
+def test_adr_has_custom_rule_a9_available():
+    from src.custom_dqr_engine import (
+        ADR_A9_PERIOD_POLICY_PARAM, ADR_A9_TOLERANCE_PARAM,
+        ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
+    )
+    by_id = {r.id: r for r in get_available_custom_dqr_rules("ADR")}
+    assert "A9" in by_id
+    rule = by_id["A9"]
+    assert rule.type == "Validity"
+    assert rule.blocking is False
+    assert rule.reference["reference_dataset"] == "MFC"
+    assert set(rule.required_columns.values()) == set(_A9_COLS)
+    keys = [o.key for o in rule.select_options]
+    assert keys == [ADR_A9_TOLERANCE_PARAM, ADR_A9_PERIOD_POLICY_PARAM]
+    tol = rule.select_options[0]
+    assert tol.default == 0.10
+    assert "recommended" in dict(tol.choices)[tol.default].lower()
+    pol = rule.select_options[1]
+    assert pol.default == "nearest"
+    assert [o.key for o in rule.options] == [ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM]
+    assert rule.options[0].default is False
+
+
+def test_adr_a9_required_columns_constant_matches_catalog():
+    from src.custom_dqr_engine import ADR_A9_REQUIRED_COLUMNS
+    rule = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "A9")
+    assert rule.required_columns == ADR_A9_REQUIRED_COLUMNS
+
+
+def test_adr_a9_check_supports_params():
+    from src.custom_dqr_engine import _check_supports_params, check_adr_a9
+    assert _check_supports_params(check_adr_a9)
+
+
+# ----- happy / failure paths ---------------------------------------------------
+
+def test_adr_a9_passes_when_effective_factor_within_tolerance(_a9_references):
+    """2Q2019 → nearest EMMA period 2Q2024; US has two sites (6.0, 6.5)
+    and the closest one decides."""
+    from src.custom_dqr_engine import check_adr_a9
+    df = _make_a9_df([
+        _a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0),     # 6.00 vs 6.0
+        _a9_row(bm="313.01", bm_cost=690.0, bm_db=100.0),     # 6.90 vs 6.5 → 6.2%
+        _a9_row(bm="313.01", bm_cost=550.0, bm_db=100.0),     # 5.50 vs 6.0 → 8.3%
+    ])
+    assert check_adr_a9(df).tolist() == [True, True, True]
+
+
+def test_adr_a9_fails_when_deviation_exceeds_tolerance(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9, check_adr_a9
+    df = _make_a9_df([
+        _a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0),     # 8.0 vs 6.5 → 23%
+        _a9_row(bm="313.01", bm_cost=400.0, bm_db=100.0),     # 4.0 vs 6.0 → 33%
+    ])
+    assert check_adr_a9(df).tolist() == [False, False]
+    ev = _evaluate_adr_a9(df)
+    assert ev["bm_reason"].tolist() == ["DEVIATION_GT_TOLERANCE"] * 2
+    assert ev["bm_reference"].tolist() == [6.5, 6.0]
+    assert ev["bm_deviation"].round(4).tolist() == [0.2308, 0.3333]
+
+
+def test_adr_a9_tolerance_param_widens_the_pass_band(_a9_references):
+    from src.custom_dqr_engine import ADR_A9_TOLERANCE_PARAM, check_adr_a9
+    df = _make_a9_df([_a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0)])  # 23%
+    assert check_adr_a9(df).tolist() == [False]
+    assert check_adr_a9(df, {ADR_A9_TOLERANCE_PARAM: 0.25}).tolist() == [True]
+    # Malformed threshold falls back to the default.
+    assert check_adr_a9(df, {ADR_A9_TOLERANCE_PARAM: "abc"}).tolist() == [False]
+
+
+def test_adr_a9_sentinel_codes_fail(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9
+    df = _make_a9_df([
+        _a9_row(bm="0", bm_cost=600.0, bm_db=100.0),
+        _a9_row(bm="80", bm_cost=600.0, bm_db=100.0),
+        _a9_row(bm="80.0", bm_cost=600.0, bm_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["bm_status"].tolist() == ["FAIL"] * 3
+    assert ev["bm_reason"].tolist() == ["ZERO_MFC", "VALUE_80_NO_FACTOR", "VALUE_80_NO_FACTOR"]
+
+
+def test_adr_a9_unknown_code_fails_regardless_of_location(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9
+    df = _make_a9_df([
+        _a9_row(bm="999.99", bm_cost=600.0, bm_db=100.0),
+        _a9_row(pv="PV-NOCOUNTRY", bm="ABC", bm_cost=600.0, bm_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["bm_status"].tolist() == ["FAIL", "FAIL"]
+    assert ev["bm_reason"].tolist() == ["UNKNOWN_CODE"] * 2
+
+
+def test_adr_a9_code_matching_rounds_to_two_decimals(_a9_references):
+    """``348.01`` in ADR must hit the ``348.00999999`` EMMA row; ``313.1``
+    and ``313.10`` are the same code as ``313.01``? No - ``313.1`` is
+    ``313.10``, a different code, and must be UNKNOWN here."""
+    from src.custom_dqr_engine import _evaluate_adr_a9
+    df = _make_a9_df([
+        _a9_row(bm="348.01", bm_cost=240.0, bm_db=100.0),
+        _a9_row(bm=" 313.010 ", bm_cost=600.0, bm_db=100.0),
+        _a9_row(bm="313.1", bm_cost=600.0, bm_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["bm_status"].tolist() == ["PASS", "PASS", "FAIL"]
+    assert ev["bm_reason"].iloc[2] == "UNKNOWN_CODE"
+
+
+def test_adr_a9_null_code_or_db_cost_is_not_applicable(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9, check_adr_a9
+    df = _make_a9_df([
+        _a9_row(bm=None, bm_cost=600.0, bm_db=100.0),
+        _a9_row(bm="  ", bm_cost=600.0, bm_db=100.0),
+        _a9_row(bm="313.01", bm_cost=600.0, bm_db=0.0),
+        _a9_row(bm="313.01", bm_cost=600.0, bm_db=None),
+        _a9_row(bm="313.01", bm_cost=None, bm_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["bm_status"].tolist() == ["NOT_APPLICABLE"] * 5
+    assert ev["bm_reason"].tolist() == [
+        "NULL_MFC", "NULL_MFC", "NULL_EFFECTIVE_FACTOR",
+        "NULL_EFFECTIVE_FACTOR", "NULL_EFFECTIVE_FACTOR",
+    ]
+    assert ev["row_status"].tolist() == ["NOT_APPLICABLE"] * 5
+    assert check_adr_a9(df).all()
+
+
+# ----- location resolution -------------------------------------------------------
+
+def test_adr_a9_resolves_country_names_codes_and_uk_alias(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9
+    df = _make_a9_df([
+        _a9_row(pv="PV-NAME", bm="313.01", bm_cost=600.0, bm_db=100.0),   # United States
+        _a9_row(pv="PV-GB", bm="313.01", bm_cost=660.0, bm_db=100.0),     # UK → GB, 6.6
+        _a9_row(pv="PV-GB", bm="313.01", bm_cost=600.0, bm_db=100.0),     # 6.0 vs 6.6 → 9.1%
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["location"].tolist() == ["US", "GB", "GB"]
+    assert ev["bm_status"].tolist() == ["PASS", "PASS", "PASS"]
+
+
+def test_adr_a9_no_reference_when_location_unresolvable_or_uncovered(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9, check_adr_a9
+    df = _make_a9_df([
+        _a9_row(pv="PV-NOCOUNTRY", bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(pv="PV-BADCOUNTRY", bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(pv="PV-UNKNOWN", bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(pv=None, bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(pv="PV-NL", bm="313.01", bm_cost=600.0, bm_db=100.0),     # no NL sites
+        _a9_row(pv="PV-GB", bm="348.01", bm_cost=240.0, bm_db=100.0),     # 348.01 only in US
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["bm_status"].tolist() == ["NO_REFERENCE"] * 6
+    assert ev["bm_reason"].tolist() == [
+        "NO_LOCATION", "NO_LOCATION", "NO_LOCATION", "NO_LOCATION",
+        "NO_REFERENCE_FOR_LOCATION_PERIOD", "NO_REFERENCE_FOR_LOCATION_PERIOD",
+    ]
+    assert ev["row_status"].tolist() == ["NO_REFERENCE"] * 6
+    # Passes by default …
+    assert check_adr_a9(df).all()
+    # … fails when the toggle is on.
+    from src.custom_dqr_engine import ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM
+    assert not check_adr_a9(df, {ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM: True}).any()
+
+
+# ----- period resolution ---------------------------------------------------------
+
+def test_adr_a9_nearest_period_policy(_a9_references):
+    """2Q2019 / 2Q2024 → 2Q2024; 4Q2025 → 4Q2024 (latest available);
+    3Q2024 ties between 2Q2024 and 4Q2024 → earlier wins."""
+    from src.custom_dqr_engine import _evaluate_adr_a9
+    ord_2q2024 = 2024 * 4 + 1
+    ord_4q2024 = 2024 * 4 + 3
+    df = _make_a9_df([
+        _a9_row(period="2Q2019", bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(period="2Q2024", bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(period="4Q2025", bm="313.01", bm_cost=612.0, bm_db=100.0),  # 6.12 = 6.0*1.02
+        _a9_row(period="3Q2024", bm="313.01", bm_cost=600.0, bm_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["period_used"].tolist() == [ord_2q2024, ord_2q2024, ord_4q2024, ord_2q2024]
+    assert ev["bm_deviation"].round(6).tolist() == [0.0, 0.0, 0.0, 0.0]
+
+
+def test_adr_a9_exact_period_policy_yields_no_reference_outside_coverage(_a9_references):
+    from src.custom_dqr_engine import ADR_A9_PERIOD_POLICY_PARAM, _evaluate_adr_a9
+    df = _make_a9_df([
+        _a9_row(period="2Q2019", bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(period="4Q2024", bm="313.01", bm_cost=612.0, bm_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df, {ADR_A9_PERIOD_POLICY_PARAM: "exact"})
+    assert ev["bm_status"].tolist() == ["NO_REFERENCE", "PASS"]
+    assert ev["bm_reason"].tolist() == ["NO_PERIOD", "WITHIN_TOLERANCE"]
+
+
+def test_adr_a9_malformed_or_missing_period_is_no_reference(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9
+    df = _make_a9_df([
+        _a9_row(period=None, bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(period="5Q2019", bm="313.01", bm_cost=600.0, bm_db=100.0),
+        _a9_row(period="2019", bm="313.01", bm_cost=600.0, bm_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["bm_reason"].tolist() == ["NO_PERIOD"] * 3
+
+
+# ----- two fields, row verdict ---------------------------------------------------
+
+def test_adr_a9_vendor_shop_fab_field_is_validated_independently(_a9_references):
+    from src.custom_dqr_engine import _evaluate_adr_a9, check_adr_a9
+    df = _make_a9_df([
+        # BM fine, VSF deviates → row FAIL
+        _a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0,
+                vsf="313.01", vsf_cost=900.0, vsf_db=100.0),
+        # BM null, VSF fine → row PASS
+        _a9_row(vsf="313.01", vsf_cost=600.0, vsf_db=100.0),
+        # BM no reference, VSF fine → row PASS (any PASS wins over NO_REFERENCE)
+        _a9_row(pv="PV-NL", bm="313.01", bm_cost=600.0, bm_db=100.0,
+                vsf="348.01", vsf_cost=240.0, vsf_db=100.0),
+    ])
+    ev = _evaluate_adr_a9(df)
+    assert ev["vsf_status"].tolist() == ["FAIL", "PASS", "NO_REFERENCE"]
+    assert ev["row_status"].tolist() == ["FAIL", "PASS", "NO_REFERENCE"]
+    assert check_adr_a9(df).tolist() == [False, True, True]
+
+
+def test_adr_a9_row_fails_when_toggle_on_and_one_field_has_no_reference(_a9_references):
+    from src.custom_dqr_engine import ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM, check_adr_a9
+    df = _make_a9_df([
+        _a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0,      # PASS
+                vsf="348.01", vsf_cost=240.0, vsf_db=100.0),  # PASS
+        _a9_row(pv="PV-GB", bm="313.01", bm_cost=660.0, bm_db=100.0,   # PASS
+                vsf="348.01", vsf_cost=240.0, vsf_db=100.0),           # NO_REFERENCE (GB)
+    ])
+    assert check_adr_a9(df).tolist() == [True, True]
+    assert check_adr_a9(df, {ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM: True}).tolist() == [True, False]
+
+
+# ----- structural / reference availability ----------------------------------------
+
+@pytest.mark.parametrize("missing", _A9_COLS)
+def test_adr_a9_fails_for_all_rows_when_required_column_missing(_a9_references, missing):
+    from src.custom_dqr_engine import check_adr_a9
+    df = _make_a9_df([_a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0)] * 2)
+    assert check_adr_a9(df.drop(columns=[missing])).tolist() == [False, False]
+
+
+def test_adr_a9_empty_dataframe_returns_empty_pass_series(_a9_references):
+    from src.custom_dqr_engine import check_adr_a9
+    result = check_adr_a9(pd.DataFrame({c: [] for c in _A9_COLS}))
+    assert result.tolist() == [] and result.dtype == bool
+
+
+def test_adr_a9_raises_when_mfc_reference_unavailable(monkeypatch):
+    import src.reference_data as ref_mod
+    from src.custom_dqr_engine import CustomRuleNotEvaluated, check_adr_a9
+    refs = {"VWS_GP_STANDARD_SHARE": _a9_planview_reference()}
+    monkeypatch.setattr(ref_mod, "get_reference_dataset", lambda name: refs.get(name))
+    monkeypatch.setattr(ref_mod, "get_reference_dataset_error", lambda name: "boom")
+    df = _make_a9_df([_a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0)])
+    with pytest.raises(CustomRuleNotEvaluated, match="MFC.*boom"):
+        check_adr_a9(df)
+
+
+def test_adr_a9_raises_when_planview_reference_unavailable(monkeypatch):
+    import src.reference_data as ref_mod
+    from src.custom_dqr_engine import CustomRuleNotEvaluated, check_adr_a9
+    refs = {"MFC": _a9_mfc_reference()}
+    monkeypatch.setattr(ref_mod, "get_reference_dataset", lambda name: refs.get(name))
+    monkeypatch.setattr(ref_mod, "get_reference_dataset_error", lambda name: None)
+    df = _make_a9_df([_a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0)])
+    with pytest.raises(CustomRuleNotEvaluated, match="VWS_GP_STANDARD_SHARE"):
+        check_adr_a9(df)
+
+
+def test_adr_a9_raises_when_mfc_reference_lacks_columns(monkeypatch):
+    import src.reference_data as ref_mod
+    from src.custom_dqr_engine import CustomRuleNotEvaluated, check_adr_a9
+    refs = {
+        "MFC": pd.DataFrame({"code": ["313.01"], "factorValue": [6.0]}),
+        "VWS_GP_STANDARD_SHARE": _a9_planview_reference(),
+    }
+    monkeypatch.setattr(ref_mod, "get_reference_dataset", lambda name: refs.get(name))
+    monkeypatch.setattr(ref_mod, "get_reference_dataset_error", lambda name: None)
+    df = _make_a9_df([_a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0)])
+    with pytest.raises(CustomRuleNotEvaluated, match="LOCATION_CODE"):
+        check_adr_a9(df)
+
+
+def test_adr_a9_reference_columns_are_case_insensitive(monkeypatch):
+    """A loader that returns the warehouse spelling (lower / camelCase)
+    is normalised before the column check."""
+    import src.reference_data as ref_mod
+    from src.custom_dqr_engine import check_adr_a9
+    mfc = _a9_mfc_reference().rename(columns=str.lower)
+    refs = {"MFC": mfc, "VWS_GP_STANDARD_SHARE": _a9_planview_reference()}
+    monkeypatch.setattr(ref_mod, "get_reference_dataset", lambda name: refs.get(name))
+    monkeypatch.setattr(ref_mod, "get_reference_dataset_error", lambda name: None)
+    df = _make_a9_df([_a9_row(bm="313.01", bm_cost=600.0, bm_db=100.0)])
+    assert check_adr_a9(df).tolist() == [True]
+
+
+def test_evaluate_custom_rules_dispatches_to_a9_with_params(_a9_references):
+    from src.custom_dqr_engine import ADR_A9_TOLERANCE_PARAM
+    df = _make_a9_df([
+        _a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0),   # 23% → FAIL at 10%, PASS at 25%
+        _a9_row(bm="80", bm_cost=600.0, bm_db=100.0),
+    ])
+    out, not_evaluated = evaluate_custom_rules(
+        df, [CustomDQRAssignment(rule_id="A9", weight=100.0)], "ADR"
+    )
+    assert out["A9"].tolist() == [False, False]
+    assert not_evaluated == {}
+    out, _ = evaluate_custom_rules(
+        df,
+        [CustomDQRAssignment(rule_id="A9", weight=100.0, params={ADR_A9_TOLERANCE_PARAM: 0.25})],
+        "ADR",
+    )
+    assert out["A9"].tolist() == [True, False]
+
+
+def test_adr_a9_mock_data_product_exercises_every_outcome():
+    """Demo mode must expose every A9 outcome so the rule can be
+    unlocked and its drill-down is meaningful."""
+    import os
+    os.environ["DATA_SOURCE"] = "mock"
+    from src.custom_dqr_engine import _evaluate_adr_a9, check_adr_a9
+    from src.data_product_builder import build_data_product
+    from src.reference_data import get_reference_dataset
+    mfc = get_reference_dataset("MFC")
+    assert set(["CODE", "LOCATION_CODE", "PERIOD", "FACTOR_VALUE"]) <= set(mfc.columns)
+    df = build_data_product("ADR").df
+    ev = _evaluate_adr_a9(df)
+    statuses = set(ev["row_status"])
+    assert {"PASS", "FAIL", "NO_REFERENCE", "NOT_APPLICABLE"} <= statuses
+    reasons = set(ev["bm_reason"])
+    assert {"WITHIN_TOLERANCE", "DEVIATION_GT_TOLERANCE", "UNKNOWN_CODE", "VALUE_80_NO_FACTOR"} <= reasons
+    result = check_adr_a9(df)
+    assert result.any() and (~result).any()

@@ -22,7 +22,7 @@ that ambiguity is the right call - the alternative is hundreds of
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Tuple, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -46,6 +46,13 @@ class ADRA7Params(TypedDict, total=False):
     """Step 4.2 -> assignment.params shape for ADR A7."""
     threshold_iqr_multiplier: float   # ADR_A7_THRESHOLD_PARAM
     segment_by_project_type: bool     # ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM
+
+
+class ADRA9Params(TypedDict, total=False):
+    """Step 4.2 -> assignment.params shape for ADR A9."""
+    tolerance_pct: float              # ADR_A9_TOLERANCE_PARAM
+    period_policy: str                # ADR_A9_PERIOD_POLICY_PARAM
+    fail_without_reference: bool      # ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM
 
 
 class ADRA8Params(TypedDict, total=False):
@@ -486,6 +493,130 @@ ADR_A8_SEGMENT_REFERENCE = {
 ADR_A8_SEGMENT_REQUIRED_COLUMNS = {
     "Project Key": "PLANVIEW_ID",
 }
+
+
+# A9: Base material factor validation (MFC vs EMMA Market Analysis).
+#
+# Validity rule at the ROW_ID grain. ADR cost results carry two *material
+# factor codes* - ``BASE_MATERIAL_MFC`` and ``VENDOR_SHOP_FAB_MFC`` (e.g.
+# ``313.01``) - that point at a published EMMA factor for a location and
+# a cost-update period. The factor actually applied to the estimate is
+# the ratio ``<COST> / <DB_COST>`` (localized cost over database cost),
+# confirmed against production: the median ratio per code falls inside
+# the EMMA factor range for that code. The rule therefore:
+#
+#   1. skips a factor field whose code is null / blank (NOT_APPLICABLE);
+#   2. fails a code of ``0`` or ``80`` (no factor available, manual
+#      intervention placeholder);
+#   3. fails a code unknown to EMMA in any location / period;
+#   4. resolves the item's location (``PLANVIEW_ID`` → Planview
+#      ``COUNTRY`` → ISO-2 prefix of EMMA ``locationCode``) and period
+#      (``COST_UPDATE`` ``nQYYYY`` → exact or nearest EMMA period, per the
+#      card option); a row that cannot be resolved, or whose (code,
+#      location, period) has no EMMA row, is NO_REFERENCE - PASS unless
+#      the "fail without reference" toggle is on;
+#   5. compares the effective factor with every EMMA factor of that code
+#      in the country's sites for the period and fails when the *closest*
+#      one still deviates more than the tolerance (card option, default
+#      ±10% per the data owner).
+#
+# ``SPEC_S_C_MFC`` is deliberately not validated: Specialty Contractor
+# cost is estimated from labour hours, the MFC there is not used.
+#
+# Source columns on the denormalized data product (cost results are 1:1
+# per ROW_ID in production, so the builder's sum / first are identity):
+#   - ``PLANVIEW_ID``                   - project key (location lookup).
+#   - ``COST_UPDATE``                   - estimate basis period (nQYYYY).
+#   - ``COST_BASE_MATERIAL_MFC``        - base material factor code.
+#   - ``COST_VENDOR_SHOP_FAB_MFC``      - vendor shop fabrication code.
+#   - ``COST_BASE_MATERIAL_COST`` / ``COST_DB_BASE_MATERIAL_COST``
+#   - ``COST_VENDOR_SHOP_FAB_COST`` / ``COST_DB_VENDOR_SHOP_FAB_COST``
+ADR_A9_REQUIRED_COLUMNS = {
+    "Project Key": "PLANVIEW_ID",
+    "Estimate Basis Date": "COST_UPDATE",
+    "Base Material MFC": "COST_BASE_MATERIAL_MFC",
+    "Vendor Shop Fab MFC": "COST_VENDOR_SHOP_FAB_MFC",
+    "Base Material Cost": "COST_BASE_MATERIAL_COST",
+    "DB Base Material Cost": "COST_DB_BASE_MATERIAL_COST",
+    "Vendor Shop Fab Cost": "COST_VENDOR_SHOP_FAB_COST",
+    "DB Vendor Shop Fab Cost": "COST_DB_VENDOR_SHOP_FAB_COST",
+}
+# EMMA reference (``mfc`` table). The loader aliases the camelCase source
+# columns to these canonical names.
+ADR_A9_REFERENCE = {
+    "reference_dataset": "MFC",
+    "source_column": "COST_BASE_MATERIAL_MFC / COST_VENDOR_SHOP_FAB_MFC",
+    "reference_column": "CODE",
+    "lookup_column": "FACTOR_VALUE (per LOCATION_CODE + PERIOD)",
+}
+ADR_A9_MFC_COLUMNS: Tuple[str, ...] = (
+    "CODE", "LOCATION_CODE", "PERIOD", "FACTOR_VALUE",
+)
+# Location resolution reuses the A2 Planview join.
+ADR_A9_LOCATION_REFERENCE = {
+    "reference_dataset": "VWS_GP_STANDARD_SHARE",
+    "source_column": "PLANVIEW_ID",
+    "reference_column": "PROJECT_ID",
+    "lookup_column": "COUNTRY",
+}
+# (label, code column, localized cost column, database cost column)
+ADR_A9_FACTOR_FIELDS: Tuple[Tuple[str, str, str, str], ...] = (
+    ("BM", "COST_BASE_MATERIAL_MFC",
+     "COST_BASE_MATERIAL_COST", "COST_DB_BASE_MATERIAL_COST"),
+    ("VSF", "COST_VENDOR_SHOP_FAB_MFC",
+     "COST_VENDOR_SHOP_FAB_COST", "COST_DB_VENDOR_SHOP_FAB_COST"),
+)
+# Tolerance on the relative deviation |effective - EMMA| / EMMA.
+ADR_A9_TOLERANCE_PARAM = "tolerance_pct"
+ADR_A9_TOLERANCE = 0.10
+ADR_A9_TOLERANCE_CHOICES: Tuple[Tuple[float, str], ...] = (
+    (0.10, "±10% - recommended"),
+    (0.15, "±15%"),
+    (0.20, "±20%"),
+    (0.25, "±25% - calibration"),
+)
+# Which EMMA period to compare against. ``nearest`` picks the EMMA period
+# closest to the item's COST_UPDATE (ties → the earlier one); ``exact``
+# requires the same period and otherwise yields NO_REFERENCE.
+ADR_A9_PERIOD_POLICY_PARAM = "period_policy"
+ADR_A9_PERIOD_POLICY = "nearest"
+ADR_A9_PERIOD_POLICY_CHOICES: Tuple[Tuple[str, str], ...] = (
+    ("nearest", "Nearest EMMA period - recommended"),
+    ("exact", "Exact period only"),
+)
+# When on, rows whose (code, location, period) has no EMMA reference fail
+# instead of passing as NO_REFERENCE.
+ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM = "fail_without_reference"
+# Codes the data owner flags as "no factor available" placeholders.
+ADR_A9_SENTINEL_CODES: Tuple[float, ...] = (0.0, 80.0)
+
+# Per-field statuses / reasons surfaced by ``_evaluate_adr_a9``.
+A9_PASS = "PASS"
+A9_FAIL = "FAIL"
+A9_NO_REFERENCE = "NO_REFERENCE"
+A9_NOT_APPLICABLE = "NOT_APPLICABLE"
+
+# Planview ``COUNTRY`` → ISO-2 prefix of EMMA ``locationCode``. Keys are
+# lower-cased; a bare 2-letter alpha value is accepted as-is (``UK`` is
+# normalised to ``GB``).
+_A9_COUNTRY_TO_ISO2: Dict[str, str] = {
+    "united states": "US", "united states of america": "US", "usa": "US",
+    "canada": "CA", "mexico": "MX", "brazil": "BR", "brasil": "BR",
+    "argentina": "AR", "guyana": "GY",
+    "united kingdom": "GB", "uk": "GB", "great britain": "GB",
+    "netherlands": "NL", "the netherlands": "NL", "belgium": "BE",
+    "germany": "DE", "france": "FR", "italy": "IT", "spain": "ES",
+    "norway": "NO",
+    "china": "CN", "singapore": "SG", "japan": "JP",
+    "south korea": "KR", "korea": "KR", "republic of korea": "KR",
+    "india": "IN", "malaysia": "MY", "indonesia": "ID", "thailand": "TH",
+    "vietnam": "VN", "viet nam": "VN", "philippines": "PH",
+    "australia": "AU", "papua new guinea": "PG",
+    "saudi arabia": "SA", "qatar": "QA", "united arab emirates": "AE",
+    "uae": "AE", "iraq": "IQ", "kazakhstan": "KZ",
+    "nigeria": "NG", "angola": "AO", "mozambique": "MZ",
+}
+_A9_PERIOD_PATTERN = r"^([1-4])Q(\d{4})$"
 
 # UOM aliases, the mock and the spec use slightly different spellings
 # for the same physical unit (CY ↔ yd³, T ↔ t, M ↔ m, FT ↔ ft). Lowering
@@ -1761,3 +1892,311 @@ def check_adr_a8(
     return ~in_failing
 
 
+# =============================================================================
+# A9 helpers
+# =============================================================================
+
+def _a9_country_to_iso2(value: object) -> Optional[str]:
+    """Map a Planview ``COUNTRY`` (name or code) to the ISO-2 prefix used
+    by EMMA ``locationCode``; ``None`` when it cannot be resolved."""
+    if value is None or value != value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    key = text.lower()
+    if key in _A9_COUNTRY_TO_ISO2:
+        return _A9_COUNTRY_TO_ISO2[key]
+    if len(text) == 2 and text.isalpha():
+        return text.upper()
+    return None
+
+
+def _a9_period_ordinal(series: pd.Series) -> pd.Series:
+    """``nQYYYY`` → ``YYYY * 4 + (n - 1)`` (float; NaN when malformed)."""
+    text = series.astype(object).astype(str).str.strip().str.upper()
+    parts = text.str.extract(_A9_PERIOD_PATTERN)
+    quarter = pd.to_numeric(parts[0], errors="coerce")
+    year = pd.to_numeric(parts[1], errors="coerce")
+    return year * 4 + (quarter - 1)
+
+
+def _a9_code_key(series: pd.Series) -> Tuple[pd.Series, pd.Series]:
+    """Normalise an MFC code column.
+
+    Returns ``(key, numeric)``: ``key`` is the 2-decimal string form used
+    to join the EMMA reference (``313.1`` and ``313.10`` collapse, and
+    the float noise in ``mfc.code`` such as ``308.02999`` rounds away);
+    non-numeric populated values keep their stripped text so they miss
+    the lookup and surface as UNKNOWN_CODE. ``numeric`` is the parsed
+    float (NaN when not numeric) used for the 0 / 80 sentinel check."""
+    text = series.astype(object).astype(str).str.strip()
+    numeric = pd.to_numeric(text, errors="coerce")
+    key = numeric.round(2).map(
+        lambda v: None if pd.isna(v) else f"{v:.2f}"
+    )
+    key = key.where(key.notna(), text)
+    return key, numeric
+
+
+def _a9_load_references() -> Tuple[pd.DataFrame, Dict[str, Optional[str]]]:
+    """Load and pre-clean the EMMA ``MFC`` reference and the Planview
+    ``PLANVIEW_ID → ISO-2`` map. Raises ``CustomRuleNotEvaluated`` when
+    either dataset is unavailable or lacks its required columns."""
+    from src.reference_data import (
+        get_reference_dataset,
+        get_reference_dataset_error,
+    )
+
+    mfc_name = ADR_A9_REFERENCE["reference_dataset"]
+    mfc = get_reference_dataset(mfc_name)
+    if mfc is None:
+        cached_error = get_reference_dataset_error(mfc_name)
+        detail = f": {cached_error}" if cached_error else ""
+        raise CustomRuleNotEvaluated(
+            f"ADR A9: '{mfc_name}' reference dataset is unavailable{detail}; "
+            "material factor codes cannot be validated against EMMA."
+        )
+    mfc = mfc.rename(columns={c: str(c).upper() for c in mfc.columns})
+    missing = [c for c in ADR_A9_MFC_COLUMNS if c not in mfc.columns]
+    if missing:
+        raise CustomRuleNotEvaluated(
+            f"ADR A9: '{mfc_name}' is missing required columns {missing}; "
+            "material factor codes cannot be validated against EMMA."
+        )
+    code_key, _ = _a9_code_key(mfc["CODE"])
+    emma = pd.DataFrame({
+        "code_key": code_key,
+        "prefix": (
+            mfc["LOCATION_CODE"].astype(object).astype(str).str.strip()
+            .str.split(".").str[0].str.upper()
+        ),
+        "period": _a9_period_ordinal(mfc["PERIOD"]),
+        "factor": pd.to_numeric(mfc["FACTOR_VALUE"], errors="coerce"),
+    })
+    emma = emma[
+        emma["code_key"].notna() & emma["prefix"].ne("")
+        & emma["period"].notna() & emma["factor"].notna()
+        & (emma["factor"] > 0)
+    ].drop_duplicates()
+
+    loc_name = ADR_A9_LOCATION_REFERENCE["reference_dataset"]
+    planview = get_reference_dataset(loc_name)
+    if planview is None:
+        cached_error = get_reference_dataset_error(loc_name)
+        detail = f": {cached_error}" if cached_error else ""
+        raise CustomRuleNotEvaluated(
+            f"ADR A9: '{loc_name}' reference dataset is unavailable{detail}; "
+            "project location cannot be resolved for the EMMA lookup."
+        )
+    ref_col = ADR_A9_LOCATION_REFERENCE["reference_column"]
+    lookup_col = ADR_A9_LOCATION_REFERENCE["lookup_column"]
+    if ref_col not in planview.columns or lookup_col not in planview.columns:
+        raise CustomRuleNotEvaluated(
+            f"ADR A9: '{loc_name}' is missing '{ref_col}' / '{lookup_col}'; "
+            "project location cannot be resolved for the EMMA lookup."
+        )
+    ref = (
+        planview[[ref_col, lookup_col]]
+        .dropna(subset=[ref_col])
+        .drop_duplicates(subset=[ref_col])
+    )
+    iso_by_project = {
+        str(k).strip(): _a9_country_to_iso2(v)
+        for k, v in zip(ref[ref_col], ref[lookup_col])
+    }
+    return emma, iso_by_project
+
+
+def _a9_pick_period(
+    item_period: pd.Series, emma_periods: np.ndarray, policy: str
+) -> pd.Series:
+    """Resolve the EMMA period ordinal to compare each row against."""
+    if emma_periods.size == 0:
+        return pd.Series(np.nan, index=item_period.index)
+    if policy == "exact":
+        return item_period.where(item_period.isin(emma_periods))
+    # nearest: closest EMMA period, ties → the earlier one.
+    values = item_period.to_numpy(dtype=float)
+    out = np.full(values.shape, np.nan)
+    valid = ~np.isnan(values)
+    if valid.any():
+        pos = np.searchsorted(emma_periods, values[valid], side="left")
+        lo = np.clip(pos - 1, 0, emma_periods.size - 1)
+        hi = np.clip(pos, 0, emma_periods.size - 1)
+        d_lo = np.abs(values[valid] - emma_periods[lo])
+        d_hi = np.abs(values[valid] - emma_periods[hi])
+        out[valid] = np.where(d_lo <= d_hi, emma_periods[lo], emma_periods[hi])
+    return pd.Series(out, index=item_period.index)
+
+
+def _evaluate_adr_a9(
+    df: pd.DataFrame, params: ADRA9Params | None = None
+) -> pd.DataFrame:
+    """Per-row, per-factor evaluation behind :func:`check_adr_a9`.
+
+    Returns a DataFrame indexed like ``df`` with, for each factor field
+    (``bm`` / ``vsf``): ``<f>_status`` (PASS / FAIL / NO_REFERENCE /
+    NOT_APPLICABLE), ``<f>_reason``, ``<f>_effective`` (the applied
+    factor), ``<f>_reference`` (the closest EMMA factor) and
+    ``<f>_deviation`` (relative, fraction); plus ``location`` (ISO-2),
+    ``period_used`` (EMMA period ordinal) and ``row_status``. Useful for
+    the calibration the data owner asked for and for drill-down.
+    Assumes the required columns are present (the caller checks).
+    """
+    p = params or {}
+    tolerance = _coerce_threshold(p.get(ADR_A9_TOLERANCE_PARAM), ADR_A9_TOLERANCE)
+    policy = str(p.get(ADR_A9_PERIOD_POLICY_PARAM) or ADR_A9_PERIOD_POLICY)
+    if policy not in ("nearest", "exact"):
+        policy = ADR_A9_PERIOD_POLICY
+    fail_without_reference = bool(
+        p.get(ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM, False)
+    )
+
+    emma, iso_by_project = _a9_load_references()
+    known_codes = set(emma["code_key"])
+    emma_periods = np.sort(emma["period"].unique().astype(float))
+
+    out = pd.DataFrame(index=df.index)
+    pv = df["PLANVIEW_ID"].astype(object).astype(str).str.strip()
+    pv_filled = _is_filled(df["PLANVIEW_ID"])
+    out["location"] = pv.map(iso_by_project).where(pv_filled)
+    item_period = _a9_period_ordinal(df["COST_UPDATE"])
+    out["period_used"] = _a9_pick_period(item_period, emma_periods, policy)
+
+    for label, code_col, cost_col, db_col in ADR_A9_FACTOR_FIELDS:
+        f = label.lower()
+        status = pd.Series(A9_NOT_APPLICABLE, index=df.index, dtype=object)
+        reason = pd.Series("NULL_MFC", index=df.index, dtype=object)
+        effective = pd.Series(np.nan, index=df.index)
+        reference = pd.Series(np.nan, index=df.index)
+        deviation = pd.Series(np.nan, index=df.index)
+
+        filled = _is_filled(df[code_col])
+        code_key, code_num = _a9_code_key(df[code_col])
+        sentinel = filled & code_num.isin(ADR_A9_SENTINEL_CODES)
+        status[sentinel] = A9_FAIL
+        reason[sentinel & (code_num == 0)] = "ZERO_MFC"
+        reason[sentinel & (code_num == 80)] = "VALUE_80_NO_FACTOR"
+
+        unknown = filled & ~sentinel & ~code_key.isin(known_codes)
+        status[unknown] = A9_FAIL
+        reason[unknown] = "UNKNOWN_CODE"
+
+        pending = filled & ~sentinel & ~unknown
+        no_location = pending & out["location"].isna()
+        status[no_location] = A9_NO_REFERENCE
+        reason[no_location] = "NO_LOCATION"
+        no_period = pending & ~no_location & out["period_used"].isna()
+        status[no_period] = A9_NO_REFERENCE
+        reason[no_period] = "NO_PERIOD"
+        pending &= ~no_location & ~no_period
+
+        cost = pd.to_numeric(df[cost_col], errors="coerce")
+        db_cost = pd.to_numeric(df[db_col], errors="coerce")
+        eff = (cost / db_cost).where(db_cost > 0)
+        effective[pending] = eff[pending]
+        no_eff = pending & eff.isna()
+        status[no_eff] = A9_NOT_APPLICABLE
+        reason[no_eff] = "NULL_EFFECTIVE_FACTOR"
+        pending &= ~no_eff
+
+        if pending.any():
+            rows = pd.DataFrame({
+                "_idx": df.index[pending],
+                "code_key": code_key[pending].to_numpy(),
+                "prefix": out["location"][pending].to_numpy(),
+                "period": out["period_used"][pending].to_numpy(),
+                "eff": eff[pending].to_numpy(),
+            })
+            merged = rows.merge(
+                emma, on=["code_key", "prefix", "period"], how="inner"
+            )
+            if not merged.empty:
+                merged["dev"] = (merged["eff"] - merged["factor"]).abs() / merged["factor"]
+                best = (
+                    merged.sort_values("dev")
+                    .drop_duplicates(subset=["_idx"])
+                    .set_index("_idx")
+                )
+                matched = pd.Series(False, index=df.index)
+                matched[best.index] = True
+                deviation[best.index] = best["dev"]
+                reference[best.index] = best["factor"]
+                within = matched & (deviation <= tolerance)
+                status[within] = A9_PASS
+                reason[within] = "WITHIN_TOLERANCE"
+                over = matched & (deviation > tolerance)
+                status[over] = A9_FAIL
+                reason[over] = "DEVIATION_GT_TOLERANCE"
+            else:
+                matched = pd.Series(False, index=df.index)
+            no_ref = pending & ~matched
+            status[no_ref] = A9_NO_REFERENCE
+            reason[no_ref] = "NO_REFERENCE_FOR_LOCATION_PERIOD"
+
+        out[f"{f}_status"] = status
+        out[f"{f}_reason"] = reason
+        out[f"{f}_effective"] = effective
+        out[f"{f}_reference"] = reference
+        out[f"{f}_deviation"] = deviation
+
+    statuses = [out[f"{lab.lower()}_status"] for lab, *_ in ADR_A9_FACTOR_FIELDS]
+    any_fail = pd.Series(False, index=df.index)
+    any_no_ref = pd.Series(False, index=df.index)
+    any_pass = pd.Series(False, index=df.index)
+    for st in statuses:
+        any_fail |= st.eq(A9_FAIL)
+        any_no_ref |= st.eq(A9_NO_REFERENCE)
+        any_pass |= st.eq(A9_PASS)
+    row_status = pd.Series(A9_NOT_APPLICABLE, index=df.index, dtype=object)
+    row_status[any_pass] = A9_PASS
+    row_status[any_no_ref & ~any_pass] = A9_NO_REFERENCE
+    if fail_without_reference:
+        row_status[any_no_ref] = A9_FAIL
+    row_status[any_fail] = A9_FAIL
+    out["row_status"] = row_status
+    return out
+
+
+def check_adr_a9(
+    df: pd.DataFrame, params: ADRA9Params | None = None
+) -> pd.Series:
+    """A9: Base material factor validation - MFC vs EMMA (ADR).
+
+    Validity rule at the ROW_ID grain. For each of the two material
+    factor codes (``COST_BASE_MATERIAL_MFC``, ``COST_VENDOR_SHOP_FAB_MFC``)
+    the rule derives the *effective* factor applied to the estimate
+    (``<COST> / <DB_COST>``) and compares it with the EMMA factor
+    published for that code at the project's location (Planview
+    ``COUNTRY`` → ISO-2 prefix of ``locationCode``, any site of the
+    country) and cost-update period (exact or nearest EMMA period, per
+    ``params[period_policy]``).
+
+    Per factor field:
+
+    - code null / blank → NOT_APPLICABLE;
+    - code ``0`` or ``80`` → FAIL (no factor available placeholder);
+    - code unknown to EMMA (any location / period) → FAIL;
+    - location or period unresolvable, or no EMMA row for (code,
+      location, period) → NO_REFERENCE (PASS unless
+      ``params[fail_without_reference]``);
+    - ``DB_COST`` null / non-positive → NOT_APPLICABLE;
+    - closest EMMA factor deviates more than ``params[tolerance_pct]``
+      (default ±10%) → FAIL, otherwise PASS.
+
+    Row verdict: FAIL when any factor field fails; otherwise PASS
+    (NOT_APPLICABLE and NO_REFERENCE rows pass). ``SPEC_S_C_MFC`` is not
+    validated (specialty contractor cost is hours-based).
+
+    Raises :class:`CustomRuleNotEvaluated` when the EMMA ``MFC`` or the
+    Planview reference is unavailable. Schema-level missing column → all
+    rows fail (same convention as the other custom rules).
+    """
+    required = list(ADR_A9_REQUIRED_COLUMNS.values())
+    if any(col not in df.columns for col in required):
+        return pd.Series(False, index=df.index)
+    if df.empty:
+        return pd.Series(True, index=df.index)
+    result = _evaluate_adr_a9(df, params)
+    return result["row_status"].ne(A9_FAIL)

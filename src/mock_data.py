@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import zlib
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -293,12 +293,136 @@ def _explode_children(row_ids: List[str], avg_per_parent: int = RESULTS_PER_ITEM
     return out
 
 
+# EMMA (Market Analysis) material factor codes shared by the ADR cost
+# mock and the ``mfc`` reference mock. ``base`` is the published factor of
+# the code at the US reference site; the location / site / period
+# multipliers below scale it so the rule's location + period matching is
+# exercised in demo mode. Production codes look exactly like these
+# (``313.01``, ``348.01`` …).
+_MOCK_MFC_BASE: Dict[str, Tuple[float, str]] = {
+    "313.01": (6.0, "Piping - carbon steel"),
+    "313.02": (2.8, "Piping - stainless steel"),
+    "313.04": (1.4, "Piping - alloy"),
+    "318.02": (5.7, "Structural steel"),
+    "322.01": (6.0, "Instruments - field"),
+    "337.01": (2.9, "Electrical - cable"),
+    "348.01": (2.4, "Insulation"),
+    "349.01": (9.0, "Paint"),
+}
+# ISO-2 prefix → (sites, location multiplier). The Planview mock uses
+# ``UK`` for Great Britain; A9 normalises it to ``GB``. ``NL`` and ``ZZ``
+# from the Planview mock are absent here on purpose: NL items resolve a
+# location but find no EMMA rows (NO_REFERENCE), ZZ never resolves.
+_MOCK_MFC_LOCATIONS: Dict[str, Tuple[Tuple[str, ...], float]] = {
+    "US": (("US.HPY.P", "US.CRP.F"), 1.00),
+    "GB": (("GB.FAW.P", "GB.FAW.S"), 1.10),
+    "BR": (("BR.RIO.P", "BR.SSA.F"), 0.90),
+}
+_MOCK_MFC_PERIODS: Tuple[Tuple[str, float], ...] = (
+    ("2Q2024", 1.00), ("4Q2024", 1.02), ("2Q2025", 1.04), ("4Q2025", 1.06),
+)
+_MOCK_MFC_SITE_STEP = 1.08   # second site of a country publishes +8%
+
+
+def _mock_mfc_factor(code: str, iso2: str) -> float:
+    """Published factor of ``code`` at the first site of ``iso2`` for the
+    earliest EMMA period - the value the cost mock builds its effective
+    factor around."""
+    base = _MOCK_MFC_BASE[code][0]
+    mult = _MOCK_MFC_LOCATIONS.get(iso2, ((), 1.0))[1]
+    return base * mult
+
+
+def _mock_mfc() -> pd.DataFrame:
+    """EMMA Market Analysis reference used by A9: one row per (code,
+    locationCode, period) with the canonical column names the loader
+    exposes (``CODE``, ``DESCRIPTION``, ``LOCATION_CODE``, ``PERIOD``,
+    ``FACTOR_VALUE``). Deterministic (no RNG draws) so fixtures can rely
+    on exact values."""
+    _reseed_rng_for("MFC")
+    rows = []
+    for code, (base, description) in _MOCK_MFC_BASE.items():
+        for _iso2, (sites, loc_mult) in _MOCK_MFC_LOCATIONS.items():
+            for site_no, site in enumerate(sites):
+                site_mult = _MOCK_MFC_SITE_STEP ** site_no
+                for period, period_mult in _MOCK_MFC_PERIODS:
+                    rows.append({
+                        "CODE": code,
+                        "DESCRIPTION": description,
+                        "LOCATION_CODE": site,
+                        "PERIOD": period,
+                        "FACTOR_VALUE": round(
+                            base * loc_mult * site_mult * period_mult, 6
+                        ),
+                    })
+    return pd.DataFrame(rows)
+
+
 def _mock_adr_fact_estimatecostresults() -> pd.DataFrame:
+    # Country per item (via the Planview mock) so the effective material
+    # factor can track the EMMA factor of the item's location. Building the
+    # Planview mock reseeds the shared RNG, so reseed back to this table's
+    # own stream before any draw below - the output stays a pure function
+    # of the table name.
+    planview = _mock_vws_gp_standard_share()
+    country_by_project = dict(zip(planview["PROJECT_ID"], planview["COUNTRY"]))
+    _reseed_rng_for("ADR_FACT_ESTIMATECOSTRESULTS")
+    iso_by_item = []
+    for pv in _ITEM_PLANVIEW_ID:
+        country = country_by_project.get(pv)
+        iso_by_item.append("GB" if country == "UK" else country)
+    mfc_pool = list(_MOCK_MFC_BASE)
+
+    def _draw_code(null_rate: float) -> object:
+        r = RNG.random()
+        if r < null_rate:
+            return None
+        if r < null_rate + 0.03:
+            return "999.99"          # unknown to EMMA → FAIL
+        if r < null_rate + 0.04:
+            return "80"              # "no factor available" placeholder → FAIL
+        return str(RNG.choice(mfc_pool))
+
+    def _draw_ratio(code: object, iso2: object) -> float:
+        if code in _MOCK_MFC_BASE and iso2 in _MOCK_MFC_LOCATIONS:
+            published = _mock_mfc_factor(str(code), str(iso2))
+        else:
+            published = 3.0
+        noise = (
+            float(RNG.uniform(1.25, 1.60))     # ~18% deviate → FAIL
+            if RNG.random() < 0.18
+            else float(RNG.uniform(0.96, 1.04))
+        )
+        return published * noise
+
+    bm_code_by_item, bm_ratio_by_item = {}, {}
+    vsf_code_by_item, vsf_ratio_by_item = {}, {}
+    for rid, iso2 in zip(_ITEM_ROW_IDS, iso_by_item):
+        bm_code_by_item[rid] = _draw_code(null_rate=0.20)
+        bm_ratio_by_item[rid] = _draw_ratio(bm_code_by_item[rid], iso2)
+        vsf_code_by_item[rid] = _draw_code(null_rate=0.35)
+        vsf_ratio_by_item[rid] = _draw_ratio(vsf_code_by_item[rid], iso2)
+
     parent_ids = _ITEM_ROW_IDS
     exploded = _explode_children(parent_ids)
     n = len(exploded)
+    db_bm = RNG.lognormal(mean=9.0, sigma=1.0, size=n).round(2)
+    db_vsf = RNG.lognormal(mean=8.0, sigma=1.0, size=n).round(2)
+    bm_ratio = np.array([bm_ratio_by_item[rid] for rid in exploded])
+    vsf_ratio = np.array([vsf_ratio_by_item[rid] for rid in exploded])
     df = pd.DataFrame({
         "ROW_ID": exploded,
+        # Material factor codes + localized / database costs - drive A9.
+        # The ratio is constant per parent item so the builder's SUM over
+        # child rows preserves it.
+        "BASE_MATERIAL_MFC": [bm_code_by_item[rid] for rid in exploded],
+        "VENDOR_SHOP_FAB_MFC": [vsf_code_by_item[rid] for rid in exploded],
+        "SPEC_S_C_MFC": RNG.choice([None, "313.01"], size=n, p=[0.85, 0.15]),
+        "DB_BASE_MATERIAL_COST": db_bm,
+        "BASE_MATERIAL_COST": (db_bm * bm_ratio).round(2),
+        "DB_VENDOR_SHOP_FAB_COST": db_vsf,
+        "VENDOR_SHOP_FAB_COST": (db_vsf * vsf_ratio).round(2),
+        "SPEC_S_C_COST": RNG.lognormal(mean=7.0, sigma=1.0, size=n).round(2),
         "COST_TYPE": RNG.choice(["LABOR", "MATERIAL", "EQUIPMENT", "SUBCONTRACT"], size=n),
         "CURRENCY": RNG.choice(["USD", "EUR", "GBP", "CAD", "XXX"], size=n, p=[0.5, 0.25, 0.1, 0.1, 0.05]),
         "COST_AMOUNT": RNG.lognormal(mean=13, sigma=1.3, size=n).round(6),  # excess decimals

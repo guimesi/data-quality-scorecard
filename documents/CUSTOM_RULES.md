@@ -111,6 +111,8 @@ the check callable.
 | **A3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ADR_A3_PERCENTILE = 0.90` |
 | **A7** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A7_MILD_IQR_MULTIPLIER = 1.5` |
 | **A8** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A8_MILD_IQR_MULTIPLIER = 1.5` |
+| **A9** | `tolerance_pct` | **±10%**, ±15%, ±20%, ±25% (calibration) | `ADR_A9_TOLERANCE = 0.10` |
+| **A9** | `period_policy` | **nearest EMMA period**, exact only | `ADR_A9_PERIOD_POLICY = "nearest"` |
 | **AC3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ACCE_AC3_PERCENTILE = 0.90` |
 | **AC7** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC7_MILD_IQR_MULTIPLIER = 1.5` |
 | **AC8** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC8_MILD_IQR_MULTIPLIER = 1.5` |
@@ -179,6 +181,7 @@ inputs are missing, that would hide the gap in the score.
 | **A6** | Construction hours present when quantity exists        | Consistency          | No  | `QTY_QUANTITY`, `COST_TOTAL_HOURS`, `COST_DB_TOTAL_HOURS` | - | - |
 | **A7** | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  | No  | `ITEM_TYPE`, `QTY_QUANTITY`, `QTY_UOM`, `COST_TOTAL_HOURS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 | **A8** | Cross-discipline quantity ratios                       | Statistical Outlier  | No  | `ITEM_TYPE`, `ROOT_ITEM_NAME`, `QTY_QUANTITY`, `QTY_UOM` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **A9** | Base material factor validation (MFC vs EMMA)          | Validity             | No  | `PLANVIEW_ID`, `COST_UPDATE`, `COST_BASE_MATERIAL_MFC`, `COST_VENDOR_SHOP_FAB_MFC`, `COST_BASE_MATERIAL_COST`, `COST_DB_BASE_MATERIAL_COST`, `COST_VENDOR_SHOP_FAB_COST`, `COST_DB_VENDOR_SHOP_FAB_COST` | `MFC` (EMMA: `CODE`, `LOCATION_CODE`, `PERIOD`, `FACTOR_VALUE`) + `VWS_GP_STANDARD_SHARE` (`PLANVIEW_ID → PROJECT_ID`, lookup `COUNTRY`) | `tolerance_pct` (select, default ±10%), `period_policy` (select, default nearest), `fail_without_reference` (bool) |
 
 ## Quick reference (ACCE)
 
@@ -1724,6 +1727,141 @@ feature, one IQR per ratio across the dataset.
 
 Adding a new ratio is a one-line change in `_A8_RATIOS` once the
 underlying categories are produced by `_classify_a8_category`.
+
+---
+
+## A9: Base material factor validation - MFC vs EMMA (ADR)
+
+- **Type:** Validity · **Blocking:** No · **Data product:** ADR
+- **Implementation:** `check_adr_a9` (boolean verdict) over
+  `_evaluate_adr_a9` (per-row, per-factor statuses, reasons and
+  deviations - the calibration / drill-down view).
+- **CDE:** Material Factor Code.
+
+A9 checks that each ADR estimate applies the base material factor that
+EMMA Market Analysis publishes for its **material factor code**,
+**location** and **cost-update period**, and identifies estimates that
+cannot be validated because EMMA has no reference for that location and
+period.
+
+### What the data says (production exploration, Sep-2026)
+
+- `BASE_MATERIAL_MFC` / `VENDOR_SHOP_FAB_MFC` carry **EMMA codes**
+  (`313.01`, `313.04`, `348.01` …), not factor values. 22% of cost rows
+  have a null base-material code. No `0` / `80` code exists today; the
+  guard is kept because the data owner flags them as "no factor
+  available" placeholders.
+- The factor actually **applied** to an estimate is the ratio
+  `<COST> / <DB_COST>` (localized cost over database cost). For 19 of the
+  20 most frequent codes the production median of that ratio falls
+  inside EMMA's `factorValue` range for the same code; the one exception
+  (`313.04`) sits 4% below the minimum, consistent with 2018-19
+  estimates versus 2024 prices.
+- `mfc` holds 73 `locationCode`s (`CC.SITE.T` - ISO-2 country, site,
+  type suffix `P` / `F` / `S` / `B`) × 4 periods (`2Q2024` … `4Q2025`)
+  × ~215 codes. The same code varies several-fold between sites, so a
+  global average is meaningless: the comparison must be per location.
+- ADR `COST_UPDATE` runs `2Q2015` … `4Q2023`: **no period overlap**
+  with EMMA. With exact matching every item is NO_REFERENCE today, hence
+  the *nearest period* default agreed with the user (2026-09-17).
+- Cost results are **1:1 per `ROW_ID`**, so the builder's `sum` /
+  `first` collapse is the identity here.
+
+### Where the inputs come from
+
+| Source table | Source column | Denormalized column | Notes |
+|---|---|---|---|
+| `ADR_DIM_ESTIMATEITEMRECORD` (primary) | `PLANVIEW_ID` | `PLANVIEW_ID` | Project key → Planview `COUNTRY`. |
+| `ADR_DIM_ESTIMATEITEMRECORD` (primary) | `COST_UPDATE` | `COST_UPDATE` | Estimate basis period, `nQYYYY` (same shape A2 validates). |
+| `ADR_FACT_ESTIMATECOSTRESULTS` (1:1) | `BASE_MATERIAL_MFC`, `VENDOR_SHOP_FAB_MFC` | `COST_BASE_MATERIAL_MFC`, `COST_VENDOR_SHOP_FAB_MFC` | EMMA codes, matched after rounding to 2 decimals (`mfc.code` carries float noise such as `308.02999`). |
+| `ADR_FACT_ESTIMATECOSTRESULTS` (1:1) | `BASE_MATERIAL_COST`, `DB_BASE_MATERIAL_COST`, `VENDOR_SHOP_FAB_COST`, `DB_VENDOR_SHOP_FAB_COST` | `COST_*` | Effective factor = localized cost / database cost, per field. |
+| `mfc` (reference `MFC`) | `code`, `locationCode`, `costUpdateReportingPeriod_name`, `factorValue` | `CODE`, `LOCATION_CODE`, `PERIOD`, `FACTOR_VALUE` | Aliased by the loader (`src/reference_data.py::_load_mfc`). |
+| `VWS_GP_STANDARD_SHARE` (reference) | `PROJECT_ID`, `COUNTRY` | - | `COUNTRY` (name or code) → ISO-2 prefix of `LOCATION_CODE`; `UK` → `GB`. |
+
+`SPEC_S_C_MFC` is **not** validated: Specialty Contractor cost is
+estimated from labour hours, so its MFC is not used in the cost
+calculation (rule exception scenario).
+
+### Algorithm
+
+For each row and each factor field (`BM` = base material, `VSF` =
+vendor shop fabrication):
+
+1. **Code null / blank** → `NOT_APPLICABLE` (`NULL_MFC`).
+2. **Code `0` or `80`** → `FAIL` (`ZERO_MFC` / `VALUE_80_NO_FACTOR`).
+3. **Code unknown to EMMA** in any location / period (including
+   non-numeric text) → `FAIL` (`UNKNOWN_CODE`). A Validity failure:
+   the code cannot point at any published factor.
+4. **Location**: `PLANVIEW_ID` → Planview `COUNTRY` → ISO-2. Unmatched
+   project, null country or unrecognised name → `NO_REFERENCE`
+   (`NO_LOCATION`).
+5. **Period**: `COST_UPDATE` → quarter ordinal. `nearest` policy picks
+   the closest EMMA period (ties → earlier); `exact` requires the same
+   period. Malformed / missing period, or no EMMA period under `exact`
+   → `NO_REFERENCE` (`NO_PERIOD`).
+6. **Effective factor** = `COST / DB_COST`; `DB_COST` null or ≤ 0 →
+   `NOT_APPLICABLE` (`NULL_EFFECTIVE_FACTOR`).
+7. **Candidates** = EMMA rows with the same code, the same ISO-2 prefix
+   (every site of the country) and the chosen period. None →
+   `NO_REFERENCE` (`NO_REFERENCE_FOR_LOCATION_PERIOD`).
+8. **Deviation** = `|effective − factor| / factor` against every
+   candidate; the **closest** wins. Deviation ≤ tolerance → `PASS`
+   (`WITHIN_TOLERANCE`), otherwise `FAIL` (`DEVIATION_GT_TOLERANCE`).
+
+Row verdict: `FAIL` when any field fails; otherwise `PASS` when any
+field passes; otherwise `NO_REFERENCE` when any field lacks a
+reference; otherwise `NOT_APPLICABLE`. Only `FAIL` yields `False`.
+With `fail_without_reference` on, rows with any `NO_REFERENCE` field
+also fail.
+
+### Options
+
+| Option | Kind | Default | Effect |
+|---|---|---|---|
+| `tolerance_pct` | select | **0.10** (±10%) | Relative deviation allowed between the applied factor and the closest EMMA factor. ±25% mirrors the gap observed in the estimates and is meant for calibration runs. |
+| `period_policy` | select | **`nearest`** | `nearest`: closest EMMA period to `COST_UPDATE`. `exact`: same period only - today every ADR item becomes NO_REFERENCE. |
+| `fail_without_reference` | toggle | off | Turn NO_REFERENCE rows into FAIL so the score reflects estimations that cannot be validated. Off: they pass and are counted in the drill-down. |
+
+### Calibration
+
+`_evaluate_adr_a9(df, params)` returns, per row, `bm_*` / `vsf_*`
+columns (`status`, `reason`, `effective`, `reference`, `deviation`),
+`location`, `period_used` and `row_status`. Grouping `bm_deviation` by
+code or country answers the data owner's second comment ("calibrate the
+~25% between EMMA and the estimates") without re-running the rule.
+
+### Open points for the data owner
+
+- **Site-level location.** Only the country is known for an ADR project;
+  the rule accepts any site of the country. A project → `locationCode`
+  attribute (or a default site per country, and whether the `.F` / `.S`
+  suffixes belong to vendor-shop fabrication) would make the match
+  exact.
+- **Period policy** once EMMA history is loaded (`exact` becomes viable).
+- Where the `0` / `80` placeholders actually appear - none exist in the
+  three sources today.
+
+### Mock mode
+
+`_mock_mfc()` publishes the 8 mock codes at two sites for `US`, `GB`
+and `BR` across the four EMMA periods; `NL` and `ZZ` projects have no
+sites (NO_REFERENCE). The ADR cost mock draws a code per item (20% null,
+3% unknown `999.99`, 1% `80`) and builds the localized cost as
+`DB_COST × published × noise`, with ~18% of items pushed 25-60% off so
+the rule has real FAIL cases.
+
+### Inputs
+
+| Alias | Physical column |
+|---|---|
+| Project Key | `PLANVIEW_ID` |
+| Estimate Basis Date | `COST_UPDATE` |
+| Base Material MFC | `COST_BASE_MATERIAL_MFC` |
+| Vendor Shop Fab MFC | `COST_VENDOR_SHOP_FAB_MFC` |
+| Base Material Cost | `COST_BASE_MATERIAL_COST` |
+| DB Base Material Cost | `COST_DB_BASE_MATERIAL_COST` |
+| Vendor Shop Fab Cost | `COST_VENDOR_SHOP_FAB_COST` |
+| DB Vendor Shop Fab Cost | `COST_DB_VENDOR_SHOP_FAB_COST` |
 
 ---
 

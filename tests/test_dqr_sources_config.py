@@ -43,7 +43,7 @@ def test_adr_catalog_includes_a1_through_a8():
     quantity ratios at the project level)."""
     rules = get_available_custom_dqr_rules("ADR")
     assert [r.id for r in rules] == [
-        "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"
+        "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"
     ]
     by_id = {r.id: r for r in rules}
 

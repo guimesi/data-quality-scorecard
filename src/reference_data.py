@@ -31,7 +31,11 @@ from typing import Callable, Dict, Iterable, List, Optional
 import pandas as pd
 
 from config.settings import SETTINGS
-from src.mock_data import _mock_acce_coa_master, _mock_vws_gp_standard_share
+from src.mock_data import (
+    _mock_acce_coa_master,
+    _mock_mfc,
+    _mock_vws_gp_standard_share,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +118,43 @@ def _load_acce_coa_master() -> Optional[pd.DataFrame]:
     return get_shared_client().fetch_query(sql)
 
 
+def _load_mfc() -> Optional[pd.DataFrame]:
+    """Resolve the EMMA Market Analysis ``MFC`` reference dataset (the
+    ``mfc`` table) for the active data source. Used by A9 to validate
+    ADR material factor codes and the factor applied to each estimate.
+
+    The warehouse columns are camelCase (``code``, ``locationCode``,
+    ``costUpdateReportingPeriod_name``, ``factorValue``); the query
+    aliases them to the canonical upper-case names A9 reads
+    (``CODE``, ``DESCRIPTION``, ``LOCATION_CODE``, ``PERIOD``,
+    ``FACTOR_VALUE``) so the rule is independent of the source spelling.
+
+    May raise the underlying connector error, callers
+    (:func:`prefetch_reference_datasets`) capture and surface it as a
+    cached error string.
+    """
+    if SETTINGS.data_source == "mock":
+        return _mock_mfc()
+    from src.databricks_client import get_shared_client
+    catalog, schema = _resolve_reference_location()
+    qualified = f"{catalog}.{schema}.mfc"
+    sql = (
+        "SELECT code AS CODE, description AS DESCRIPTION, "  # nosec B608 - static column list; only the internal catalog/schema is interpolated, no user input
+        "locationCode AS LOCATION_CODE, "
+        "costUpdateReportingPeriod_name AS PERIOD, "
+        "factorValue AS FACTOR_VALUE "
+        f"FROM {qualified}"
+    )
+    return get_shared_client().fetch_query(sql)
+
+
 # Logical name -> loader callable. The logical name is the actual table
 # name in the warehouse so the same identifier flows from the catalog metadata
 # to the rule card and to the SQL fetcher.
 _REGISTRY: Dict[str, Callable[[], Optional[pd.DataFrame]]] = {
     "VWS_GP_STANDARD_SHARE": _load_vws_gp_standard_share,
     "ACCE_COA_MASTER": _load_acce_coa_master,
+    "MFC": _load_mfc,
 }
 
 
