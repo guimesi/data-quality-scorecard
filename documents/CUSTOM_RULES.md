@@ -175,7 +175,7 @@ inputs are missing, that would hide the gap in the score.
 | **A2** | Location + estimate date present & valid               | Completeness & Validity | No  | `COST_UPDATE`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
 | **A3** | Statistical WBC-to-ISO mapping ratio                   | Statistical Outlier  | No  | `PLANVIEW_ID`, `COMPLETE_WBC`, `COST_TOTAL_HOURS`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `project_scoped` (bool), `detect_uniform_mapping` (bool) |
 | **A4** | Core quantities populated & non-negative project totals | Completeness & Validity | No  | `PLANVIEW_ID`, `ITEM_TYPE`, `ITEM_DESCRIPTION`, `QTY_QUANTITY`, `QTY_UOM` | - | - |
-| **A5** | Design details present when quantity exists            | Consistency          | No  | `QTY_QUANTITY`, `DESIGN_PARAMETER_VALUE` | - | - |
+| **A5** | Key design details present when quantity exists        | Consistency          | No  | `QTY_QUANTITY`, `ITEM_TYPE`, `DESIGN_PARAMETER_NAME`, `DESIGN_PARAMETER_VALUE` | - | - |
 | **A6** | Construction hours present when quantity exists        | Consistency          | No  | `QTY_QUANTITY`, `COST_TOTAL_HOURS`, `COST_DB_TOTAL_HOURS` | - | - |
 | **A7** | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  | No  | `ITEM_TYPE`, `QTY_QUANTITY`, `QTY_UOM`, `COST_TOTAL_HOURS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 | **A8** | Cross-discipline quantity ratios                       | Statistical Outlier  | No  | `ITEM_TYPE`, `ROOT_ITEM_NAME`, `QTY_QUANTITY`, `QTY_UOM` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
@@ -1092,20 +1092,27 @@ mismatch is what A4 surfaces.
 
 ---
 
-## A5: Design details present when quantity exists (ADR)
+## A5: Key design details present when quantity exists (ADR)
 
 - **Type:** Consistency · **Blocking:** No · **Data product:** ADR
-- **Implementation:** `check_adr_a5`.
+- **Implementation:** `check_adr_a5` (with the `_A5_KEY_DESIGN_PREFIX`
+  `ITEM_TYPE → COA prefix` mapping).
 
-A row passes when one of the following holds:
+A5 is a **type-aware** consistency rule. A row passes when one of the
+following holds:
 
 1. The estimate item has **no non-zero quantity** (out-of-scope, treated
    as PASS).
-2. The estimate item has a **non-zero quantity** *and* a populated
-   `DESIGN_PARAMETER_VALUE`.
+2. The item's `ITEM_TYPE` is in the prefix mapping *and* its
+   `DESIGN_PARAMETER_NAME` starts with the expected ACCE COA prefix
+   *and* `DESIGN_PARAMETER_VALUE` is populated.
+3. The item's `ITEM_TYPE` is **not** in the mapping *and*
+   `DESIGN_PARAMETER_VALUE` is populated (the original any-value check).
 
-A row fails when a non-zero quantity exists *but* no design parameter
-value is present for the same `ROW_ID`.
+A row fails when a non-zero quantity exists but the design parameter
+that explains it is missing: for a mapped type that means the *key*
+parameter (right prefix + value); for an unmapped type, any parameter
+value.
 
 ### Where the inputs come from
 
@@ -1113,62 +1120,100 @@ A5 operates on the **denormalized ADR data product** built by
 [src/data_product_builder.py](../src/data_product_builder.py), which
 left-joins the child tables onto the primary item record:
 
-| Source table                          | Source column           | Denormalized column      | Notes |
-|---------------------------------------|-------------------------|--------------------------|-------|
-| `ADR_FACT_ESTIMATEQTYRESULTS` (1:N)   | `QUANTITY`              | `QTY_QUANTITY`           | The builder aggregates the 1:N child rows by `ROW_ID` (`SUM` for numeric columns), so `QTY_QUANTITY` is the **sum** of the underlying `QUANTITY` rows for that item. |
-| `ADR_DIM_ESTIMATEDESIGNDETAILS` (1:1) | `DESIGN_PARAMETER_VALUE`| `DESIGN_PARAMETER_VALUE` | 1:1 join, the column is preserved as-is (already prefixed with `DESIGN_`). |
+| Source table                          | Source column            | Denormalized column      | Notes |
+|---------------------------------------|--------------------------|--------------------------|-------|
+| `ADR_FACT_ESTIMATEITEMRECORD` (primary) | `ITEM_TYPE`            | `ITEM_TYPE`              | Pass-through; selects the expected COA prefix. |
+| `ADR_FACT_ESTIMATEQTYRESULTS` (1:N)   | `QUANTITY`               | `QTY_QUANTITY`           | The builder aggregates the 1:N child rows by `ROW_ID` (`SUM` for numeric columns), so `QTY_QUANTITY` is the **sum** of the underlying `QUANTITY` rows for that item. |
+| `ADR_DIM_ESTIMATEDESIGNDETAILS` (1:1) | `DESIGN_PARAMETER_NAME`  | `DESIGN_PARAMETER_NAME`  | Design parameter label carrying the COA prefix, e.g. `324.0-Pump Type`, `314.0,315.2,316.0-Diameter-Section-1`. |
+| `ADR_DIM_ESTIMATEDESIGNDETAILS` (1:1) | `DESIGN_PARAMETER_VALUE` | `DESIGN_PARAMETER_VALUE` | 1:1 join, the column is preserved as-is (already prefixed with `DESIGN_`). |
+
+> **Grain caveat.** `config/systems.py` declares the design dimension as
+> 1:1 on `ROW_ID`. If a production extract ever carries several design
+> rows per item, the builder keeps only the **first** non-numeric value
+> per `ROW_ID`, so the rule would see a single parameter name per item.
+> Supporting a true 1:N design table needs a builder-side aggregation
+> (e.g. concatenating names) before the prefix check can mean "at least
+> one parameter".
 
 ### Pass / fail matrix
 
-| `HAS_QUANTITY` | `HAS_DESIGN_DETAIL` | Result |
-|---:|---:|---|
-| 0 | 0 | PASS |
-| 0 | 1 | PASS |
-| 1 | 0 | **FAIL** |
-| 1 | 1 | PASS |
+Rows with `HAS_QUANTITY = 0` always pass. For the rest:
+
+| `KNOWN_TYPE` | `HAS_KEY_DESIGN` | `HAS_ANY_DESIGN` | Result |
+|---:|---:|---:|---|
+| 1 | 1 | - | PASS |
+| 1 | 0 | - | **FAIL** |
+| 0 | - | 1 | PASS |
+| 0 | - | 0 | **FAIL** |
 
 Where:
 
 - `HAS_QUANTITY = (QTY_QUANTITY is non-null) AND (QTY_QUANTITY <> 0)`.
-  Null quantities are treated as zero - a row is "with quantity" only
-  when the aggregate is genuinely non-zero. Negative aggregates count as
+  Null quantities are treated as zero. Negative aggregates count as
   non-zero (the rule does not validate sign).
-- `HAS_DESIGN_DETAIL = DESIGN_PARAMETER_VALUE is non-null and non-blank`
+- `KNOWN_TYPE = TRIM(ITEM_TYPE) ∈ _A5_KEY_DESIGN_PREFIX` (exact match
+  after stripping; null / blank item types are unmapped).
+- `HAS_KEY_DESIGN = DESIGN_PARAMETER_NAME starts with one of the type's
+  prefixes AND DESIGN_PARAMETER_VALUE is non-null and non-blank`.
+- `HAS_ANY_DESIGN = DESIGN_PARAMETER_VALUE is non-null and non-blank`
   (whitespace-only strings are treated as blank, same `_is_filled`
   semantics used by E1 / E4 / A2).
 
+### The `ITEM_TYPE → COA prefix` mapping
+
+The mapping (33 item types) was derived from production data: each
+prefix has ≥ 90% coverage within its item type. The match is
+**starts-with**, so composite names such as
+`314.0,315.2,316.0-Diameter-Section-1` resolve to `314.0`, and prefixes
+without a minor digit (`302.`, `337.`) cover every sub-account of that
+COA group.
+
+| Discipline | `ITEM_TYPE` | Expected prefix |
+|---|---|---|
+| Piping | `EstimateAbovegroundInstrumentPiping` / `EstimatePipingUnderground` / `EstimatePipingPneumatic` | `313.1` / `313.2` / `339.0` |
+| Rotating | `EstimatePump` / `EstimateElectricMotor` / `EstimateCentrifugalCompressor` / `EstimateReciprocatingCompressor` / `EstimateSteamTurbine` / `EstimateGasTurbine` | `324.0` / `301.0` / `302.` / `303.0` / `304.0` / `305.0` |
+| Vessels & tanks | `EstimateHorizontalDrum` / `EstimateVerticalPressureVessel` / `EstimateTankage` | `315.1` / `314.0` / `326.0` |
+| Exchangers & fired | `EstimateShellAndTubeExchanger` / `EstimatePlateExchanger` / `EstimateHairpinExchanger` / `EstimateAirCooledExchanger` / `EstimateFurnace` | `311.1` / `312.0` / `311.2` / `310.0` / `317.0` |
+| Structural & civil | `EstimateSteelStructure` / `EstimatePiperack` / `EstimateFoundation` / `EstimateConcreteStructure` / `EstimateMiscellaneousConcrete` / `EstimatePaving` / `EstimatePiling` / `EstimateExcavation` / `EstimateTrenching` / `EstimateRoadWalkFence` / `EstimateBuilding` | `318.0` / `318.0` / `308.0` / `308.0` / `308.0` / `308.0` / `309.0` / `307.0` / `307.0` / `328.0` / `321.0` |
+| Electrical & instruments | `EstimateElectricalPowerGroup` / `EstimateFieldInstrumentGroup` | `337.` / `322.0` |
+| Finishing | `EstimateInsulation` / `EstimatePaint` / `EstimateFireproofing` | `348.0` / `349.0` / `306.0` |
+
+Item types outside the table (e.g. `EstimateMiscellaneous`,
+`EstimateStructuralSteel`, `EstimateBuriedCablingGroup`) use the
+any-populated-value fallback.
+
 ### Why it matters
 
-A quantity without supporting design information cannot be normalized,
-compared across items, or validated, the analytical value of the
-estimate drops sharply. A5 is the lightweight gate that surfaces the
-most consequential omission: **a quantity exists but the engineering
-context that explains it does not.**
+A quantity without the design information that explains it cannot be
+normalized, compared across items, or validated. The type-aware check
+sharpens the original gate: a pump with a populated *driver* parameter
+but no *pump type* still cannot be benchmarked, so it fails.
 
 ### Failure modes
 
-- Missing `QTY_QUANTITY` or `DESIGN_PARAMETER_VALUE` column → all rows
-  fail (structural incompleteness; same convention as the other custom
-  rules).
+- Missing `QTY_QUANTITY`, `ITEM_TYPE`, `DESIGN_PARAMETER_NAME` or
+  `DESIGN_PARAMETER_VALUE` column → all rows fail (structural
+  incompleteness; same convention as the other custom rules).
 
 ### Notes
 
-- The current version does not validate the *type* of design detail, any populated `DESIGN_PARAMETER_VALUE` is sufficient. Adding a
-  required-parameter list (e.g. material grade, schedule, nominal size)
-  is a future extension.
+- Mock mode generates `DESIGN_PARAMETER_NAME` per item: mapped item
+  types get their expected prefix most of the time and an off-prefix
+  name in ~15% of rows, unmapped types get a generic name, so the demo
+  exercises both branches.
 - Because the data product builder aggregates `QUANTITY` by `SUM`, two
   child rows with equal-and-opposite values (e.g. `+5` and `-5`) collapse
   to a zero aggregate and the rule treats the item as "no quantity". In
   practice this is a degenerate case for ADR estimates - quantities are
-  typically non-negative, and the SQL implementation in §14 of the rule
-  spec mirrors the same behaviour via `COUNT_IF(QUANTITY <> 0) > 0`,
-  which would also flag at least one non-zero row in either direction.
+  typically non-negative.
 
 ### Inputs
 
 | Alias                    | Physical column          |
 |--------------------------|--------------------------|
 | Quantity                 | `QTY_QUANTITY`           |
+| Item Type                | `ITEM_TYPE`              |
+| Design Parameter Name    | `DESIGN_PARAMETER_NAME`  |
 | Design Parameter Value   | `DESIGN_PARAMETER_VALUE` |
 
 ---
@@ -1717,7 +1762,7 @@ differences below are mechanical adaptations to ACCE's schema.
 | **AC3 Ratio numerator** | `COUNT(DISTINCT COMPLETE_WBC)` | `COUNT(DISTINCT COA)` (over the full 4-char `COA`) | Different granularity - ACCE's metric counts distinct 4-char codes per resolved bucket, naturally capped at ten per 3-char ICARUS group; same statistical (IQR-bound) logic. |
 | **AC4 Discipline keys** | `ITEM_TYPE` (pattern-matched `Estimate*` labels) | `DESCRIPTION` (explicit per-core-type value lists, e.g. `PIPING` / `CS PIPE ERECTION` for piping, `CENTRIFUGAL PUMPS` / `S&T EXCHANGER` for equipment), matched on `UPPER(TRIM(DESCRIPTION))`; `MODULE_COUNT` keeps a `MODULE` / `MODULAR` substring match | ACCE classifies straight off the estimate-line label rather than a discipline account code; both scope and population use the same `DESCRIPTION` lists. |
 | **AC4 Quantity / UOM source** | Coalesced `QTY_QUANTITY` + `QTY_UOM` (sum / first per item) | Split `QTY_KEY_QTY` / `QTY_OTHER_QTY` and `QTY_KEY_UNITS` / `QTY_OTHER_UNITS`; a type is populated when **either** slot has qty > 0 and **either** unit is in the type's UOM set, compared on `UPPER(TRIM(units))` with no alias normalization | Mirrors the SQL spec's per-row `(KEY_QTY > 0 OR OTHER_QTY > 0)` and `(KEY_UNITS IN (...) OR OTHER_UNITS IN (...))` before the project-level `MAX()`. |
-| **AC5 Design source** | `DESIGN_PARAMETER_VALUE` (1:1 join on `ROW_ID`); any non-null value suffices | `DESIGN_PROPERTY` + `DESIGN_VALUE` (source columns `PROPERTY` / `VALUE` on `ACCE_ESTIMATEDESIGNDETAILS`, joined via `DESIGN_ID` - builder prefixes with `DESIGN_`) | ACCE requires BOTH a named parameter and a value (the "120 m of what?" interpretability gate); A5 checks only the value. Also: AC5's quantity gate is strictly positive (negatives are "no quantity"). |
+| **AC5 Design source** | `DESIGN_PARAMETER_NAME` + `DESIGN_PARAMETER_VALUE` (1:1 join on `ROW_ID`); the name must start with the item type's COA prefix (any populated value for unmapped types) | `DESIGN_PROPERTY` + `DESIGN_VALUE` (source columns `PROPERTY` / `VALUE` on `ACCE_ESTIMATEDESIGNDETAILS`, joined via `DESIGN_ID` - builder prefixes with `DESIGN_`) | ACCE requires BOTH a named parameter and a value (the "120 m of what?" interpretability gate); A5 checks only the value. Also: AC5's quantity gate is strictly positive (negatives are "no quantity"). |
 | **AC6 Hours source** | `COST_TOTAL_HOURS` OR `COST_DB_TOTAL_HOURS` | **`COST_MH` only** (sourced from `MH` on `ACCE_ESTIMATECOSTRESULTS`) | ACCE has no separate Design-Build hours column; AC6 evaluates only `COST_MH`. Equivalent to A6's two-column OR when only one hours column exists. |
 | **AC7 Segment keys** | `(ITEM_TYPE, QTY_UOM)` | `(DESCRIPTION, QTY_UOM)` | Same per-segment IQR logic; AC7 partitions by the raw `UPPER(TRIM(DESCRIPTION))` value + effective UOM (`COALESCE(KEY_UNITS, OTHER_UNITS)`) - finer-grained (per-label) than ADR's discipline-level types. |
 | **AC8 Project key** | `ROOT_ITEM_NAME` | `COMPONENT_SOURCE` | Same field semantics, the project / scope grouping key; different column name. |

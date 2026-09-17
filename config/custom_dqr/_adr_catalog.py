@@ -246,25 +246,40 @@ ADR_RULES = [
     ),
     CustomRuleDef(
         id="A5",
-        name="Design details present when quantity exists",
+        name="Key design details present when quantity exists",
         type="Consistency",
         description=(
-            "When an estimate item has a non-zero quantity, at least "
-            "one design parameter value must also be populated for the "
-            "same ROW_ID - otherwise the quantity cannot be interpreted, "
-            "normalized, or compared."
+            "When an estimate item has a non-zero quantity, the "
+            "design parameter relevant to that commodity type must "
+            "be populated. The rule maps each ``ITEM_TYPE`` to its "
+            "expected ACCE COA design-parameter prefix and checks "
+            "that the parameter matching that prefix is filled in. "
+            "Item types without a known mapping fall back to the "
+            "original check: any populated design parameter value "
+            "is sufficient."
         ),
         notes=(
             "Evaluated at the ROW_ID grain on the denormalized data "
             "product. ``QTY_QUANTITY`` is the SUM of "
-            "ADR_FACT_ESTIMATEQTYRESULTS.QUANTITY for the item (the "
-            "builder aggregates the 1:N child rows); a row is treated "
-            "as having a quantity when that sum is non-null and not "
-            "equal to zero. ``DESIGN_PARAMETER_VALUE`` comes from the "
-            "1:1 ADR_DIM_ESTIMATEDESIGNDETAILS join and is considered "
-            "present when populated (non-null, non-blank). The current "
-            "version does not validate the *type* of design detail - "
-            "any populated value is sufficient. Items with no non-zero "
+            "ADR_FACT_ESTIMATEQTYRESULTS.QUANTITY for the item; a "
+            "row is treated as having a quantity when the sum is "
+            "non-null and not equal to zero. For each ``ITEM_TYPE`` "
+            "in the ``_A5_KEY_DESIGN_PREFIX`` mapping (33 types "
+            "covering major equipment, piping, structural, civil, "
+            "electrical and instrument categories), the rule checks "
+            "that ``DESIGN_PARAMETER_NAME`` starts with the expected "
+            "COA prefix and ``DESIGN_PARAMETER_VALUE`` is populated. "
+            "The starts-with match handles composite prefixes such as "
+            "``314.0,315.2,316.0-Diameter-Section-1`` for vertical "
+            "pressure vessels. For example, ``EstimatePump`` requires "
+            "a ``324.0-*`` parameter (Pump Type, Pump Material, "
+            "Driver Power Rating); ``EstimateShellAndTubeExchanger`` "
+            "requires ``311.1-*`` (TEMA Type, Surface Area Per "
+            "Shell); ``EstimateAbovegroundInstrumentPiping`` requires "
+            "``313.1-*`` (Line Size, Pipe Material Type). Items whose "
+            "``ITEM_TYPE`` is not in the mapping (e.g. "
+            "``EstimateMiscellaneous``) fall back to the original "
+            "any-populated-value check. Items with no non-zero "
             "quantity are out of scope and pass."
         ),
         required_columns=dict(ADR_A5_REQUIRED_COLUMNS),

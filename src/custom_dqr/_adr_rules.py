@@ -258,18 +258,72 @@ _A4_STEEL_UOMS = _A4_WEIGHT_UOMS | _A4_LENGTH_UOMS | _A4_AREA_UOMS
 # Concrete: volume (original) + weight + area (metric fix).
 _A4_CONCRETE_UOMS = _A4_VOLUME_UOMS | _A4_WEIGHT_UOMS | _A4_AREA_UOMS
 
-# A5: Design details present when quantity exists.
+# A5: Key design details present when quantity exists.
 #
 # Operates on the denormalized ADR data product (built by
 # ``src.data_product_builder.build_data_product``), which left-joins
 # ``ADR_FACT_ESTIMATEQTYRESULTS`` (1:N → SUM-aggregated to one row per
-# ``ROW_ID`` by the builder) and ``ADR_DIM_ESTIMATEDESIGNDETAILS`` (1:1)
-# onto the primary item table. After the join the source columns appear as:
+# ``ROW_ID`` by the builder) and ``ADR_DIM_ESTIMATEDESIGNDETAILS`` (1:1 on
+# ``ROW_ID`` per ``config/systems.py``) onto the primary item table.
+#
+# The rule is type-aware: for each ``ITEM_TYPE`` with a known ACCE COA
+# prefix mapping, the design parameter attached to the item must have a
+# name starting with the expected prefix AND a populated value. Item
+# types not in the mapping fall back to "any populated design parameter
+# value" (the original A5 behaviour).
+#
+# Source columns after prefixing on the denormalized data product:
 #   - ``QTY_QUANTITY``           - SUM of QUANTITY for the ROW_ID.
-#   - ``DESIGN_PARAMETER_VALUE`` - pass-through (already prefixed).
+#   - ``ITEM_TYPE``              - pass-through from the primary item table.
+#   - ``DESIGN_PARAMETER_NAME``  - pass-through from design details.
+#   - ``DESIGN_PARAMETER_VALUE`` - pass-through from design details.
 ADR_A5_REQUIRED_COLUMNS = {
     "Quantity": "QTY_QUANTITY",
+    "Item Type": "ITEM_TYPE",
+    "Design Parameter Name": "DESIGN_PARAMETER_NAME",
     "Design Parameter Value": "DESIGN_PARAMETER_VALUE",
+}
+
+# ITEM_TYPE → expected COA design-parameter prefix(es). Derived from
+# production data: each prefix has ≥ 90% coverage within its item type.
+# The match is starts-with (not exact) so composite prefixes such as
+# ``314.0,315.2,316.0-Diameter-Section-1`` (vertical vessels) still
+# resolve. Prefixes without a minor digit (``302.``, ``337.``) cover every
+# sub-account of that COA group.
+_A5_KEY_DESIGN_PREFIX: Dict[str, Tuple[str, ...]] = {
+    "EstimateAbovegroundInstrumentPiping": ("313.1",),
+    "EstimatePipingUnderground": ("313.2",),
+    "EstimatePipingPneumatic": ("339.0",),
+    "EstimatePump": ("324.0",),
+    "EstimateElectricMotor": ("301.0",),
+    "EstimateCentrifugalCompressor": ("302.",),
+    "EstimateReciprocatingCompressor": ("303.0",),
+    "EstimateHorizontalDrum": ("315.1",),
+    "EstimateVerticalPressureVessel": ("314.0",),
+    "EstimateShellAndTubeExchanger": ("311.1",),
+    "EstimatePlateExchanger": ("312.0",),
+    "EstimateHairpinExchanger": ("311.2",),
+    "EstimateAirCooledExchanger": ("310.0",),
+    "EstimateTankage": ("326.0",),
+    "EstimateFurnace": ("317.0",),
+    "EstimateSteelStructure": ("318.0",),
+    "EstimatePiperack": ("318.0",),
+    "EstimateFoundation": ("308.0",),
+    "EstimateConcreteStructure": ("308.0",),
+    "EstimateMiscellaneousConcrete": ("308.0",),
+    "EstimateElectricalPowerGroup": ("337.",),
+    "EstimateFieldInstrumentGroup": ("322.0",),
+    "EstimateInsulation": ("348.0",),
+    "EstimatePaint": ("349.0",),
+    "EstimateFireproofing": ("306.0",),
+    "EstimateExcavation": ("307.0",),
+    "EstimateTrenching": ("307.0",),
+    "EstimatePiling": ("309.0",),
+    "EstimateRoadWalkFence": ("328.0",),
+    "EstimatePaving": ("308.0",),
+    "EstimateBuilding": ("321.0",),
+    "EstimateSteamTurbine": ("304.0",),
+    "EstimateGasTurbine": ("305.0",),
 }
 
 # A6: Construction hours present when quantity exists.
@@ -1175,34 +1229,35 @@ def check_adr_a4(df: pd.DataFrame) -> pd.Series:
 
 
 def check_adr_a5(df: pd.DataFrame) -> pd.Series:
-    """A5: Design details present when quantity exists (ADR).
+    """A5: Key design details present when quantity exists (ADR).
 
-    For each estimate item (one row per ``ROW_ID`` in the denormalized data
-    product) the rule checks two derived flags:
+    Type-aware Consistency rule evaluated at the ``ROW_ID`` grain. For
+    each estimate item the rule derives:
 
-    - ``HAS_QUANTITY``, the aggregated ``QTY_QUANTITY`` is non-null
-      and not equal to zero. ``QTY_QUANTITY`` is the SUM of the underlying
-      ``ADR_FACT_ESTIMATEQTYRESULTS.QUANTITY`` rows for the item, applied by
-      :func:`src.data_product_builder.build_data_product`.
-    - ``HAS_DESIGN_DETAIL``   - ``DESIGN_PARAMETER_VALUE`` is populated
-      (non-null and non-blank).
+    - ``HAS_QUANTITY`` - the aggregated ``QTY_QUANTITY`` is non-null and
+      not equal to zero (negative counts as non-zero).
+    - ``KNOWN_TYPE`` - ``ITEM_TYPE`` is in ``_A5_KEY_DESIGN_PREFIX``.
+    - ``HAS_KEY_DESIGN`` - ``DESIGN_PARAMETER_NAME`` starts with one of
+      the prefixes expected for the item type AND
+      ``DESIGN_PARAMETER_VALUE`` is populated (non-null, non-blank).
+    - ``HAS_ANY_DESIGN`` - ``DESIGN_PARAMETER_VALUE`` is populated,
+      regardless of the parameter name (the original A5 check).
 
-    Pass / fail matrix:
+    Pass / fail matrix (rows with ``HAS_QUANTITY = 0`` always pass):
 
-    +--------------+-------------------+-------------+
-    | HAS_QUANTITY | HAS_DESIGN_DETAIL | RULE_RESULT |
-    +==============+===================+=============+
-    |       0      |        0          |    PASS     |
-    |       0      |        1          |    PASS     |
-    |       1      |        0          |    FAIL     |
-    |       1      |        1          |    PASS     |
-    +--------------+-------------------+-------------+
+    +------------+----------------+----------------+-------------+
+    | KNOWN_TYPE | HAS_KEY_DESIGN | HAS_ANY_DESIGN | RULE_RESULT |
+    +============+================+================+=============+
+    |     1      |       1        |       -        |    PASS     |
+    |     1      |       0        |       -        |    FAIL     |
+    |     0      |       -        |       1        |    PASS     |
+    |     0      |       -        |       0        |    FAIL     |
+    +------------+----------------+----------------+-------------+
 
-    A row fails only when a non-zero quantity exists but the design parameter
-    value is missing, the only configuration that prevents the quantity from
-    being interpreted, normalized, or compared. Missing required column → all
-    rows fail (structural incompleteness, same convention as the other custom
-    rules).
+    The prefix match is starts-with so composite names such as
+    ``314.0,315.2,316.0-Diameter-Section-1`` resolve to ``314.0``.
+    Schema-level missing column → all rows fail (same convention as the
+    other custom rules).
     """
     required = list(ADR_A5_REQUIRED_COLUMNS.values())
     if any(col not in df.columns for col in required):
@@ -1211,12 +1266,32 @@ def check_adr_a5(df: pd.DataFrame) -> pd.Series:
         return pd.Series(True, index=df.index)
 
     # NaN → 0 so a missing aggregated quantity is treated as "no quantity".
-    # ``pd.to_numeric`` keeps the rule resilient if QTY_QUANTITY arrives as
-    # an object-typed column from a heterogeneous source.
     qty = pd.to_numeric(df["QTY_QUANTITY"], errors="coerce").fillna(0.0)
     has_quantity = qty != 0
-    has_design_detail = _is_filled(df["DESIGN_PARAMETER_VALUE"])
-    return (~has_quantity) | has_design_detail
+    if not has_quantity.any():
+        return pd.Series(True, index=df.index)
+
+    item_type = df["ITEM_TYPE"].astype(object).astype(str).str.strip()
+    param_name = (
+        df["DESIGN_PARAMETER_NAME"].astype(object).astype(str).str.strip()
+    )
+    value_filled = _is_filled(df["DESIGN_PARAMETER_VALUE"])
+
+    known_type = item_type.isin(_A5_KEY_DESIGN_PREFIX.keys())
+    prefix_ok = pd.Series(False, index=df.index)
+    for it, prefixes in _A5_KEY_DESIGN_PREFIX.items():
+        it_mask = item_type == it
+        if not it_mask.any():
+            continue
+        name_match = pd.Series(False, index=df.index)
+        for pfx in prefixes:
+            name_match = name_match | param_name.str.startswith(pfx, na=False)
+        prefix_ok = prefix_ok | (it_mask & name_match)
+
+    # Known types need the key parameter; unknown types keep the original
+    # any-populated-value check.
+    design_ok = value_filled & (prefix_ok | ~known_type)
+    return (~has_quantity) | design_ok
 
 
 def check_adr_a6(df: pd.DataFrame) -> pd.Series:

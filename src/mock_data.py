@@ -354,6 +354,30 @@ def _mock_adr_fact_estimateqtyresults() -> pd.DataFrame:
     return df
 
 
+def _assign_design_parameter_names() -> List[str]:
+    """One ``DESIGN_PARAMETER_NAME`` per estimate item, aligned with
+    ``_ITEM_TYPE``. Mapped item types get their expected COA prefix most
+    of the time (``<prefix>-<label>``), a minority get an unrelated
+    prefix so A5 fails on them; unmapped types get a generic name."""
+    from src.custom_dqr._adr_rules import _A5_KEY_DESIGN_PREFIX
+
+    labels = ["Line Size", "Material Type", "Design Pressure", "Rating"]
+    names: List[str] = []
+    for item_type in _ITEM_TYPE:
+        prefixes = _A5_KEY_DESIGN_PREFIX.get(item_type) if item_type else None
+        if not prefixes:
+            names.append("000.0-Generic Parameter")
+            continue
+        if RNG.random() < 0.15:
+            names.append("999.0-Unrelated Parameter")
+            continue
+        prefix = prefixes[0]
+        if prefix.endswith("."):
+            prefix = f"{prefix}{int(RNG.integers(0, 4))}"
+        names.append(f"{prefix}-{RNG.choice(labels)}")
+    return names
+
+
 def _mock_adr_dim_estimatedesigndetails() -> pd.DataFrame:
     """Engineering design parameters per estimate item. 1:1 with the primary
     table on ROW_ID. Includes deliberate gaps (null specs, out-of-range
@@ -368,6 +392,12 @@ def _mock_adr_dim_estimatedesigndetails() -> pd.DataFrame:
     parameter_values = [
         f"PARAM-{int(RNG.integers(1, 999)):03d}" for _ in range(n)
     ]
+    # Design parameter *name* carrying the ACCE COA prefix A5 expects per
+    # ITEM_TYPE (e.g. ``313.1-Line Size`` for aboveground piping). ~15% of
+    # the mapped items get an off-prefix name so the type-aware check has
+    # real FAIL cases; unmapped / null item types get a generic name and
+    # exercise the any-populated-value fallback.
+    parameter_names = _assign_design_parameter_names()
     df = pd.DataFrame({
         "ROW_ID": _ITEM_ROW_IDS,
         "DESIGN_PRESSURE_BAR": RNG.uniform(1, 250, size=n).round(2),
@@ -378,6 +408,7 @@ def _mock_adr_dim_estimatedesigndetails() -> pd.DataFrame:
         "WALL_THICKNESS_MM": RNG.uniform(3, 50, size=n).round(2),
         "CORROSION_ALLOWANCE_MM": RNG.uniform(0, 6, size=n).round(2),
         "DESIGN_CODE": RNG.choice(design_codes, size=n, p=[0.4, 0.2, 0.2, 0.15, 0.05]),
+        "DESIGN_PARAMETER_NAME": parameter_names,
         "DESIGN_PARAMETER_VALUE": parameter_values,
     })
     # Inject ~4% nulls in MATERIAL_SPEC and ~3% in DESIGN_PRESSURE_BAR
