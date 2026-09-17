@@ -16,6 +16,9 @@ def test_build_adr_data_product():
     # 4 source tables in ADR: primary ESTIMATEITEMRECORD + 2 result facts
     # (cost / qty) + ESTIMATEDESIGNDETAILS (design specs, joined on ROW_ID).
     assert len(dp.source_tables) == 4
+    # The design derivation runs even when the mock design table is 1:1.
+    assert "DESIGN_KEY_PARAMETER_NAMES" in dp.df.columns
+    assert dp.df["DESIGN_KEY_PARAMETER_NAMES"].notna().any()
 
 
 def test_build_acce_data_product():
@@ -231,3 +234,119 @@ def test_default_fetcher_binds_adversarial_id_as_param_not_sql(monkeypatch):
     assert kwargs["where"] == "PLANVIEW_ID IN (%s)"   # only a placeholder
     assert "DROP TABLE" not in kwargs["where"]
     assert kwargs["params"] == [evil]                 # payload bound, verbatim
+
+
+# ---------------------------------------------------------------------------
+# ADR design details: 1:N on ROW_ID, DESIGN_KEY_PARAMETER_NAMES derivation
+# ---------------------------------------------------------------------------
+
+def _adr_fetcher(design_rows):
+    """Minimal ADR fetcher: three items, a 1:N design table from
+    ``design_rows`` (list of dicts with ROW_ID / PARAMETER_NAME /
+    PARAMETER_VALUE)."""
+    import pandas as pd
+
+    frames = {
+        "ADR_DIM_ESTIMATEITEMRECORD": pd.DataFrame({
+            "ROW_ID": ["r1", "r2", "r3"],
+            "PLANVIEW_ID": ["P1", "P1", "P1"],
+            "ITEM_TYPE": ["EstimatePump", "EstimatePump",
+                          "EstimateMiscellaneous"],
+        }),
+        "ADR_FACT_ESTIMATECOSTRESULTS": pd.DataFrame({
+            "ROW_ID": ["r1"], "TOTAL_COST": [1.0],
+        }),
+        "ADR_FACT_ESTIMATEQTYRESULTS": pd.DataFrame({
+            "ROW_ID": ["r1", "r2", "r3"],
+            "QUANTITY": [1.0, 2.0, 3.0],
+            "UOM": ["EA", "EA", "EA"],
+        }),
+        "ADR_DIM_ESTIMATEDESIGNDETAILS": pd.DataFrame(
+            design_rows, columns=["ROW_ID", "PARAMETER_NAME", "PARAMETER_VALUE"]
+        ),
+    }
+    return lambda name: frames[name]
+
+
+def test_adr_design_details_join_every_populated_parameter_name_per_item():
+    """Several design rows per ROW_ID collapse to one item row whose
+    DESIGN_KEY_PARAMETER_NAMES lists every parameter that carries a
+    value - distinct, first-seen order, blank-valued names dropped,
+    unnamed-but-valued rows kept as ``(unnamed)``."""
+    fetch = _adr_fetcher([
+        {"ROW_ID": "r1", "PARAMETER_NAME": "301.0-Driver Power", "PARAMETER_VALUE": "75 kW"},
+        {"ROW_ID": "r1", "PARAMETER_NAME": "324.0-Pump Type", "PARAMETER_VALUE": "Centrifugal"},
+        {"ROW_ID": "r1", "PARAMETER_NAME": "324.0-Pump Type", "PARAMETER_VALUE": "Centrifugal"},
+        {"ROW_ID": "r1", "PARAMETER_NAME": "324.0-Pump Material", "PARAMETER_VALUE": None},
+        {"ROW_ID": "r1", "PARAMETER_NAME": "324.0-Rating", "PARAMETER_VALUE": "   "},
+        {"ROW_ID": "r2", "PARAMETER_NAME": "301.0-Driver Power", "PARAMETER_VALUE": "75 kW"},
+        {"ROW_ID": "r3", "PARAMETER_NAME": None, "PARAMETER_VALUE": "free text"},
+        {"ROW_ID": "r3", "PARAMETER_NAME": "  ", "PARAMETER_VALUE": "more"},
+    ])
+    dp = build_data_product("ADR", fetcher=fetch)
+    df = dp.df.set_index("ROW_ID")
+    # No duplication of the primary rows.
+    assert len(dp.df) == 3
+    assert df.loc["r1", "DESIGN_KEY_PARAMETER_NAMES"] == "301.0-Driver Power|324.0-Pump Type"
+    assert df.loc["r2", "DESIGN_KEY_PARAMETER_NAMES"] == "301.0-Driver Power"
+    assert df.loc["r3", "DESIGN_KEY_PARAMETER_NAMES"] == "(unnamed)"
+    # The other text columns keep the builder's default ``first``.
+    assert df.loc["r1", "DESIGN_PARAMETER_NAME"] == "301.0-Driver Power"
+
+
+def test_adr_design_details_derived_column_is_null_when_no_value_populated():
+    fetch = _adr_fetcher([
+        {"ROW_ID": "r1", "PARAMETER_NAME": "324.0-Pump Type", "PARAMETER_VALUE": None},
+        {"ROW_ID": "r1", "PARAMETER_NAME": "324.0-Rating", "PARAMETER_VALUE": ""},
+    ])
+    dp = build_data_product("ADR", fetcher=fetch)
+    df = dp.df.set_index("ROW_ID")
+    import pandas as pd
+    assert pd.isna(df.loc["r1", "DESIGN_KEY_PARAMETER_NAMES"])
+    # Items with no design rows at all (left join) are null too.
+    assert pd.isna(df.loc["r2", "DESIGN_KEY_PARAMETER_NAMES"])
+
+
+def test_adr_design_details_feed_a5_end_to_end():
+    """r1 (pump) has the 324.0 key parameter among others → PASS; r2
+    (pump) only has a 301.0 driver parameter → FAIL; r3 (unmapped type)
+    has any populated parameter → PASS."""
+    from src.custom_dqr_engine import check_adr_a5
+    fetch = _adr_fetcher([
+        {"ROW_ID": "r1", "PARAMETER_NAME": "301.0-Driver Power", "PARAMETER_VALUE": "75 kW"},
+        {"ROW_ID": "r1", "PARAMETER_NAME": "324.0-Pump Type", "PARAMETER_VALUE": "Centrifugal"},
+        {"ROW_ID": "r2", "PARAMETER_NAME": "301.0-Driver Power", "PARAMETER_VALUE": "75 kW"},
+        {"ROW_ID": "r2", "PARAMETER_NAME": "324.0-Pump Type", "PARAMETER_VALUE": None},
+        {"ROW_ID": "r3", "PARAMETER_NAME": "Anything", "PARAMETER_VALUE": "x"},
+    ])
+    dp = build_data_product("ADR", fetcher=fetch)
+    df = dp.df.sort_values("ROW_ID").reset_index(drop=True)
+    assert check_adr_a5(df).tolist() == [True, False, True]
+
+
+def test_adr_design_derive_is_a_no_op_without_the_parameter_columns():
+    """A design extract without PARAMETER_NAME / PARAMETER_VALUE must not
+    crash the build; the derived column is simply absent and A5 reports
+    the missing column the usual way."""
+    import pandas as pd
+    fetch = _adr_fetcher([])
+    frames_design = pd.DataFrame({"ROW_ID": ["r1"], "MATERIAL_SPEC": ["CS"]})
+    inner = fetch
+
+    def fetch2(name):
+        if name == "ADR_DIM_ESTIMATEDESIGNDETAILS":
+            return frames_design
+        return inner(name)
+
+    dp = build_data_product("ADR", fetcher=fetch2)
+    assert "DESIGN_KEY_PARAMETER_NAMES" not in dp.df.columns
+    assert "DESIGN_MATERIAL_SPEC" in dp.df.columns
+
+
+def test_join_unique_aggregator_semantics():
+    import numpy as np
+    import pandas as pd
+    from config.systems import join_unique
+    assert join_unique(pd.Series(["b", "a", "b", None, np.nan, "  ", " a "])) == "b|a"
+    assert join_unique(pd.Series([None, np.nan, ""])) is None
+    assert join_unique(pd.Series([], dtype=object)) is None

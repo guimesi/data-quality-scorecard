@@ -52,7 +52,7 @@ flowchart TD
     ST2 --> PVF["Apply sidebar Project filter<br/>(domain-aware - column from<br/>active DomainDef.project_filter:<br/>PLANVIEW_ID for Cost Estimate,<br/>PROJECT_CODE for Quality)"]
     PVF --> BUILD["For each system:<br/>build_data_product(planview_ids=…,<br/>filter_column=…)"]
     BUILD --> JOIN["LEFT JOIN child tables<br/>on join_key"]
-    JOIN --> AGG["Aggregate 1:N<br/>numeric → SUM<br/>others → first non-null"]
+    JOIN --> AGG["Aggregate 1:N<br/>numeric → SUM<br/>others → first non-null<br/>per-column overrides (column_aggregations)"]
     AGG --> PRX["Prefix non-primary<br/>table columns"]
     PRX --> PROF["profile_dataframe()<br/>per-column profiles"]
     PROF --> SHOW2["Show table summary<br/>+ column profile preview<br/>+ project-filter banner (if active)"]

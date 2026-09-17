@@ -5972,10 +5972,7 @@ def test_adr_a4_does_not_add_reference_dataset_to_prefetch():
 # A5: Key design details present when quantity exists (ADR; consistency rule)
 # =============================================================================
 
-_A5_COLS = [
-    "QTY_QUANTITY", "ITEM_TYPE", "DESIGN_PARAMETER_NAME",
-    "DESIGN_PARAMETER_VALUE",
-]
+_A5_COLS = ["QTY_QUANTITY", "ITEM_TYPE", "DESIGN_KEY_PARAMETER_NAMES"]
 
 
 def _make_a5_df(rows):
@@ -5985,12 +5982,13 @@ def _make_a5_df(rows):
     return pd.DataFrame(completed, columns=_A5_COLS)
 
 
-def _a5_row(qty, item_type=None, name=None, value=None):
+def _a5_row(qty, item_type=None, names=None):
+    """``names`` is the builder-derived pipe-separated list of parameter
+    names whose value is populated (``DESIGN_KEY_PARAMETER_NAMES``)."""
     return {
         "QTY_QUANTITY": qty,
         "ITEM_TYPE": item_type,
-        "DESIGN_PARAMETER_NAME": name,
-        "DESIGN_PARAMETER_VALUE": value,
+        "DESIGN_KEY_PARAMETER_NAMES": names,
     }
 
 
@@ -6007,8 +6005,7 @@ def test_adr_has_custom_rule_a5_available():
     assert rule.required_columns == {
         "Quantity": "QTY_QUANTITY",
         "Item Type": "ITEM_TYPE",
-        "Design Parameter Name": "DESIGN_PARAMETER_NAME",
-        "Design Parameter Value": "DESIGN_PARAMETER_VALUE",
+        "Key Parameter Names": "DESIGN_KEY_PARAMETER_NAMES",
     }
     # A5 does not consult an external reference dataset.
     assert rule.reference is None
@@ -6043,27 +6040,31 @@ def test_adr_a5_prefix_map_uses_production_item_type_spellings():
 
 # ----- known ITEM_TYPE: key-parameter check ---------------------------------
 
-def test_adr_a5_passes_known_type_with_matching_prefix_and_value():
+def test_adr_a5_passes_known_type_when_any_entry_matches_prefix():
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(10.0, "EstimatePump", "324.0-Pump Type", "Centrifugal"),
-        _a5_row(0.5, "EstimateShellAndTubeExchanger",
-                "311.1-TEMA Type", "BEM"),
+        _a5_row(10.0, "EstimatePump", "324.0-Pump Type"),
+        # key parameter is not the first entry of the list
+        _a5_row(10.0, "EstimatePump", "301.0-Driver Power|324.0-Pump Type"),
+        _a5_row(10.0, "EstimatePump", "301.0-Driver|999.0-X|324.0-Pump Material"),
+        _a5_row(0.5, "EstimateShellAndTubeExchanger", "311.1-TEMA Type"),
         _a5_row(-1.0, "EstimateAbovegroundInstrumentPiping",
-                "313.1-Line Size", "6 in"),
+                "313.1-Line Size|313.1-Pipe Material Type"),
     ])
-    assert check_adr_a5(df).tolist() == [True, True, True]
+    assert check_adr_a5(df).tolist() == [True] * 5
 
 
 def test_adr_a5_prefix_match_is_starts_with_for_composite_names():
     """``314.0,315.2,316.0-Diameter-Section-1`` must resolve to the
-    vertical-vessel prefix ``314.0``."""
+    vertical-vessel prefix ``314.0``, also when not the first entry."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
         _a5_row(3.0, "EstimateVerticalPressureVessel",
-                "314.0,315.2,316.0-Diameter-Section-1", "2.5 m"),
+                "314.0,315.2,316.0-Diameter-Section-1"),
+        _a5_row(3.0, "EstimateVerticalPressureVessel",
+                "999.0-Other|314.0,315.2,316.0-Diameter-Section-1"),
     ])
-    assert check_adr_a5(df).tolist() == [True]
+    assert check_adr_a5(df).tolist() == [True, True]
 
 
 def test_adr_a5_prefix_without_minor_digit_covers_every_sub_account():
@@ -6071,32 +6072,46 @@ def test_adr_a5_prefix_without_minor_digit_covers_every_sub_account():
     ``302.3-*`` alike, but not ``303.0-*``."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(1.0, "EstimateCentrifugalCompressor", "302.1-Stages", "3"),
-        _a5_row(1.0, "EstimateCentrifugalCompressor", "302.3-Driver", "M"),
-        _a5_row(1.0, "EstimateCentrifugalCompressor", "303.0-Driver", "M"),
+        _a5_row(1.0, "EstimateCentrifugalCompressor", "302.1-Stages"),
+        _a5_row(1.0, "EstimateCentrifugalCompressor", "302.3-Driver"),
+        _a5_row(1.0, "EstimateCentrifugalCompressor", "303.0-Driver"),
     ])
     assert check_adr_a5(df).tolist() == [True, True, False]
 
 
-def test_adr_a5_fails_known_type_when_prefix_does_not_match():
-    """A populated value under the *wrong* parameter is not enough for a
-    mapped item type."""
+def test_adr_a5_prefix_must_start_an_entry_not_merely_appear_inside():
+    """``1324.0-X`` or ``Foo 324.0`` must not satisfy the ``324.0``
+    prefix - the match is anchored at the start of each entry."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(10.0, "EstimatePump", "301.0-Driver Power", "75 kW"),
-        _a5_row(10.0, "EstimatePump", "Pump Type", "Centrifugal"),
-        _a5_row(10.0, "EstimatePump", None, "Centrifugal"),
-        _a5_row(10.0, "EstimatePump", "", "Centrifugal"),
+        _a5_row(1.0, "EstimatePump", "1324.0-Pump Type"),
+        _a5_row(1.0, "EstimatePump", "Foo 324.0-Pump Type"),
+        _a5_row(1.0, "EstimatePump", "301.0-Driver| 324.0-Pump Type"),  # ws ok
+    ])
+    assert check_adr_a5(df).tolist() == [False, False, True]
+
+
+def test_adr_a5_fails_known_type_when_no_entry_matches_prefix():
+    """Populated parameters under the *wrong* prefixes are not enough for
+    a mapped item type."""
+    from src.custom_dqr_engine import check_adr_a5
+    df = _make_a5_df([
+        _a5_row(10.0, "EstimatePump", "301.0-Driver Power"),
+        _a5_row(10.0, "EstimatePump", "301.0-Driver Power|999.0-Other"),
+        _a5_row(10.0, "EstimatePump", "Pump Type"),
+        _a5_row(10.0, "EstimatePump", "(unnamed)"),
     ])
     assert check_adr_a5(df).tolist() == [False, False, False, False]
 
 
-def test_adr_a5_fails_known_type_when_key_value_blank():
+def test_adr_a5_fails_known_type_when_no_parameter_is_populated():
+    """An empty / null list means no design parameter carries a value
+    (the builder only lists names whose value is populated)."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(10.0, "EstimatePump", "324.0-Pump Type", None),
-        _a5_row(5.0, "EstimatePump", "324.0-Pump Type", ""),
-        _a5_row(2.0, "EstimatePump", "324.0-Pump Type", "   "),
+        _a5_row(10.0, "EstimatePump", None),
+        _a5_row(5.0, "EstimatePump", ""),
+        _a5_row(2.0, "EstimatePump", "   "),
     ])
     assert check_adr_a5(df).tolist() == [False, False, False]
 
@@ -6106,22 +6121,22 @@ def test_adr_a5_item_type_is_matched_exactly_after_strip():
     not silently coerced into a mapped type."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(1.0, "  EstimatePump  ", "324.0-Pump Type", "X"),
-        _a5_row(1.0, "EstimatePumpXL", "324.0-Pump Type", "X"),  # unmapped
-        _a5_row(1.0, "EstimatePumpXL", "999.9-Other", None),     # unmapped
+        _a5_row(1.0, "  EstimatePump  ", "324.0-Pump Type"),
+        _a5_row(1.0, "EstimatePumpXL", "999.9-Other"),   # unmapped → any
+        _a5_row(1.0, "EstimatePumpXL", None),            # unmapped → none
     ])
     assert check_adr_a5(df).tolist() == [True, True, False]
 
 
-# ----- unknown ITEM_TYPE: any-populated-value fallback ----------------------
+# ----- unknown ITEM_TYPE: any-populated-parameter fallback ------------------
 
-def test_adr_a5_unknown_type_falls_back_to_any_populated_value():
+def test_adr_a5_unknown_type_falls_back_to_any_populated_parameter():
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(10.0, "EstimateMiscellaneous", "Whatever", "SCH 40"),
-        _a5_row(10.0, "EstimateMiscellaneous", None, "SCH 40"),
-        _a5_row(10.0, "EstimateMiscellaneous", "Whatever", None),
-        _a5_row(10.0, "EstimateMiscellaneous", "Whatever", "   "),
+        _a5_row(10.0, "EstimateMiscellaneous", "Whatever"),
+        _a5_row(10.0, "EstimateMiscellaneous", "(unnamed)"),
+        _a5_row(10.0, "EstimateMiscellaneous", None),
+        _a5_row(10.0, "EstimateMiscellaneous", "   "),
     ])
     assert check_adr_a5(df).tolist() == [True, True, False, False]
 
@@ -6129,9 +6144,9 @@ def test_adr_a5_unknown_type_falls_back_to_any_populated_value():
 def test_adr_a5_null_or_blank_item_type_uses_fallback():
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(10.0, None, None, "Carbon Steel"),
-        _a5_row(10.0, "", None, "Carbon Steel"),
-        _a5_row(10.0, None, None, None),
+        _a5_row(10.0, None, "Some Parameter"),
+        _a5_row(10.0, "", "Some Parameter"),
+        _a5_row(10.0, None, None),
     ])
     assert check_adr_a5(df).tolist() == [True, True, False]
 
@@ -6143,9 +6158,9 @@ def test_adr_a5_passes_when_quantity_zero_regardless_of_design_detail():
     and the row passes - even for a mapped type with no key parameter."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(0.0, "EstimatePump", None, None),
-        _a5_row(0, "EstimatePump", "999.0-Other", ""),
-        _a5_row(0.0, "EstimateMiscellaneous", None, None),
+        _a5_row(0.0, "EstimatePump", None),
+        _a5_row(0, "EstimatePump", "999.0-Other"),
+        _a5_row(0.0, "EstimateMiscellaneous", None),
     ])
     assert check_adr_a5(df).tolist() == [True, True, True]
 
@@ -6155,8 +6170,8 @@ def test_adr_a5_passes_when_quantity_null_regardless_of_design_detail():
     so the rule is not applicable and the row passes."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(None, "EstimatePump", None, None),
-        _a5_row(None, None, None, "SS-316"),
+        _a5_row(None, "EstimatePump", None),
+        _a5_row(None, None, "SS-316"),
     ])
     assert check_adr_a5(df).tolist() == [True, True]
 
@@ -6167,9 +6182,9 @@ def test_adr_a5_negative_quantity_counts_as_quantity_present():
     design detail must FAIL."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(-3.0, "EstimatePump", "324.0-Pump Type", None),
-        _a5_row(-3.0, "EstimatePump", "324.0-Pump Type", "Centrifugal"),
-        _a5_row(-3.0, "EstimateMiscellaneous", None, None),
+        _a5_row(-3.0, "EstimatePump", "301.0-Driver"),
+        _a5_row(-3.0, "EstimatePump", "324.0-Pump Type"),
+        _a5_row(-3.0, "EstimateMiscellaneous", None),
     ])
     assert check_adr_a5(df).tolist() == [False, True, False]
 
@@ -6179,16 +6194,16 @@ def test_adr_a5_decision_matrix_covers_all_states():
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
         # no quantity → PASS whatever the design side looks like
-        _a5_row(0.0, "EstimatePump", None, None),
-        _a5_row(0.0, "EstimateMiscellaneous", None, "ASME"),
+        _a5_row(0.0, "EstimatePump", None),
+        _a5_row(0.0, "EstimateMiscellaneous", "Any"),
         # known type, key present → PASS
-        _a5_row(12.0, "EstimatePump", "324.0-Pump Type", "API-610"),
-        # known type, key missing (wrong prefix / blank value) → FAIL
-        _a5_row(12.0, "EstimatePump", "301.0-Driver", "API-610"),
-        _a5_row(12.0, "EstimatePump", "324.0-Pump Type", ""),
-        # unknown type, any value → PASS; none → FAIL
-        _a5_row(12.0, "EstimateMiscellaneous", "Any", "API-650"),
-        _a5_row(12.0, "EstimateMiscellaneous", "Any", None),
+        _a5_row(12.0, "EstimatePump", "301.0-Driver|324.0-Pump Type"),
+        # known type, key missing (wrong prefix / nothing populated) → FAIL
+        _a5_row(12.0, "EstimatePump", "301.0-Driver"),
+        _a5_row(12.0, "EstimatePump", None),
+        # unknown type, any populated → PASS; none → FAIL
+        _a5_row(12.0, "EstimateMiscellaneous", "Any"),
+        _a5_row(12.0, "EstimateMiscellaneous", None),
     ])
     assert check_adr_a5(df).tolist() == [
         True, True, True, False, False, True, False,
@@ -6203,8 +6218,7 @@ def test_adr_a5_handles_object_dtyped_numeric_quantities():
     df = pd.DataFrame({
         "QTY_QUANTITY": ["10", "0", None, "abc"],
         "ITEM_TYPE": ["EstimatePump"] * 4,
-        "DESIGN_PARAMETER_NAME": [None] * 4,
-        "DESIGN_PARAMETER_VALUE": [None] * 4,
+        "DESIGN_KEY_PARAMETER_NAMES": [None] * 4,
     })
     # Row 0: "10" -> 10 -> non-zero, no key detail -> FAIL.
     # Rows 1,2,3: 0 / NaN / NaN -> "no quantity" -> PASS.
@@ -6219,8 +6233,8 @@ def test_adr_a5_fails_for_all_rows_when_required_column_missing(missing):
     convention as the other custom rules (E1, E4, A2, ...)."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
-        _a5_row(10.0, "EstimatePump", "324.0-Pump Type", "X"),
-        _a5_row(0.0, "EstimatePump", "324.0-Pump Type", "X"),
+        _a5_row(10.0, "EstimatePump", "324.0-Pump Type"),
+        _a5_row(0.0, "EstimatePump", "324.0-Pump Type"),
     ]).drop(columns=[missing])
     assert check_adr_a5(df).tolist() == [False, False]
 
@@ -6236,26 +6250,29 @@ def test_adr_a5_empty_dataframe_returns_empty_pass_series():
     assert result.dtype == bool
 
 
-def test_adr_a5_mock_design_details_carry_parameter_names():
-    """Mock mode must expose ``DESIGN_PARAMETER_NAME`` so A5 can be
-    unlocked in the CDE grid, with both prefix-matching and off-prefix
-    names present."""
-    from src.mock_data import _mock_adr_dim_estimatedesigndetails
-    df = _mock_adr_dim_estimatedesigndetails()
-    assert "DESIGN_PARAMETER_NAME" in df.columns
-    names = df["DESIGN_PARAMETER_NAME"]
-    assert names.notna().all()
+def test_adr_a5_mock_data_product_exercises_both_branches():
+    """Mock mode must expose ``DESIGN_KEY_PARAMETER_NAMES`` so A5 can be
+    unlocked in the CDE grid, with both PASS and FAIL rows present."""
+    import os
+    os.environ["DATA_SOURCE"] = "mock"
+    from src.custom_dqr_engine import check_adr_a5
+    from src.data_product_builder import build_data_product
+    df = build_data_product("ADR").df
+    assert "DESIGN_KEY_PARAMETER_NAMES" in df.columns
+    names = df["DESIGN_KEY_PARAMETER_NAMES"].dropna()
     assert names.str.startswith("313.1-").any()
     assert names.str.startswith("999.0-").any()
+    result = check_adr_a5(df)
+    assert result.any() and (~result).any()
 
 
 def test_evaluate_custom_rules_dispatches_to_a5():
     """End-to-end: dispatcher routes an A5 assignment through check_adr_a5
     for the ADR data product."""
     df = _make_a5_df([
-        _a5_row(10.0, "EstimatePump", "324.0-Pump Type", "ASME"),
-        _a5_row(7.0, "EstimatePump", "324.0-Pump Type", None),
-        _a5_row(0.0, "EstimatePump", None, None),
+        _a5_row(10.0, "EstimatePump", "324.0-Pump Type"),
+        _a5_row(7.0, "EstimatePump", "301.0-Driver"),
+        _a5_row(0.0, "EstimatePump", None),
     ])
     assignments = [CustomDQRAssignment(rule_id="A5", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")

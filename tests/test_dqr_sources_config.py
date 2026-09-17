@@ -109,8 +109,7 @@ def test_adr_catalog_includes_a1_through_a8():
     assert a5.required_columns == {
         "Quantity": "QTY_QUANTITY",
         "Item Type": "ITEM_TYPE",
-        "Design Parameter Name": "DESIGN_PARAMETER_NAME",
-        "Design Parameter Value": "DESIGN_PARAMETER_VALUE",
+        "Key Parameter Names": "DESIGN_KEY_PARAMETER_NAMES",
     }
     assert a5.reference is None
 

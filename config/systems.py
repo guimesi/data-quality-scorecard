@@ -19,7 +19,7 @@ project grain), present in the primary tables and ONSHORE_CETDATA.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -52,6 +52,15 @@ class TableDef:
     # row-by-row (otherwise ``SUM(KEY_QTY) + SUM(OTHER_QTY)`` would
     # double-count rows where both sides are populated).
     derive_columns: Optional[Callable[["pd.DataFrame"], "pd.DataFrame"]] = None
+    # Optional per-column override of the builder's 1:N aggregation
+    # (default: numeric → ``sum``, everything else → ``first``). Keys are
+    # column names *after* prefixing / derivation; values are anything
+    # ``DataFrame.groupby(...).agg`` accepts (a string or a callable that
+    # receives the per-group Series). Used when a child table carries
+    # several rows per parent and the consumer needs all of them, e.g.
+    # ADR's design parameters joined into one pipe-separated list so A5
+    # can ask "does *any* parameter carry the expected COA prefix?".
+    column_aggregations: Optional[Dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +81,56 @@ class SystemDef:
     @property
     def table_names(self) -> List[str]:
         return [t.name for t in self.tables]
+
+
+# Placeholder used in ``DESIGN_KEY_PARAMETER_NAMES`` for a design row whose
+# value is populated but whose name is null / blank. Keeps the "any
+# populated parameter" fallback truthful without ever matching a COA prefix.
+ADR_UNNAMED_DESIGN_PARAMETER = "(unnamed)"
+# Separator of the per-item parameter-name list produced by
+# ``_adr_design_derive`` + ``join_unique``.
+ADR_DESIGN_NAME_SEPARATOR = "|"
+
+
+def _adr_design_derive(df: "pd.DataFrame") -> "pd.DataFrame":
+    """Per-row prep for ``ADR_DIM_ESTIMATEDESIGNDETAILS`` (1:N on ROW_ID).
+
+    Adds ``DESIGN_KEY_PARAMETER_NAMES``: the design parameter *name* when
+    its *value* is populated (non-null, non-blank), ``(unnamed)`` when the
+    value is populated but the name is not, and null otherwise. The
+    builder then joins the per-item values with :func:`join_unique`
+    (see ``column_aggregations``) so the data product carries, per
+    ``ROW_ID``, a pipe-separated list of every parameter that actually
+    has a value - the input ADR A5 reads.
+
+    The pairing name ↔ value must happen here, row by row: once the
+    builder collapses the 1:N rows (``first`` for text columns) the link
+    between a name and its value is lost.
+    """
+    name_col, value_col = "DESIGN_PARAMETER_NAME", "DESIGN_PARAMETER_VALUE"
+    if name_col not in df.columns or value_col not in df.columns:
+        return df
+    value = df[value_col]
+    value_filled = value.notna() & value.astype(str).str.strip().ne("")
+    name = df[name_col].astype(object)
+    name_filled = name.notna() & name.astype(str).str.strip().ne("")
+    key = name.astype(str).str.strip().where(name_filled, ADR_UNNAMED_DESIGN_PARAMETER)
+    df["DESIGN_KEY_PARAMETER_NAMES"] = key.where(value_filled, None)
+    return df
+
+
+def join_unique(values: "pd.Series") -> Optional[str]:
+    """Group aggregator: distinct non-null values, first-seen order, joined
+    with :data:`ADR_DESIGN_NAME_SEPARATOR`. ``None`` when nothing remains
+    so a downstream completeness check still reads it as missing."""
+    seen: Dict[str, None] = {}
+    for v in values:
+        if v is None or v != v:  # None / NaN
+            continue
+        text = str(v).strip()
+        if text:
+            seen.setdefault(text, None)
+    return ADR_DESIGN_NAME_SEPARATOR.join(seen) if seen else None
 
 
 def _acce_qty_derive(df: "pd.DataFrame") -> "pd.DataFrame":
@@ -143,10 +202,16 @@ SYSTEMS: Dict[str, SystemDef] = {
                 name="ADR_DIM_ESTIMATEDESIGNDETAILS",
                 description=(
                     "Engineering design parameters (design specs) per estimate "
-                    "line item. 1:1 on ROW_ID."
+                    "line item. 1:N on ROW_ID - one row per (parameter name, "
+                    "value) pair, ~10 per item in production. The builder "
+                    "keeps the first value of every text column and adds "
+                    "DESIGN_KEY_PARAMETER_NAMES, the pipe-separated list of "
+                    "parameter names that carry a populated value (A5)."
                 ),
                 join_key="ROW_ID",
                 column_prefix="DESIGN",
+                derive_columns=_adr_design_derive,
+                column_aggregations={"DESIGN_KEY_PARAMETER_NAMES": join_unique},
             ),
         ],
     ),

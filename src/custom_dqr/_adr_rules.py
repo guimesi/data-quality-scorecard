@@ -21,6 +21,7 @@ that ambiguity is the right call - the alternative is hundreds of
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Tuple, TypedDict
 
 import numpy as np
@@ -261,28 +262,33 @@ _A4_CONCRETE_UOMS = _A4_VOLUME_UOMS | _A4_WEIGHT_UOMS | _A4_AREA_UOMS
 # A5: Key design details present when quantity exists.
 #
 # Operates on the denormalized ADR data product (built by
-# ``src.data_product_builder.build_data_product``), which left-joins
-# ``ADR_FACT_ESTIMATEQTYRESULTS`` (1:N → SUM-aggregated to one row per
-# ``ROW_ID`` by the builder) and ``ADR_DIM_ESTIMATEDESIGNDETAILS`` (1:1 on
-# ``ROW_ID`` per ``config/systems.py``) onto the primary item table.
+# ``src.data_product_builder.build_data_product``). ``ADR_DIM_ESTIMATE-
+# DESIGNDETAILS`` is 1:N on ``ROW_ID`` (one row per parameter, ~10 per
+# item in production). Because the builder keeps only the *first* value
+# of a text column when it collapses 1:N rows, the rule cannot read
+# ``DESIGN_PARAMETER_NAME`` / ``DESIGN_PARAMETER_VALUE`` directly - it
+# would see one arbitrary parameter per item. Instead the ADR TableDef
+# (``config/systems.py``) derives ``DESIGN_KEY_PARAMETER_NAMES`` per row
+# (the parameter name when its value is populated) and joins the per-item
+# values into one pipe-separated list, so the rule can ask "does *any*
+# populated parameter carry the expected COA prefix?".
 #
 # The rule is type-aware: for each ``ITEM_TYPE`` with a known ACCE COA
-# prefix mapping, the design parameter attached to the item must have a
-# name starting with the expected prefix AND a populated value. Item
-# types not in the mapping fall back to "any populated design parameter
-# value" (the original A5 behaviour).
+# prefix mapping, at least one populated parameter name must start with
+# the expected prefix. Item types not in the mapping fall back to "any
+# populated design parameter" (the original A5 behaviour).
 #
-# Source columns after prefixing on the denormalized data product:
-#   - ``QTY_QUANTITY``           - SUM of QUANTITY for the ROW_ID.
-#   - ``ITEM_TYPE``              - pass-through from the primary item table.
-#   - ``DESIGN_PARAMETER_NAME``  - pass-through from design details.
-#   - ``DESIGN_PARAMETER_VALUE`` - pass-through from design details.
+# Source columns on the denormalized data product:
+#   - ``QTY_QUANTITY``               - SUM of QUANTITY for the ROW_ID.
+#   - ``ITEM_TYPE``                  - pass-through from the primary table.
+#   - ``DESIGN_KEY_PARAMETER_NAMES`` - derived: ``name1|name2|...`` of the
+#     parameters whose value is populated; null when none is.
 ADR_A5_REQUIRED_COLUMNS = {
     "Quantity": "QTY_QUANTITY",
     "Item Type": "ITEM_TYPE",
-    "Design Parameter Name": "DESIGN_PARAMETER_NAME",
-    "Design Parameter Value": "DESIGN_PARAMETER_VALUE",
+    "Key Parameter Names": "DESIGN_KEY_PARAMETER_NAMES",
 }
+ADR_A5_NAME_SEPARATOR = "|"
 
 # ITEM_TYPE → expected COA design-parameter prefix(es). Derived from
 # production data: each prefix has ≥ 90% coverage within its item type.
@@ -1237,11 +1243,13 @@ def check_adr_a5(df: pd.DataFrame) -> pd.Series:
     - ``HAS_QUANTITY`` - the aggregated ``QTY_QUANTITY`` is non-null and
       not equal to zero (negative counts as non-zero).
     - ``KNOWN_TYPE`` - ``ITEM_TYPE`` is in ``_A5_KEY_DESIGN_PREFIX``.
-    - ``HAS_KEY_DESIGN`` - ``DESIGN_PARAMETER_NAME`` starts with one of
-      the prefixes expected for the item type AND
-      ``DESIGN_PARAMETER_VALUE`` is populated (non-null, non-blank).
-    - ``HAS_ANY_DESIGN`` - ``DESIGN_PARAMETER_VALUE`` is populated,
-      regardless of the parameter name (the original A5 check).
+    - ``HAS_KEY_DESIGN`` - at least one entry of the pipe-separated
+      ``DESIGN_KEY_PARAMETER_NAMES`` starts with one of the prefixes
+      expected for the item type. Entries only exist for parameters
+      whose value is populated (see ``_adr_design_derive``).
+    - ``HAS_ANY_DESIGN`` - ``DESIGN_KEY_PARAMETER_NAMES`` is non-empty,
+      i.e. at least one design parameter carries a value (the original
+      A5 check).
 
     Pass / fail matrix (rows with ``HAS_QUANTITY = 0`` always pass):
 
@@ -1254,8 +1262,8 @@ def check_adr_a5(df: pd.DataFrame) -> pd.Series:
     |     0      |       -        |       0        |    FAIL     |
     +------------+----------------+----------------+-------------+
 
-    The prefix match is starts-with so composite names such as
-    ``314.0,315.2,316.0-Diameter-Section-1`` resolve to ``314.0``.
+    The prefix match is starts-with per entry, so composite names such
+    as ``314.0,315.2,316.0-Diameter-Section-1`` resolve to ``314.0``.
     Schema-level missing column → all rows fail (same convention as the
     other custom rules).
     """
@@ -1272,25 +1280,27 @@ def check_adr_a5(df: pd.DataFrame) -> pd.Series:
         return pd.Series(True, index=df.index)
 
     item_type = df["ITEM_TYPE"].astype(object).astype(str).str.strip()
-    param_name = (
-        df["DESIGN_PARAMETER_NAME"].astype(object).astype(str).str.strip()
-    )
-    value_filled = _is_filled(df["DESIGN_PARAMETER_VALUE"])
+    names_col = df["DESIGN_KEY_PARAMETER_NAMES"]
+    has_any_design = _is_filled(names_col)
+    names = names_col.astype(object).astype(str).where(has_any_design, "")
 
     known_type = item_type.isin(_A5_KEY_DESIGN_PREFIX.keys())
-    prefix_ok = pd.Series(False, index=df.index)
+    has_key_design = pd.Series(False, index=df.index)
+    sep = re.escape(ADR_A5_NAME_SEPARATOR)
     for it, prefixes in _A5_KEY_DESIGN_PREFIX.items():
         it_mask = item_type == it
         if not it_mask.any():
             continue
-        name_match = pd.Series(False, index=df.index)
-        for pfx in prefixes:
-            name_match = name_match | param_name.str.startswith(pfx, na=False)
-        prefix_ok = prefix_ok | (it_mask & name_match)
+        # An entry matches when the prefix sits at the start of the string
+        # or right after a separator (optional whitespace tolerated).
+        alternatives = "|".join(re.escape(p) for p in prefixes)
+        pattern = rf"(?:^|{sep})\s*(?:{alternatives})"
+        name_match = names.str.contains(pattern, regex=True, na=False)
+        has_key_design = has_key_design | (it_mask & name_match)
 
     # Known types need the key parameter; unknown types keep the original
-    # any-populated-value check.
-    design_ok = value_filled & (prefix_ok | ~known_type)
+    # any-populated-parameter check.
+    design_ok = (known_type & has_key_design) | (~known_type & has_any_design)
     return (~has_quantity) | design_ok
 
 

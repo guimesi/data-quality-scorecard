@@ -19,7 +19,7 @@ later for cross-system analysis.
 """
 from __future__ import annotations
 
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import pandas as pd
 
@@ -251,14 +251,19 @@ def build_data_product(
         # so the primary row is not duplicated. Aggregation rules:
         # - numeric -> sum (totals)
         # - others -> first non-null
+        # - TableDef.column_aggregations overrides either default per column
+        #   (e.g. ADR design parameter names joined into one list).
         if df[table.join_key].duplicated().any():
             numeric_cols = df.select_dtypes(include="number").columns.tolist()
             other_cols = [c for c in df.columns if c not in numeric_cols and c != table.join_key]
-            agg: Dict[str, str] = {}
+            agg: Dict[str, Any] = {}
             for c in numeric_cols:
                 agg[c] = "sum"
             for c in other_cols:
                 agg[c] = "first"
+            for c, how in (table.column_aggregations or {}).items():
+                if c in agg:
+                    agg[c] = how
             df = df.groupby(table.join_key, as_index=False).agg(agg)
 
         result = result.merge(df, how="left", on=table.join_key)

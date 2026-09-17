@@ -217,7 +217,7 @@ flowchart LR
 
     DPB --> PFLT["Filter primary table on<br/>active domain's filter column<br/>(PLANVIEW_ID for Cost Estimate,<br/>PROJECT_CODE for Quality;<br/>no-op if list empty)"]
     PFLT --> JOIN["LEFT JOIN<br/>on join_key (ROW_ID)"]
-    JOIN --> AGG["1:N aggregation<br/>numeric → SUM<br/>others → first non-null"]
+    JOIN --> AGG["1:N aggregation<br/>numeric → SUM<br/>others → first non-null<br/>per-column overrides (column_aggregations)"]
     AGG --> PFX["prefix non-primary<br/>table columns"]
     PFX --> PROF["profiler.py<br/>(per-column metadata)"]
     PROF --> DP["DataProduct<br/>(DataFrame + ColumnProfiles)"]
