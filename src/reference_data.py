@@ -96,14 +96,14 @@ def _load_vws_gp_standard_share() -> Optional[pd.DataFrame]:
 
 def _load_acce_coa_master() -> Optional[pd.DataFrame]:
     """Resolve the ``ACCE_COA_MASTER`` reference dataset for the active
-    data source. Used by A1 to map the leading 3-digit COA group derived
+    data source. Used by DQ-ADR-1 to map the leading 3-digit COA group derived
     from ``COMPLETE_WBC`` to ``ISO_COR`` and ``SAB``.
 
     In the Snowflake era this table lived in a different database than
     the rest (``INGESTION_DB.GP_ADF_CSE``); the Databricks migration
     consolidated every table into the single configured namespace, so it
     now resolves like any other reference. Projects only the three
-    columns A1 needs.
+    columns DQ-ADR-1 needs.
 
     May raise the underlying connector error, callers
     (:func:`prefetch_reference_datasets`) capture and surface it as a
@@ -120,12 +120,12 @@ def _load_acce_coa_master() -> Optional[pd.DataFrame]:
 
 def _load_mfc() -> Optional[pd.DataFrame]:
     """Resolve the EMMA Market Analysis ``MFC`` reference dataset (the
-    ``mfc`` table) for the active data source. Used by A9 to validate
+    ``mfc`` table) for the active data source. Used by DQ-ADR-9 to validate
     ADR material factor codes and the factor applied to each estimate.
 
     The warehouse columns are camelCase (``code``, ``locationCode``,
     ``costUpdateReportingPeriod_name``, ``factorValue``); the query
-    aliases them to the canonical upper-case names A9 reads
+    aliases them to the canonical upper-case names DQ-ADR-9 reads
     (``CODE``, ``DESCRIPTION``, ``LOCATION_CODE``, ``PERIOD``,
     ``FACTOR_VALUE``) so the rule is independent of the source spelling.
 

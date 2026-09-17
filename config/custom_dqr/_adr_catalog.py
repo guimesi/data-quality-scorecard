@@ -65,7 +65,7 @@ from src.custom_dqr_engine import (
 
 ADR_RULES = [
     CustomRuleDef(
-        id="A1",
+        id="DQ-ADR-1",
         name="ISO Code of Account present (COR + SAB)",
         type="Completeness",
         description=(
@@ -75,7 +75,7 @@ ADR_RULES = [
             "valid ISO Code of Resource (``ISO_COR``) and a valid "
             "Standard Activity Breakdown (``SAB``) in the COA "
             "master. Without those codes, cost data cannot be "
-            "normalized via the EMMA factor - a blocking gap."
+            "normalized via the EMMA factor - a critical gap."
         ),
         notes=(
             "Row-level Completeness with a join to the "
@@ -95,12 +95,11 @@ ADR_RULES = [
             "silent."
         ),
         required_columns=dict(ADR_A1_REQUIRED_COLUMNS),
-        blocking=True,
         check=check_adr_a1,
         reference=dict(ADR_A1_REFERENCE),
     ),
     CustomRuleDef(
-        id="A2",
+        id="DQ-ADR-2",
         name="Location + estimate date present & valid",
         type="Completeness & Validity",
         description=(
@@ -120,12 +119,11 @@ ADR_RULES = [
             "correct CU period for EMMA normalization."
         ),
         required_columns=dict(ADR_A2_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a2,
         reference=dict(ADR_A2_REFERENCE),
     ),
     CustomRuleDef(
-        id="A3",
+        id="DQ-ADR-3",
         name="Statistical WBC-to-ISO mapping ratio",
         type="Statistical Outlier",
         description=(
@@ -153,7 +151,7 @@ ADR_RULES = [
             "suppress false positives from planning / "
             "structural-only mappings. Rows whose WBC does not "
             "resolve to a valid ``ISO_COR`` / ``SAB`` are PASS - "
-            "A1 already covers that completeness gap and A3 must "
+            "DQ-ADR-1 already covers that completeness gap and DQ-ADR-3 must "
             "not double-penalise. Eligible-mapping populations "
             f"below {ADR_A3_MIN_MAPPING_POPULATION} are NOT_APPLICABLE "
             "and pass. Default scope is global / dataset-wide; the "
@@ -164,7 +162,6 @@ ADR_RULES = [
             "silent."
         ),
         required_columns=dict(ADR_A3_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a3,
         reference=dict(ADR_A3_REFERENCE),
         select_options=[
@@ -201,7 +198,7 @@ ADR_RULES = [
                     "with naturally fine-grained WBCs is not dragged "
                     "down by peers that aggregate aggressively. "
                     "Requires `PLANVIEW_ID` to be a CDE; rows missing "
-                    "PLANVIEW_ID are treated as PASS (A2 already "
+                    "PLANVIEW_ID are treated as PASS (DQ-ADR-2 already "
                     "covers the missing-project linkage)."
                 ),
                 required_columns_when_enabled=dict(
@@ -212,7 +209,7 @@ ADR_RULES = [
         ],
     ),
     CustomRuleDef(
-        id="A4",
+        id="DQ-ADR-4",
         name="Core quantities populated & non-negative project totals",
         type="Completeness & Validity",
         description=(
@@ -231,7 +228,7 @@ ADR_RULES = [
         notes=(
             "Project-level rule with row-level verdict: every row "
             "of a project that fails inherits the FAIL (same "
-            "row-level / group-verdict pattern as E6 / A8). For "
+            "row-level / group-verdict pattern as E6 / DQ-ADR-8). For "
             "each ``PLANVIEW_ID`` the rule first determines which "
             "core quantity types are *expected* from the per-row "
             "scope classification (``ITEM_TYPE`` + "
@@ -252,11 +249,10 @@ ADR_RULES = [
             "including metric entries (e.g. EstimateTankage + m³)."
         ),
         required_columns=dict(ADR_A4_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a4,
     ),
     CustomRuleDef(
-        id="A5",
+        id="DQ-ADR-5",
         name="Key design details present when quantity exists",
         type="Consistency",
         description=(
@@ -300,11 +296,10 @@ ADR_RULES = [
             "quantity are out of scope and pass."
         ),
         required_columns=dict(ADR_A5_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a5,
     ),
     CustomRuleDef(
-        id="A6",
+        id="DQ-ADR-6",
         name="Construction hours present when quantity exists",
         type="Consistency",
         description=(
@@ -327,11 +322,10 @@ ADR_RULES = [
             "quantity passes; only quantity-without-hours fails."
         ),
         required_columns=dict(ADR_A6_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a6,
     ),
     CustomRuleDef(
-        id="A7",
+        id="DQ-ADR-7",
         name="Within-discipline quantity / hour ratio outlier",
         type="Statistical Outlier",
         description=(
@@ -368,7 +362,6 @@ ADR_RULES = [
             "- the rule identifies anomalies, not errors."
         ),
         required_columns=dict(ADR_A7_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a7,
         select_options=[
             _iqr_threshold_option(
@@ -413,8 +406,8 @@ ADR_RULES = [
                     "inside it as an outlier of itself. Rows whose "
                     "project-type cannot be resolved (missing "
                     "PLANVIEW_ID, unmatched PROJECT_ID, or null "
-                    "`E05_DEPARTMENT` / `BUSINESS`) are PASS - A1 / "
-                    "A2 already cover those gaps."
+                    "`E05_DEPARTMENT` / `BUSINESS`) are PASS - DQ-ADR-1 / "
+                    "DQ-ADR-2 already cover those gaps."
                 ),
                 required_columns_when_enabled=dict(
                     ADR_A7_SEGMENT_REQUIRED_COLUMNS
@@ -423,7 +416,7 @@ ADR_RULES = [
         ],
     ),
     CustomRuleDef(
-        id="A8",
+        id="DQ-ADR-8",
         name="Cross-discipline quantity ratios",
         type="Statistical Outlier",
         description=(
@@ -467,7 +460,6 @@ ADR_RULES = [
             "identifies statistical anomalies, not errors."
         ),
         required_columns=dict(ADR_A8_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a8,
         select_options=[
             _iqr_threshold_option(
@@ -500,7 +492,7 @@ ADR_RULES = [
                     "`(E05_DEPARTMENT, BUSINESS)` looked up from the "
                     "`VWS_GP_STANDARD_SHARE` reference via "
                     "`PLANVIEW_ID → PROJECT_ID` - the same lookup "
-                    "E6 / A7 use. For each ratio the IQR is "
+                    "E6 / DQ-ADR-7 use. For each ratio the IQR is "
                     "recomputed **within each segment**, so a "
                     "deepwater FPSO and an onshore refinery are no "
                     "longer pooled into the same baseline. Segments "
@@ -511,7 +503,7 @@ ADR_RULES = [
                     "project-type cannot be resolved (no associated "
                     "PLANVIEW_ID, unmatched PROJECT_ID, or null "
                     "`E05_DEPARTMENT` / `BUSINESS`) are PASS - "
-                    "A1 / A2 already cover those gaps."
+                    "DQ-ADR-1 / DQ-ADR-2 already cover those gaps."
                 ),
                 required_columns_when_enabled=dict(
                     ADR_A8_SEGMENT_REQUIRED_COLUMNS
@@ -520,7 +512,7 @@ ADR_RULES = [
         ],
     ),
     CustomRuleDef(
-        id="A9",
+        id="DQ-ADR-9",
         name="Base material factor validation (MFC vs EMMA)",
         type="Validity",
         description=(
@@ -561,7 +553,6 @@ ADR_RULES = [
             "when the ``MFC`` or Planview reference is unavailable."
         ),
         required_columns=dict(ADR_A9_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_adr_a9,
         reference=dict(ADR_A9_REFERENCE),
         select_options=[

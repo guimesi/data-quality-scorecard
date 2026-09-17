@@ -39,7 +39,7 @@ class ACCEAC8Params(TypedDict, total=False):
     segment_by_project_type: bool     # ACCE_AC8_SEGMENT_BY_PROJECT_TYPE_PARAM
 
 
-# ACCE rules reuse ADR primitives: AC1 mirrors A1's value-validation and
+# ACCE rules reuse ADR primitives: AC1 mirrors DQ-ADR-1's value-validation and
 # COA-master lookup.
 from src.custom_dqr._adr_rules import (
     _a1_value_valid,
@@ -95,7 +95,7 @@ ACCE_AC2_JOB_NO_PATTERN = r"[1-4]Q\d{2}(\s.*)?"
 # AC3: Statistical COA-to-ISO mapping ratio (ACCE).
 #
 # Mapping-quality statistical rule with row-level verdict. Mirrors ADR
-# A3 against the ACCE schema:
+# DQ-ADR-3 against the ACCE schema:
 #
 #   - ADR groups COMPLETE_WBC rows by SPLIT_PART(.,'.',1) → ICARUS_COA
 #     before computing COUNT(DISTINCT COMPLETE_WBC) per (ISO_COR, SAB)
@@ -105,19 +105,19 @@ ACCE_AC2_JOB_NO_PATTERN = r"[1-4]Q\d{2}(\s.*)?"
 #     because ACCE granularity is capped at ten 4-char codes per
 #     3-char ICARUS_COA group.
 #   - Materiality, P90 baseline, and minimum-population floor mirror
-#     A3. The percentile is recomputed from the data on every run
+#     DQ-ADR-3. The percentile is recomputed from the data on every run
 #     (no fixed benchmark). The materiality columns differ: ACCE
 #     uses ``COST_MH`` (sourced from ``MH`` on
 #     ``ACCE_ESTIMATECOSTRESULTS``) for construction hours and
 #     ``COST_TOTAL_COST`` for total cost. ADR uses
 #     ``COST_TOTAL_HOURS`` + ``COST_TOTAL_COST``.
-#   - The project-scope toggle present on A3 is *not* exposed by AC3
+#   - The project-scope toggle present on DQ-ADR-3 is *not* exposed by AC3
 #     per the rule spec - AC3 only ships the percentile threshold and
 #     the uniform-detection toggle.
 #   - Uniform detection on AC3 is gated by a *portfolio-wide
 #     proportion*: when ≥ ACCE_AC3_UNIFORM_THRESHOLD (default 80%) of
 #     eligible mappings have ratio == 1, every material 1:1 bucket
-#     fails. A3 flags every material 1:1 bucket unconditionally when
+#     fails. DQ-ADR-3 flags every material 1:1 bucket unconditionally when
 #     its toggle is on, which is a stricter signal. AC3's relaxed
 #     version reflects that ACCE COA codes are inherently coarser, so
 #     a small handful of legitimate 1:1 mappings is not by itself a
@@ -140,7 +140,7 @@ ACCE_AC3_REFERENCE = {
     "lookup_column": "ISO_COR / SAB",    # mappings derived from the join
 }
 
-# Statistical-threshold parameters. Same framing as A3 - percentile
+# Statistical-threshold parameters. Same framing as DQ-ADR-3 - percentile
 # baseline plus materiality filter to suppress structural-only
 # mappings.
 ACCE_AC3_PERCENTILE = 0.90
@@ -150,7 +150,7 @@ ACCE_AC3_MATERIALITY_USD = 100_000.0
 # small to call any mapping an outlier.
 ACCE_AC3_MIN_MAPPING_POPULATION = 10
 
-# Percentile-threshold customization - mirror of E3 / A3 selectbox.
+# Percentile-threshold customization - mirror of E3 / DQ-ADR-3 selectbox.
 # check_acce_ac3 reads ``params[ACCE_AC3_THRESHOLD_PARAM]`` and falls
 # back to ``ACCE_AC3_PERCENTILE`` (P90) when the param is absent.
 ACCE_AC3_THRESHOLD_PARAM = "threshold_percentile"
@@ -161,7 +161,7 @@ ACCE_AC3_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (0.99, "P99 - very strict"),
 )
 
-# Uniform 1:1 mapping detection. Unlike A3 (which flags every material
+# Uniform 1:1 mapping detection. Unlike DQ-ADR-3 (which flags every material
 # 1:1 bucket when its toggle is on), AC3's uniform check is gated by a
 # portfolio-wide proportion: when ≥ ACCE_AC3_UNIFORM_THRESHOLD of
 # eligible mappings have ratio == 1, every material 1:1 bucket fails.
@@ -357,7 +357,7 @@ _AC4_MODULE_DESC_PATTERNS = ("MODULE", "MODULAR")
 # normalization, the lists carry the canonical spellings the SQL spec
 # matches against (both the unicode ``M³`` and ASCII ``M3`` / ``YD3``
 # forms are listed where they appear in production extracts).
-# The steel and concrete sets are unit-system-neutral (mirrors ADR A4):
+# The steel and concrete sets are unit-system-neutral (mirrors ADR DQ-ADR-4):
 # they accept any physical measurement (imperial or metric) that
 # represents the discipline's quantity, not just the historically
 # predominant UOM.
@@ -469,13 +469,13 @@ ACCE_AC7_REQUIRED_COLUMNS = {
 ACCE_AC7_MILD_IQR_MULTIPLIER = 1.5
 ACCE_AC7_EXTREME_IQR_MULTIPLIER = 3.0
 # Segments with fewer than this many eligible rows are
-# NOT_APPLICABLE → every row in the segment passes. Mirrors A7.
+# NOT_APPLICABLE → every row in the segment passes. Mirrors DQ-ADR-7.
 ACCE_AC7_MIN_POPULATION = 10
 
 # IQR-multiplier customization - selectbox on the rule card. The
 # check reads ``params[ACCE_AC7_THRESHOLD_PARAM]`` and falls back to
 # :data:`ACCE_AC7_MILD_IQR_MULTIPLIER` (1.5×) when the param is
-# absent. Choices mirror A7 / A8 / E6 so the selectbox semantics stay
+# absent. Choices mirror DQ-ADR-7 / DQ-ADR-8 / E6 so the selectbox semantics stay
 # in lockstep across systems.
 ACCE_AC7_THRESHOLD_PARAM = "threshold_iqr_multiplier"
 ACCE_AC7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
@@ -484,7 +484,7 @@ ACCE_AC7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "3.0×IQR (extreme)"),
 )
 
-# Project-type segmentation toggle for AC7, mirrors the toggle A7
+# Project-type segmentation toggle for AC7, mirrors the toggle DQ-ADR-7
 # exposes against the ADR data product. When on, the per-segment IQR
 # baseline used to flag outliers is partitioned by the composite
 # ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
@@ -548,7 +548,7 @@ ACCE_AC8_REQUIRED_COLUMNS = {
     "Other Units": "QTY_OTHER_UNITS",
 }
 
-# IQR multipliers, same shape as A8. ``MILD`` is the FAIL boundary
+# IQR multipliers, same shape as DQ-ADR-8. ``MILD`` is the FAIL boundary
 # used by the Boolean check; ``EXTREME`` is documented for future
 # severity classification.
 ACCE_AC8_MILD_IQR_MULTIPLIER = 1.5
@@ -560,7 +560,7 @@ ACCE_AC8_MIN_POPULATION = 10
 # IQR-multiplier customization - selectbox on the rule card. The
 # check reads ``params[ACCE_AC8_THRESHOLD_PARAM]`` and falls back to
 # :data:`ACCE_AC8_MILD_IQR_MULTIPLIER` (1.5×) when the param is
-# absent. Choices in lockstep with A7 / A8 / E6 / AC7.
+# absent. Choices in lockstep with DQ-ADR-7 / DQ-ADR-8 / E6 / AC7.
 ACCE_AC8_THRESHOLD_PARAM = "threshold_iqr_multiplier"
 ACCE_AC8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (1.5, "1.5×IQR (mild) - recommended"),
@@ -568,7 +568,7 @@ ACCE_AC8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "3.0×IQR (extreme)"),
 )
 
-# Project-type segmentation toggle for AC8, mirrors the toggle A8
+# Project-type segmentation toggle for AC8, mirrors the toggle DQ-ADR-8
 # exposes against the ADR data product. When on, the cross-discipline
 # ratio population (one ratio value per ``COMPONENT_SOURCE``) is
 # partitioned by the composite ``(E05_DEPARTMENT, BUSINESS)`` tuple
@@ -690,7 +690,7 @@ _AC8_CATEGORY_SPECS: Tuple[Tuple[str, frozenset, frozenset], ...] = (
     ("EQUIPMENT_COUNT",   _AC8_EQUIPMENT_DESCRIPTIONS,  _AC8_COUNT_UOMS),
 )
 
-# Cross-discipline ratios evaluated per project, same shape as A8.
+# Cross-discipline ratios evaluated per project, same shape as DQ-ADR-8.
 # Each entry is ``ratio_name → (numerator_category, denominator_category)``.
 # Adding a new ratio is a one-line change here once the underlying
 # categories are produced by ``_classify_ac8_category_acce``.
@@ -720,7 +720,7 @@ def check_acce_ac1(df: pd.DataFrame) -> pd.Series:
     The master may carry multiple rows per ``ICARUS_COA`` (one per
     detailed sub-code); :func:`_resolve_coa_master_lookups` picks the
     best-available mapping (preferring valid over ``ERROR`` / ``NULL``
-    rows), same semantics as A1.
+    rows), same semantics as DQ-ADR-1.
 
     Raises :class:`CustomRuleNotEvaluated` when the reference dataset is
     unavailable, so the rule never silently passes when the join target
@@ -860,7 +860,7 @@ def check_acce_ac3(
     2. The optional uniform-1:1 detector is gated by a portfolio-wide
        proportion: when ≥ :data:`ACCE_AC3_UNIFORM_THRESHOLD` (default
        80 %) of eligible mappings have ratio == 1, every material 1:1
-       bucket fails. A3 flags every material 1:1 bucket unconditionally
+       bucket fails. DQ-ADR-3 flags every material 1:1 bucket unconditionally
        when its toggle is on, which is a stricter signal. AC3's wider
        gate reflects that ACCE COA codes are inherently coarser.
 
@@ -1233,7 +1233,7 @@ def check_acce_ac6(df: pd.DataFrame) -> pd.Series:
     - ``HAS_CONSTRUCTION_HOURS``  - ``COST_MH`` is strictly greater
       than zero. Null inputs are coerced to zero; negative
       aggregates do **not** count as hours present, so the
-      comparison is ``> 0`` (not ``!= 0``). Unlike A6, ACCE has no
+      comparison is ``> 0`` (not ``!= 0``). Unlike DQ-ADR-6, ACCE has no
       separate Design-Build hours column, the rule consults only
       ``COST_MH``.
 
@@ -1315,7 +1315,7 @@ def check_acce_ac7(
     False) extends the segment key with a composite
     ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
     ``VWS_GP_STANDARD_SHARE`` via ``PLANVIEW_ID → PROJECT_ID``
-    (mirrors the A7 toggle). With it on the IQR is recomputed within
+    (mirrors the DQ-ADR-7 toggle). With it on the IQR is recomputed within
     each ``(DESCRIPTION, QTY_UOM, E05_DEPARTMENT, BUSINESS)`` bucket so
     a deepwater FPSO is not pooled with an onshore refinery when
     judging within-discipline productivity. Segments below
@@ -1388,7 +1388,7 @@ def check_acce_ac7(
     if segmented:
         # Extend the segment key with the project-type tuple resolved
         # via PLANVIEW_ID. Rows whose project-type cannot be resolved
-        # become NOT_APPLICABLE → PASS, mirrors A7's segmented
+        # become NOT_APPLICABLE → PASS, mirrors DQ-ADR-7's segmented
         # convention.
         segment_lookup = _resolve_planview_segment_map(
             ACCE_AC7_SEGMENT_REFERENCE, "ACCE AC7"
@@ -1407,7 +1407,7 @@ def check_acce_ac7(
 
         # Pre-cleaning in ``_resolve_planview_segment_map`` guarantees
         # ``dept_seg.notna() ⟺ business_seg.notna()``; we AND both for
-        # clarity, matching the A7 implementation.
+        # clarity, matching the DQ-ADR-7 implementation.
         resolved = dept_seg.notna() & business_seg.notna()
         eligible = eligible & resolved
         if not eligible.any():
@@ -1523,7 +1523,7 @@ def check_acce_ac8(
     False) partitions the per-ratio IQR baseline by the composite
     ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
     ``VWS_GP_STANDARD_SHARE`` via ``PLANVIEW_ID → PROJECT_ID``
-    (mirrors the A8 toggle). With it on, each project is tagged with
+    (mirrors the DQ-ADR-8 toggle). With it on, each project is tagged with
     its archetype from the Planview reference and the IQR for each
     ratio is recomputed within each segment, so a deepwater FPSO is
     not pooled with an onshore refinery. Per-segment populations

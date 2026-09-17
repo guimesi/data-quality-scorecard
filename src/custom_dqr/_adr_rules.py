@@ -1,11 +1,11 @@
 # pyright: reportArgumentType=false, reportOperatorIssue=false
 # pyright: reportCallIssue=false, reportReturnType=false
 # pyright: reportAttributeAccessIssue=false
-"""ADR custom DQR rule checks (A1-A8).
+"""ADR custom DQR rule checks (DQ-ADR-1..8).
 
 ADR rules consume the denormalized data product built by joining the ADR
-table to its dependencies. Some are referential (A1 / A2 → ACCE_COA_MASTER),
-some statistical (A3 / A7 / A8 / mapping outliers), others completeness or
+table to its dependencies. Some are referential (DQ-ADR-1 / DQ-ADR-2 → ACCE_COA_MASTER),
+some statistical (DQ-ADR-3 / DQ-ADR-7 / DQ-ADR-8 / mapping outliers), others completeness or
 consistency. Each callable returns ``(df) -> pd.Series[bool]``; True means
 the row passes.
 
@@ -36,27 +36,27 @@ from src.custom_dqr._shared import (
 
 
 class ADRA3Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ADR A3 (mirrors EPT E3)."""
+    """Step 4.2 -> assignment.params shape for ADR DQ-ADR-3 (mirrors EPT E3)."""
     threshold_percentile: float       # ADR_A3_THRESHOLD_PARAM
     project_scoped: bool              # ADR_A3_PROJECT_SCOPED_PARAM
     detect_uniform_mapping: bool      # ADR_A3_DETECT_UNIFORM_MAPPING_PARAM
 
 
 class ADRA7Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ADR A7."""
+    """Step 4.2 -> assignment.params shape for ADR DQ-ADR-7."""
     threshold_iqr_multiplier: float   # ADR_A7_THRESHOLD_PARAM
     segment_by_project_type: bool     # ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM
 
 
 class ADRA9Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ADR A9."""
+    """Step 4.2 -> assignment.params shape for ADR DQ-ADR-9."""
     tolerance_pct: float              # ADR_A9_TOLERANCE_PARAM
     period_policy: str                # ADR_A9_PERIOD_POLICY_PARAM
     fail_without_reference: bool      # ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM
 
 
 class ADRA8Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ADR A8."""
+    """Step 4.2 -> assignment.params shape for ADR DQ-ADR-8."""
     threshold_iqr_multiplier: float   # ADR_A8_THRESHOLD_PARAM
     segment_by_project_type: bool     # ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM
 
@@ -89,22 +89,22 @@ ADR_A2_REFERENCE = {
     "lookup_column": "COUNTRY",          # populated value to check post-join
 }
 
-# A2 Validity: COST_UPDATE is a fiscal quarter-year period, NOT a calendar
+# DQ-ADR-2 Validity: COST_UPDATE is a fiscal quarter-year period, NOT a calendar
 # date. Production values look like "2Q2019", "4Q2015", "3Q2022": a quarter
 # digit 1-4, the literal "Q", then a 4-digit year. Case-insensitive on the
-# "Q". A populated value that does not match this shape fails A2 on Validity.
+# "Q". A populated value that does not match this shape fails DQ-ADR-2 on Validity.
 ADR_A2_DATE_PATTERN = r"[1-4]Q\d{4}"
 
-# A3: Statistical WBC-to-ISO mapping ratio (ADR).
+# DQ-ADR-3: Statistical WBC-to-ISO mapping ratio (ADR).
 #
 # Mapping-quality statistical rule with row-level verdict. For each
 # valid ISO mapping (resolved via the same ``ACCE_COA_MASTER`` lookup
-# A1 uses) the rule counts distinct ``COMPLETE_WBC`` values rolling
+# DQ-ADR-1 uses) the rule counts distinct ``COMPLETE_WBC`` values rolling
 # through the bucket, and flags mappings whose ratio exceeds the
 # global ``P90`` and meets the materiality bar
 # (``SUM(TOTAL_HOURS) > 0`` OR ``SUM(TOTAL_COST) >= materiality``).
 # Every row of a flagged mapping inherits the FAIL, same row-level /
-# group-verdict pattern as E3 / E6 / A8.
+# group-verdict pattern as E3 / E6 / DQ-ADR-8.
 #
 # Source columns after prefixing on the denormalized data product:
 #   - ``COMPLETE_WBC``       - pass-through from the primary item table.
@@ -136,7 +136,7 @@ ADR_A3_MATERIALITY_USD = 100_000.0
 # small to call any mapping an outlier.
 ADR_A3_MIN_MAPPING_POPULATION = 10
 
-# Percentile-threshold customization for A3, mirrors EPT E3's selectbox.
+# Percentile-threshold customization for DQ-ADR-3, mirrors EPT E3's selectbox.
 # check_adr_a3 reads ``params[ADR_A3_THRESHOLD_PARAM]`` and falls back to
 # ``ADR_A3_PERCENTILE`` (P90) when the param is absent.
 ADR_A3_THRESHOLD_PARAM = "threshold_percentile"
@@ -147,18 +147,18 @@ ADR_A3_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (0.99, "P99 - very strict"),
 )
 
-# Project-scope toggle - A3 mirror of EPT_E3_PROJECT_SCOPED_PARAM. When on,
+# Project-scope toggle - DQ-ADR-3 mirror of EPT_E3_PROJECT_SCOPED_PARAM. When on,
 # the percentile baseline is recomputed *within each PLANVIEW_ID partition*
 # instead of globally, so a project with naturally fine-grained WBCs is not
 # dragged down by peers that aggregate aggressively. The group key becomes
 # ``(PLANVIEW_ID, ISO_COR, SAB)`` and rows lacking PLANVIEW_ID are treated
-# as PASS (A2's territory).
+# as PASS (DQ-ADR-2's territory).
 ADR_A3_PROJECT_SCOPED_PARAM = "project_scoped"
 ADR_A3_PROJECT_SCOPED_REQUIRED_COLUMNS = {
     "Project Key": "PLANVIEW_ID",
 }
 
-# Uniform 1:1 mapping detection - A3 mirror of EPT_E3_DETECT_UNIFORM_MAPPING_PARAM.
+# Uniform 1:1 mapping detection - DQ-ADR-3 mirror of EPT_E3_DETECT_UNIFORM_MAPPING_PARAM.
 # When on, after the regular percentile fail every *material* (ISO_COR, SAB)
 # bucket whose distinct-WBC ratio equals 1 also fails, typically a sign
 # that ``COMPLETE_WBC`` codes are being copied 1:1 into the ISO bucket
@@ -166,7 +166,7 @@ ADR_A3_PROJECT_SCOPED_REQUIRED_COLUMNS = {
 ADR_A3_DETECT_UNIFORM_MAPPING_PARAM = "detect_uniform_mapping"
 
 
-# A4: Core quantities populated & non-negative project totals.
+# DQ-ADR-4: Core quantities populated & non-negative project totals.
 #
 # Project-level Completeness + Validity rule with row-level verdict. For
 # each ``PLANVIEW_ID`` the rule:
@@ -178,7 +178,7 @@ ADR_A3_DETECT_UNIFORM_MAPPING_PARAM = "detect_uniform_mapping"
 #   4. fails the project iff its total ``QTY_QUANTITY`` is negative
 #      (row-level negatives are allowed; only the project sum is checked).
 # Every row of a failing project inherits the FAIL, same row-level /
-# group-verdict pattern as E6 / A8.
+# group-verdict pattern as E6 / DQ-ADR-8.
 #
 # Source columns after prefixing on the denormalized data product:
 #   - ``PLANVIEW_ID``       - pass-through, the project key.
@@ -194,8 +194,8 @@ ADR_A4_REQUIRED_COLUMNS = {
     "Quantity UOM": "QTY_UOM",
 }
 
-# Closed list of piping ITEM_TYPEs. A4's piping classifier is *stricter*
-# than A8's (which uses a substring match against "Piping" / "Pipe") -
+# Closed list of piping ITEM_TYPEs. DQ-ADR-4's piping classifier is *stricter*
+# than DQ-ADR-8's (which uses a substring match against "Piping" / "Pipe") -
 # the spec lists three explicit types.
 _A4_PIPING_ITEM_TYPES = frozenset({
     "EstimateAbovegroundInstrumentPiping",
@@ -204,7 +204,7 @@ _A4_PIPING_ITEM_TYPES = frozenset({
 })
 
 # Allow-list of (ITEM_TYPE, UOM_lowercased) pairs that count as
-# EQUIPMENT_COUNT. A4 is intentionally conservative - a generic
+# EQUIPMENT_COUNT. DQ-ADR-4 is intentionally conservative - a generic
 # ``EstimatePump + EA`` does not count; only the specific labels seen
 # in production are accepted. Reproduces the spec §8.6 list verbatim.
 _A4_EQUIPMENT_PAIRS = frozenset({
@@ -229,7 +229,7 @@ _A4_EQUIPMENT_PAIRS = frozenset({
 _A4_EQUIPMENT_ITEM_TYPES = frozenset(t for (t, _) in _A4_EQUIPMENT_PAIRS)
 
 # Instrument-count UOMs. Matched against the lowercased UOM. Mirrors
-# spec §8.5 (more compact than A8's TRANSMITTER_COUNT set, which
+# spec §8.5 (more compact than DQ-ADR-8's TRANSMITTER_COUNT set, which
 # overlaps but doesn't include the singular "transmitter" label).
 _A4_TRANSMITTER_UOMS = frozenset({
     "transmitter",
@@ -252,8 +252,8 @@ _A4_MODULE_UOMS = frozenset({
     "module", "modules", "each", "ea", "unit", "units",
 })
 
-# Length / volume / weight / area UOMs used by A4's classifiers. Reuses the
-# A8 alias map (defined further down) so ``CY`` ↔ ``yd³`` etc.
+# Length / volume / weight / area UOMs used by DQ-ADR-4's classifiers. Reuses the
+# DQ-ADR-8 alias map (defined further down) so ``CY`` ↔ ``yd³`` etc.
 # The steel and concrete sets are unit-system-neutral: they accept any
 # physical measurement (imperial or metric) that represents the
 # discipline's quantity, not just the historically predominant UOM.
@@ -266,7 +266,7 @@ _A4_STEEL_UOMS = _A4_WEIGHT_UOMS | _A4_LENGTH_UOMS | _A4_AREA_UOMS
 # Concrete: volume (original) + weight + area (metric fix).
 _A4_CONCRETE_UOMS = _A4_VOLUME_UOMS | _A4_WEIGHT_UOMS | _A4_AREA_UOMS
 
-# A5: Key design details present when quantity exists.
+# DQ-ADR-5: Key design details present when quantity exists.
 #
 # Operates on the denormalized ADR data product (built by
 # ``src.data_product_builder.build_data_product``). ``ADR_DIM_ESTIMATE-
@@ -283,7 +283,7 @@ _A4_CONCRETE_UOMS = _A4_VOLUME_UOMS | _A4_WEIGHT_UOMS | _A4_AREA_UOMS
 # The rule is type-aware: for each ``ITEM_TYPE`` with a known ACCE COA
 # prefix mapping, at least one populated parameter name must start with
 # the expected prefix. Item types not in the mapping fall back to "any
-# populated design parameter" (the original A5 behaviour).
+# populated design parameter" (the original DQ-ADR-5 behaviour).
 #
 # Source columns on the denormalized data product:
 #   - ``QTY_QUANTITY``               - SUM of QUANTITY for the ROW_ID.
@@ -339,7 +339,7 @@ _A5_KEY_DESIGN_PREFIX: Dict[str, Tuple[str, ...]] = {
     "EstimateGasTurbine": ("305.0",),
 }
 
-# A6: Construction hours present when quantity exists.
+# DQ-ADR-6: Construction hours present when quantity exists.
 #
 # Operates on the denormalized ADR data product. The hours columns live on
 # ``ADR_FACT_ESTIMATECOSTRESULTS`` (1:N child of the item record), so the
@@ -354,7 +354,7 @@ ADR_A6_REQUIRED_COLUMNS = {
     "Construction Hours (DB)": "COST_DB_TOTAL_HOURS",
 }
 
-# A7: Within-discipline quantity / hour ratio outlier detection.
+# DQ-ADR-7: Within-discipline quantity / hour ratio outlier detection.
 #
 # Per-row eligibility: ``QTY_QUANTITY > 0`` and ``COST_TOTAL_HOURS > 0``
 # and ``ITEM_TYPE`` / ``QTY_UOM`` populated. Eligible rows compute
@@ -387,7 +387,7 @@ ADR_A7_EXTREME_IQR_MULTIPLIER = 3.0
 # to define an outlier reliably.
 ADR_A7_MIN_POPULATION = 10
 
-# IQR-multiplier threshold customization for A7. Step 4.2 UI exposes the
+# IQR-multiplier threshold customization for DQ-ADR-7. Step 4.2 UI exposes the
 # choices below as a selectbox; check_adr_a7 reads
 # ``params[ADR_A7_THRESHOLD_PARAM]`` and falls back to
 # ``ADR_A7_MILD_IQR_MULTIPLIER`` (1.5×) when the param is absent.
@@ -398,7 +398,7 @@ ADR_A7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "Extreme (3.0×IQR) - lenient"),
 )
 
-# Project-type segmentation toggle for A7, mirrors the E6 toggle. When on,
+# Project-type segmentation toggle for DQ-ADR-7, mirrors the E6 toggle. When on,
 # the (ITEM_TYPE, QTY_UOM) segment key is extended with a composite
 # ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from the Planview reference
 # (``VWS_GP_STANDARD_SHARE``) via ``PLANVIEW_ID → PROJECT_ID``. The IQR is
@@ -409,7 +409,7 @@ ADR_A7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
 # the user opts in. Rows whose segment cannot be resolved (missing
 # PLANVIEW_ID, unmatched PROJECT_ID, null/blank E05_DEPARTMENT / BUSINESS)
 # are NOT_APPLICABLE → PASS so the toggle never double-penalises the
-# referential-integrity gap A2 / blocking A1 already cover.
+# referential-integrity gap DQ-ADR-2 / DQ-ADR-1 already cover.
 ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM = "segment_by_project_type"
 ADR_A7_SEGMENT_REFERENCE = {
     "reference_dataset": "VWS_GP_STANDARD_SHARE",
@@ -425,7 +425,7 @@ ADR_A7_SEGMENT_REQUIRED_COLUMNS = {
     "Project Key": "PLANVIEW_ID",
 }
 
-# A8: Cross-discipline quantity ratios.
+# DQ-ADR-8: Cross-discipline quantity ratios.
 #
 # Project-level statistical rule with row-level verdict. Each project
 # (``ROOT_ITEM_NAME``) aggregates positive quantities by discipline
@@ -452,10 +452,10 @@ ADR_A8_EXTREME_IQR_MULTIPLIER = 3.0
 # Minimum number of projects with a calculable ratio required before
 # IQR thresholds are derived for that ratio. Below this the ratio is
 # NOT_APPLICABLE for every project - too small a population to define
-# an outlier reliably (mirrors A7 / E6 conventions).
+# an outlier reliably (mirrors DQ-ADR-7 / E6 conventions).
 ADR_A8_MIN_POPULATION = 10
 
-# IQR-multiplier threshold customization for A8. Step 4.2 UI exposes the
+# IQR-multiplier threshold customization for DQ-ADR-8. Step 4.2 UI exposes the
 # choices below as a selectbox; check_adr_a8 reads
 # ``params[ADR_A8_THRESHOLD_PARAM]`` and falls back to
 # ``ADR_A8_MILD_IQR_MULTIPLIER`` (1.5×) when the param is absent.
@@ -466,7 +466,7 @@ ADR_A8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "Extreme (3.0×IQR) - lenient"),
 )
 
-# Project-type segmentation toggle for A8, mirrors the E6 / A7 toggle.
+# Project-type segmentation toggle for DQ-ADR-8, mirrors the E6 / DQ-ADR-7 toggle.
 # When on, the cross-discipline ratio population (one ratio value per
 # ``ROOT_ITEM_NAME``) is partitioned by the composite
 # ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
@@ -478,7 +478,7 @@ ADR_A8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
 # opts in. Projects whose segment cannot be resolved (no associated
 # PLANVIEW_ID, unmatched PROJECT_ID, null/blank E05_DEPARTMENT / BUSINESS)
 # are NOT_APPLICABLE → PASS so the toggle never double-penalises the
-# referential-integrity gap A1 / A2 already cover.
+# referential-integrity gap DQ-ADR-1 / DQ-ADR-2 already cover.
 ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM = "segment_by_project_type"
 ADR_A8_SEGMENT_REFERENCE = {
     "reference_dataset": "VWS_GP_STANDARD_SHARE",
@@ -495,7 +495,7 @@ ADR_A8_SEGMENT_REQUIRED_COLUMNS = {
 }
 
 
-# A9: Base material factor validation (MFC vs EMMA Market Analysis).
+# DQ-ADR-9: Base material factor validation (MFC vs EMMA Market Analysis).
 #
 # Validity rule at the ROW_ID grain. ADR cost results carry two *material
 # factor codes* - ``BASE_MATERIAL_MFC`` and ``VENDOR_SHOP_FAB_MFC`` (e.g.
@@ -552,7 +552,7 @@ ADR_A9_REFERENCE = {
 ADR_A9_MFC_COLUMNS: Tuple[str, ...] = (
     "CODE", "LOCATION_CODE", "PERIOD", "FACTOR_VALUE",
 )
-# Location resolution reuses the A2 Planview join.
+# Location resolution reuses the DQ-ADR-2 Planview join.
 ADR_A9_LOCATION_REFERENCE = {
     "reference_dataset": "VWS_GP_STANDARD_SHARE",
     "source_column": "PLANVIEW_ID",
@@ -646,7 +646,7 @@ _A8_EQUIPMENT_EXCLUDED_UOMS = frozenset({
     "nozzles", "manways", "tubes", "trays",
     "shells", "burners", "supports", "baffles",
 })
-# ITEM_TYPE values that count as "major equipment" for A8's
+# ITEM_TYPE values that count as "major equipment" for DQ-ADR-8's
 # EQUIPMENT_COUNT category. Mirrors the production "Estimate*" labels
 # enumerated in the rule spec §9.2.
 _A8_EQUIPMENT_ITEM_TYPES = frozenset({
@@ -697,7 +697,7 @@ _A8_RATIOS: Dict[str, Tuple[str, str]] = {
 
 def _classify_a8_category(item_type: object, qty_uom: object) -> object:
     """Classify a single (``ITEM_TYPE``, ``QTY_UOM``) pair into one of
-    A8's six discipline categories, or ``None`` when the row is not
+    DQ-ADR-8's six discipline categories, or ``None`` when the row is not
     eligible for any ratio.
 
     Categories are checked in priority order so overlapping name patterns
@@ -765,8 +765,8 @@ def _a1_value_valid(s: pd.Series) -> pd.Series:
 def _resolve_coa_master_lookups(
     reference_df: pd.DataFrame,
 ) -> Tuple[pd.Series, pd.Series]:
-    """Build the per-``ICARUS_COA`` ``(ISO_COR, SAB)`` lookups used by A1
-    and A3.
+    """Build the per-``ICARUS_COA`` ``(ISO_COR, SAB)`` lookups used by DQ-ADR-1
+    and DQ-ADR-3.
 
     The COA master may carry several rows per ``ICARUS_COA`` (one per
     detailed sub-code). The two lookups mirror the SQL spec's
@@ -807,7 +807,7 @@ def _resolve_coa_master_lookups(
 
 
 def check_adr_a1(df: pd.DataFrame) -> pd.Series:
-    """A1: ISO Code of Account Present (COR + SAB) for ADR.
+    """DQ-ADR-1: ISO Code of Account Present (COR + SAB) for ADR.
 
     Each ADR row carries a Work Breakdown Code in ``COMPLETE_WBC``. The
     rule extracts the leading dot-separated segment (the ICARUS Code of
@@ -845,7 +845,7 @@ def check_adr_a1(df: pd.DataFrame) -> pd.Series:
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ADR A1: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"ADR DQ-ADR-1: '{ref_name}' reference dataset is unavailable{detail}; "
             "ISO_COR / SAB linkage cannot be validated."
         )
 
@@ -875,7 +875,7 @@ def check_adr_a1(df: pd.DataFrame) -> pd.Series:
 
 
 def check_adr_a2(df: pd.DataFrame) -> pd.Series:
-    """A2: Location + Estimate Date Present & Valid (ADR).
+    """DQ-ADR-2: Location + Estimate Date Present & Valid (ADR).
 
     Mirrors EPT E2 against the ADR data product. Row passes when *all* hold:
     - ``COST_UPDATE`` (estimate basis date, in ADR) is non-null/non-blank
@@ -906,7 +906,7 @@ def check_adr_a2(df: pd.DataFrame) -> pd.Series:
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ADR A2: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"ADR DQ-ADR-2: '{ref_name}' reference dataset is unavailable{detail}; "
             "COUNTRY linkage cannot be validated."
         )
 
@@ -946,11 +946,11 @@ def check_adr_a2(df: pd.DataFrame) -> pd.Series:
 def check_adr_a3(
     df: pd.DataFrame, params: ADRA3Params | None = None
 ) -> pd.Series:
-    """A3: Statistical WBC-to-ISO mapping ratio (ADR).
+    """DQ-ADR-3: Statistical WBC-to-ISO mapping ratio (ADR).
 
     Mapping-quality statistical rule with row-level verdict. For each
     row the rule resolves ``ISO_COR`` and ``SAB`` from the COA master
-    (same lookup as A1). Eligible rows - ``COMPLETE_WBC`` filled AND a
+    (same lookup as DQ-ADR-1). Eligible rows - ``COMPLETE_WBC`` filled AND a
     valid ISO mapping - are grouped by ``(ISO_COR, SAB)`` and the
     metric ``WBC_TO_ISO_RATIO = COUNT(DISTINCT COMPLETE_WBC)`` is
     computed per bucket.
@@ -962,14 +962,14 @@ def check_adr_a3(
     failing bucket inherits the FAIL.
 
     Rows whose WBC does not resolve to a valid ISO mapping are PASS -
-    A1 already covers the WBC / COR / SAB completeness gap, and A3
+    DQ-ADR-1 already covers the WBC / COR / SAB completeness gap, and DQ-ADR-3
     must not double-penalise the same row.
 
     NOT_APPLICABLE → PASS for:
 
-    - WBC missing or unmapped - A1's territory.
+    - WBC missing or unmapped - DQ-ADR-1's territory.
     - Resolved ``ISO_COR`` / ``SAB`` invalid (null / blank / `ERROR` /
-      `N/A`) - A1's territory.
+      `N/A`) - DQ-ADR-1's territory.
     - Eligible-mapping population below
       :data:`ADR_A3_MIN_MAPPING_POPULATION` - too small to derive a P90.
     - Bucket not material.
@@ -984,7 +984,7 @@ def check_adr_a3(
       each ``PLANVIEW_ID`` partition. Every project is therefore judged
       against its own peers, which is the right framing when projects
       differ in maturity / WBC discipline. Rows lacking ``PLANVIEW_ID``
-      are treated as PASS (A2 already covers the missing-project
+      are treated as PASS (DQ-ADR-2 already covers the missing-project
       linkage).
 
     ``params[ADR_A3_THRESHOLD_PARAM]`` (float in (0, 1], default
@@ -1026,7 +1026,7 @@ def check_adr_a3(
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ADR A3: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"ADR DQ-ADR-3: '{ref_name}' reference dataset is unavailable{detail}; "
             "ISO_COR / SAB cannot be resolved."
         )
 
@@ -1054,7 +1054,7 @@ def check_adr_a3(
     )
     if project_scoped:
         # In project scope, rows lacking PLANVIEW_ID can't be assigned to a
-        # project; they pass A3 (A2 already covers the missing-project gap)
+        # project; they pass DQ-ADR-3 (DQ-ADR-2 already covers the missing-project gap)
         # mirroring E3's project-scope handling.
         has_valid_mapping &= _is_filled(df["PLANVIEW_ID"])
     if not has_valid_mapping.any():
@@ -1155,7 +1155,7 @@ def check_adr_a3(
 
 
 def _classify_a4_scope(item_type: object, item_description: object) -> set:
-    """Return the set of A4 core quantity types implied by an item's
+    """Return the set of DQ-ADR-4 core quantity types implied by an item's
     ``ITEM_TYPE`` and ``ITEM_DESCRIPTION`` *alone*, i.e. before
     looking at QTY_UOM or QUANTITY. Used to compute the project-level
     ``EXPECTS_*`` flags."""
@@ -1189,7 +1189,7 @@ def _classify_a4_quantity(
     item_type: object, qty_uom: object, item_description: object
 ) -> object:
     """Classify a single (``ITEM_TYPE``, ``QTY_UOM``, ``ITEM_DESCRIPTION``)
-    triple into one of A4's seven core quantity types, or ``None`` when
+    triple into one of DQ-ADR-4's seven core quantity types, or ``None`` when
     the row does not satisfy any of the documented patterns. Called only
     for rows whose quantity is positive (caller checks).
     """
@@ -1238,7 +1238,7 @@ def _classify_a4_quantity(
 
 
 def check_adr_a4(df: pd.DataFrame) -> pd.Series:
-    """A4: Core quantities populated (ADR).
+    """DQ-ADR-4: Core quantities populated (ADR).
 
     Project-level Completeness rule with row-level verdict. For each
     ``PLANVIEW_ID`` the rule:
@@ -1366,7 +1366,7 @@ def check_adr_a4(df: pd.DataFrame) -> pd.Series:
 
 
 def check_adr_a5(df: pd.DataFrame) -> pd.Series:
-    """A5: Key design details present when quantity exists (ADR).
+    """DQ-ADR-5: Key design details present when quantity exists (ADR).
 
     Type-aware Consistency rule evaluated at the ``ROW_ID`` grain. For
     each estimate item the rule derives:
@@ -1380,7 +1380,7 @@ def check_adr_a5(df: pd.DataFrame) -> pd.Series:
       whose value is populated (see ``_adr_design_derive``).
     - ``HAS_ANY_DESIGN`` - ``DESIGN_KEY_PARAMETER_NAMES`` is non-empty,
       i.e. at least one design parameter carries a value (the original
-      A5 check).
+      DQ-ADR-5 check).
 
     Pass / fail matrix (rows with ``HAS_QUANTITY = 0`` always pass):
 
@@ -1436,13 +1436,13 @@ def check_adr_a5(df: pd.DataFrame) -> pd.Series:
 
 
 def check_adr_a6(df: pd.DataFrame) -> pd.Series:
-    """A6: Construction hours present when quantity exists (ADR).
+    """DQ-ADR-6: Construction hours present when quantity exists (ADR).
 
     For each estimate item (one row per ``ROW_ID`` in the denormalized data
     product) the rule checks two derived flags:
 
     - ``HAS_QUANTITY``, the aggregated ``QTY_QUANTITY`` is
-      non-null and not equal to zero (same definition as A5).
+      non-null and not equal to zero (same definition as DQ-ADR-5).
     - ``HAS_CONSTRUCTION_HOURS``  - at least one of the two hours
       aggregates (``COST_TOTAL_HOURS``, ``COST_DB_TOTAL_HOURS``) is
       strictly greater than zero. Null inputs are coerced to zero;
@@ -1488,7 +1488,7 @@ def check_adr_a6(df: pd.DataFrame) -> pd.Series:
 def check_adr_a7(
     df: pd.DataFrame, params: ADRA7Params | None = None
 ) -> pd.Series:
-    """A7: Within-discipline quantity / hour ratio outlier detection.
+    """DQ-ADR-7: Within-discipline quantity / hour ratio outlier detection.
 
     Statistical rule with row-level verdict. Eligible rows (``QTY_QUANTITY > 0``
     and ``COST_TOTAL_HOURS > 0`` with both ``ITEM_TYPE`` and ``QTY_UOM``
@@ -1526,12 +1526,12 @@ def check_adr_a7(
     :data:`ADR_A7_MIN_POPULATION` remain NOT_APPLICABLE → PASS. Rows
     whose segment cannot be resolved (missing PLANVIEW_ID, unmatched
     PROJECT_ID, or null/blank ``E05_DEPARTMENT`` / ``BUSINESS``) are also
-    NOT_APPLICABLE → PASS - A1 / A2 already cover the referential gap.
+    NOT_APPLICABLE → PASS - DQ-ADR-1 / DQ-ADR-2 already cover the referential gap.
     Raises :class:`CustomRuleNotEvaluated` when the toggle is on and the
     reference dataset is unavailable.
 
     Schema-level missing columns make every row fail, mirroring the
-    convention used by E1 / E3 / E6 / A5 / A6.
+    convention used by E1 / E3 / E6 / DQ-ADR-5 / DQ-ADR-6.
     """
     p = params or {}
     iqr_multiplier = _coerce_threshold(
@@ -1593,7 +1593,7 @@ def check_adr_a7(
         # the ``notna()`` mask, no per-row pandas allocations, no
         # per-row ``_is_filled`` rebuilds.
         segment_lookup = _resolve_planview_segment_map(
-            ADR_A7_SEGMENT_REFERENCE, "ADR A7"
+            ADR_A7_SEGMENT_REFERENCE, "ADR DQ-ADR-7"
         )
         dept_lookup = {k: v[0] for k, v in segment_lookup.items()}
         business_lookup = {k: v[1] for k, v in segment_lookup.items()}
@@ -1664,7 +1664,7 @@ def check_adr_a7(
 def check_adr_a8(
     df: pd.DataFrame, params: ADRA8Params | None = None
 ) -> pd.Series:
-    """A8: Cross-discipline quantity ratios (ADR).
+    """DQ-ADR-8: Cross-discipline quantity ratios (ADR).
 
     Project-level statistical rule with row-level verdict. For each
     ``ROOT_ITEM_NAME`` (the project / scope key) the rule classifies
@@ -1705,7 +1705,7 @@ def check_adr_a8(
     False) partitions the per-ratio IQR baseline by the composite
     ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
     ``VWS_GP_STANDARD_SHARE`` via ``PLANVIEW_ID → PROJECT_ID``, mirrors
-    the E6 / A7 toggle. With it on, each project is tagged with its
+    the E6 / DQ-ADR-7 toggle. With it on, each project is tagged with its
     archetype from the Planview reference and the IQR for each ratio is
     recomputed within each segment, so a deepwater FPSO is not pooled
     with an onshore refinery. Per-segment populations below
@@ -1713,7 +1713,7 @@ def check_adr_a8(
     Projects whose segment cannot be resolved (no associated
     PLANVIEW_ID, unmatched PROJECT_ID, or null/blank
     ``E05_DEPARTMENT`` / ``BUSINESS``) are also NOT_APPLICABLE → PASS
-    - A1 / A2 already cover those gaps. Raises
+    - DQ-ADR-1 / DQ-ADR-2 already cover those gaps. Raises
     :class:`CustomRuleNotEvaluated` when the toggle is on and the
     reference dataset is unavailable.
 
@@ -1798,13 +1798,13 @@ def check_adr_a8(
     proj_segment: Dict[str, Tuple[str, str]] = {}
     if segmented:
         segment_lookup = _resolve_planview_segment_map(
-            ADR_A8_SEGMENT_REFERENCE, "ADR A8"
+            ADR_A8_SEGMENT_REFERENCE, "ADR DQ-ADR-8"
         )
         # Pick the first non-blank PLANVIEW_ID per ROOT_ITEM_NAME. A
         # project should normally have a single PLANVIEW_ID across all
         # its rows, but if there are stragglers we still take the first
-        # populated value - A1 / A2 already cover the missing-PLANVIEW
-        # completeness gap, so A8 only needs *some* anchor to resolve
+        # populated value - DQ-ADR-1 / DQ-ADR-2 already cover the missing-PLANVIEW
+        # completeness gap, so DQ-ADR-8 only needs *some* anchor to resolve
         # the archetype.
         pv_series = df["PLANVIEW_ID"]
         pv_filled = _is_filled(pv_series)
@@ -1893,7 +1893,7 @@ def check_adr_a8(
 
 
 # =============================================================================
-# A9 helpers
+# DQ-ADR-9 helpers
 # =============================================================================
 
 def _a9_country_to_iso2(value: object) -> Optional[str]:
@@ -1954,14 +1954,14 @@ def _a9_load_references() -> Tuple[pd.DataFrame, Dict[str, Optional[str]]]:
         cached_error = get_reference_dataset_error(mfc_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ADR A9: '{mfc_name}' reference dataset is unavailable{detail}; "
+            f"ADR DQ-ADR-9: '{mfc_name}' reference dataset is unavailable{detail}; "
             "material factor codes cannot be validated against EMMA."
         )
     mfc = mfc.rename(columns={c: str(c).upper() for c in mfc.columns})
     missing = [c for c in ADR_A9_MFC_COLUMNS if c not in mfc.columns]
     if missing:
         raise CustomRuleNotEvaluated(
-            f"ADR A9: '{mfc_name}' is missing required columns {missing}; "
+            f"ADR DQ-ADR-9: '{mfc_name}' is missing required columns {missing}; "
             "material factor codes cannot be validated against EMMA."
         )
     code_key, _ = _a9_code_key(mfc["CODE"])
@@ -1986,14 +1986,14 @@ def _a9_load_references() -> Tuple[pd.DataFrame, Dict[str, Optional[str]]]:
         cached_error = get_reference_dataset_error(loc_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ADR A9: '{loc_name}' reference dataset is unavailable{detail}; "
+            f"ADR DQ-ADR-9: '{loc_name}' reference dataset is unavailable{detail}; "
             "project location cannot be resolved for the EMMA lookup."
         )
     ref_col = ADR_A9_LOCATION_REFERENCE["reference_column"]
     lookup_col = ADR_A9_LOCATION_REFERENCE["lookup_column"]
     if ref_col not in planview.columns or lookup_col not in planview.columns:
         raise CustomRuleNotEvaluated(
-            f"ADR A9: '{loc_name}' is missing '{ref_col}' / '{lookup_col}'; "
+            f"ADR DQ-ADR-9: '{loc_name}' is missing '{ref_col}' / '{lookup_col}'; "
             "project location cannot be resolved for the EMMA lookup."
         )
     ref = (
@@ -2162,7 +2162,7 @@ def _evaluate_adr_a9(
 def check_adr_a9(
     df: pd.DataFrame, params: ADRA9Params | None = None
 ) -> pd.Series:
-    """A9: Base material factor validation - MFC vs EMMA (ADR).
+    """DQ-ADR-9: Base material factor validation - MFC vs EMMA (ADR).
 
     Validity rule at the ROW_ID grain. For each of the two material
     factor codes (``COST_BASE_MATERIAL_MFC``, ``COST_VENDOR_SHOP_FAB_MFC``)

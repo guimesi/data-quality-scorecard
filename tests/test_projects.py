@@ -383,3 +383,26 @@ def test_open_project_build_failure_keeps_user_on_step(monkeypatch):
     fake.error.assert_called_once()
     assert "databricks offline" in fake.error.call_args[0][0]
     smode.goto.assert_not_called()
+
+
+def test_deserialize_config_maps_legacy_adr_rule_ids():
+    """Projects saved before the ADR catalog moved to the ``DQ-ADR-#``
+    naming still carry ``A1`` … ``A9``; loading them must resolve to the
+    current ids so the assignments keep matching the catalog. Current ids
+    and other families pass through untouched."""
+    from config.custom_dqr_catalog import canonical_custom_rule_id
+    data = {
+        "custom_assignments": [
+            {"rule_id": "A1", "weight": 40.0},
+            {"rule_id": " A9 ", "weight": 20.0, "params": {"tolerance_pct": 0.25}},
+            {"rule_id": "DQ-ADR-5", "weight": 20.0},
+            {"rule_id": "AC1", "weight": 20.0},
+        ]
+    }
+    cfg = proj.deserialize_config(data)
+    assert [a.rule_id for a in cfg.custom_assignments] == [
+        "DQ-ADR-1", "DQ-ADR-9", "DQ-ADR-5", "AC1",
+    ]
+    assert cfg.custom_assignments[1].params == {"tolerance_pct": 0.25}
+    assert canonical_custom_rule_id(None) == ""
+    assert canonical_custom_rule_id("E3") == "E3"

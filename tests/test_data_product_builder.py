@@ -326,7 +326,7 @@ def test_adr_design_details_feed_a5_end_to_end():
 
 def test_adr_design_derive_is_a_no_op_without_the_parameter_columns():
     """A design extract without PARAMETER_NAME / PARAMETER_VALUE must not
-    crash the build; the derived column is simply absent and A5 reports
+    crash the build; the derived column is simply absent and DQ-ADR-5 reports
     the missing column the usual way."""
     import pandas as pd
     fetch = _adr_fetcher([])

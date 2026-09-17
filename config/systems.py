@@ -58,7 +58,7 @@ class TableDef:
     # ``DataFrame.groupby(...).agg`` accepts (a string or a callable that
     # receives the per-group Series). Used when a child table carries
     # several rows per parent and the consumer needs all of them, e.g.
-    # ADR's design parameters joined into one pipe-separated list so A5
+    # ADR's design parameters joined into one pipe-separated list so DQ-ADR-5
     # can ask "does *any* parameter carry the expected COA prefix?".
     column_aggregations: Optional[Dict[str, Any]] = None
 
@@ -101,7 +101,7 @@ def _adr_design_derive(df: "pd.DataFrame") -> "pd.DataFrame":
     builder then joins the per-item values with :func:`join_unique`
     (see ``column_aggregations``) so the data product carries, per
     ``ROW_ID``, a pipe-separated list of every parameter that actually
-    has a value - the input ADR A5 reads.
+    has a value - the input ADR DQ-ADR-5 reads.
 
     The pairing name ↔ value must happen here, row by row: once the
     builder collapses the 1:N rows (``first`` for text columns) the link
@@ -206,7 +206,7 @@ SYSTEMS: Dict[str, SystemDef] = {
                     "value) pair, ~10 per item in production. The builder "
                     "keeps the first value of every text column and adds "
                     "DESIGN_KEY_PARAMETER_NAMES, the pipe-separated list of "
-                    "parameter names that carry a populated value (A5)."
+                    "parameter names that carry a populated value (DQ-ADR-5)."
                 ),
                 join_key="ROW_ID",
                 column_prefix="DESIGN",

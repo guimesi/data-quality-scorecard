@@ -352,7 +352,7 @@ def test_rule_drilldown_no_selection_shows_hint(monkeypatch):
 def _custom_table_df() -> pd.DataFrame:
     return pd.DataFrame([
         {"Rule ID": "E1", "Name": "ISO Code of Account Present (COR + SAB)",
-         "Type": "Completeness", "Blocking": "Yes", "Status": "Evaluated",
+         "Type": "Completeness", "Status": "Evaluated",
          "Weight (%)": 100.0, "Pass rate (%)": 75.0},
     ])
 

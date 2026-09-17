@@ -60,12 +60,12 @@ ACCE_RULES = [
             "and a valid Standard Activity Breakdown (``SAB``) "
             "in the COA master. Without those codes, ACCE cost "
             "data cannot be normalized via the EMMA factor for "
-            "cross-project benchmarking - a blocking gap."
+            "cross-project benchmarking - a critical gap."
         ),
         notes=(
             "Row-level Completeness with a join to the "
             "``ACCE_COA_MASTER`` reference dataset. Unlike ADR's "
-            "A1 (which extracts the COA group from "
+            "DQ-ADR-1 (which extracts the COA group from "
             "``COMPLETE_WBC`` via ``SPLIT_PART(..., '.', 1)``), "
             "ACCE stores the COA code directly in the ``COA`` "
             "field - the lookup is a direct ``COA`` → "
@@ -82,7 +82,6 @@ ACCE_RULES = [
             "dataset is unavailable so the gap is never silent."
         ),
         required_columns=dict(ACCE_AC1_REQUIRED_COLUMNS),
-        blocking=True,
         check=check_acce_ac1,
         reference=dict(ACCE_AC1_REFERENCE),
     ),
@@ -95,7 +94,7 @@ ACCE_RULES = [
             "(``JOB_NO``) in the fiscal quarter-year format "
             "(e.g. ``2Q23 RP1``), and a project location "
             "(``COUNTRY``) resolved via the Planview reference "
-            "dataset. Mirrors ADR A2 against the ACCE schema, "
+            "dataset. Mirrors ADR DQ-ADR-2 against the ACCE schema, "
             "swapping ``COST_UPDATE`` (ADR's estimate basis date) "
             "for ``JOB_NO`` (ACCE's estimate-job/period proxy)."
         ),
@@ -117,7 +116,6 @@ ACCE_RULES = [
             "dataset is unavailable so the gap is never silent."
         ),
         required_columns=dict(ACCE_AC2_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_acce_ac2,
         reference=dict(ACCE_AC2_REFERENCE),
     ),
@@ -136,7 +134,7 @@ ACCE_RULES = [
         ),
         notes=(
             "Mapping-quality statistical rule with a row-level "
-            "verdict. Mirrors ADR A3 against the ACCE schema, "
+            "verdict. Mirrors ADR DQ-ADR-3 against the ACCE schema, "
             "swapping ``COUNT(DISTINCT COMPLETE_WBC)`` for "
             "``COUNT(DISTINCT COA)`` because ACCE stores the "
             "Code of Account directly (no ``SPLIT_PART`` "
@@ -156,14 +154,13 @@ ACCE_RULES = [
             "AC1 already covers that completeness gap and AC3 "
             "must not double-penalise. Eligible-mapping "
             f"populations below {ACCE_AC3_MIN_MAPPING_POPULATION} "
-            "are NOT_APPLICABLE and pass. Unlike A3, AC3 does "
+            "are NOT_APPLICABLE and pass. Unlike DQ-ADR-3, AC3 does "
             "**not** expose a project-scope toggle - the "
             "percentile baseline is always portfolio-wide. The "
             "rule raises ``CustomRuleNotEvaluated`` when the COA "
             "master is unavailable so the gap is never silent."
         ),
         required_columns=dict(ACCE_AC3_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_acce_ac3,
         reference=dict(ACCE_AC3_REFERENCE),
         select_options=[
@@ -189,7 +186,7 @@ ACCE_RULES = [
                     "**How this option works**\n\n"
                     "On top of the percentile-based outlier check, the "
                     "rule layers a portfolio-wide uniform-mapping "
-                    "detector. Unlike ADR A3 (which fails every "
+                    "detector. Unlike ADR DQ-ADR-3 (which fails every "
                     "material 1:1 bucket the moment its toggle is on), "
                     "AC3 only trips the uniform branch when the "
                     "*proportion* of eligible mappings with "
@@ -255,7 +252,6 @@ ACCE_RULES = [
             "and area (FT2, SF, M2, YD2, SY) UOMs."
         ),
         required_columns=dict(ACCE_AC4_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_acce_ac4,
     ),
     CustomRuleDef(
@@ -289,7 +285,6 @@ ACCE_RULES = [
             "detail. Missing required column → all rows fail."
         ),
         required_columns=dict(ACCE_AC5_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_acce_ac5,
     ),
     CustomRuleDef(
@@ -319,7 +314,6 @@ ACCE_RULES = [
             "required column → all rows fail."
         ),
         required_columns=dict(ACCE_AC6_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_acce_ac6,
     ),
     CustomRuleDef(
@@ -361,7 +355,6 @@ ACCE_RULES = [
             "tuple via the ``segment_by_project_type`` toggle."
         ),
         required_columns=dict(ACCE_AC7_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_acce_ac7,
         select_options=[
             _iqr_threshold_option(
@@ -395,7 +388,7 @@ ACCE_RULES = [
                     "`(E05_DEPARTMENT, BUSINESS)` looked up from the "
                     "`VWS_GP_STANDARD_SHARE` reference via "
                     "`PLANVIEW_ID → PROJECT_ID` - the same lookup "
-                    "E6 / A7 / A8 use. The segment key becomes "
+                    "E6 / DQ-ADR-7 / DQ-ADR-8 use. The segment key becomes "
                     "`(DESCRIPTION, QTY_UOM, E05_DEPARTMENT, "
                     "BUSINESS)` and "
                     "the IQR is recomputed within each bucket, so a "
@@ -455,10 +448,9 @@ ACCE_RULES = [
             "on, partitions the per-ratio IQR baseline by the "
             "composite ``(E05_DEPARTMENT, BUSINESS)`` tuple "
             "resolved from ``VWS_GP_STANDARD_SHARE`` via "
-            "``PLANVIEW_ID → PROJECT_ID`` - mirrors A8's toggle."
+            "``PLANVIEW_ID → PROJECT_ID`` - mirrors DQ-ADR-8's toggle."
         ),
         required_columns=dict(ACCE_AC8_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_acce_ac8,
         select_options=[
             _iqr_threshold_option(
@@ -490,7 +482,7 @@ ACCE_RULES = [
                     "`(E05_DEPARTMENT, BUSINESS)` looked up from the "
                     "`VWS_GP_STANDARD_SHARE` reference via "
                     "`PLANVIEW_ID → PROJECT_ID` - the same lookup "
-                    "E6 / A7 / A8 / AC7 use. For each ratio the IQR "
+                    "E6 / DQ-ADR-7 / DQ-ADR-8 / AC7 use. For each ratio the IQR "
                     "is recomputed **within each segment**, so a "
                     "deepwater FPSO and an onshore refinery are no "
                     "longer pooled into the same baseline. Segments "

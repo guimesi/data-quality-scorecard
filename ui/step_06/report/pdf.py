@@ -631,7 +631,6 @@ def _dqr_table_page(view: Dict, ctx: ReportContext) -> str:
         ok = rule["status"] == STATUS_EVALUATED
         reason = ("" if ok else
                   f'<div class="reason">Not evaluated — {esc(rule["reason"] or "")}</div>')
-        blocking = '<span class="pill p-err">Blocking</span>' if rule["blocking"] else ""
         bar = _bar(rule["pass_rate"], g, y) if ok else _dash()
         rate = (f"{_f1(rule['pass_rate'])}%" if ok
                 else '<span class="pill p-warn">n/e</span>')
@@ -639,14 +638,14 @@ def _dqr_table_page(view: Dict, ctx: ReportContext) -> str:
         rows.append(
             f'<tr class="{"" if ok else "ne"}"><td class="mono"><b>'
             f'{esc(rule["rule_id"])}</b></td><td>{esc(rule["name"])}{reason}</td>'
-            f'<td class="muted">{esc(rule["type"])}</td><td>{blocking}</td>'
+            f'<td class="muted">{esc(rule["type"])}</td>'
             f'<td class="num">{_f1(rule["weight"])}%</td><td>{bar}</td>'
             f'<td class="num">{rate}</td><td class="num">{fails}</td></tr>'
         )
     weight_sum = sum(rule["weight"] for rule in view["dqrs"])
     table = (
         '<table class="t rules"><thead><tr><th>ID</th><th>Rule</th><th>Type</th>'
-        '<th></th><th class="num">Weight</th><th>Pass rate</th>'
+        '<th class="num">Weight</th><th>Pass rate</th>'
         '<th class="num"></th><th class="num">Failing rows</th></tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table>"
         if rows else '<p class="muted">No DQRs selected for this Data Product.</p>'
@@ -671,7 +670,6 @@ def _card(view: Dict, rule: Dict, ctx: ReportContext) -> str:
         f'{_f1(rule["pass_rate"])}% pass</span>' if ok else
         '<span class="pill p-warn">Not evaluated</span>'
     )
-    blocking = '<span class="pill p-err">Blocking</span>' if rule["blocking"] else ""
     reason = ("" if ok else
               f'<p class="reason"><b>Not evaluated.</b> {esc(rule["reason"] or "")} '
               "The DQR was excluded and its weight redistributed; this is not a "
@@ -700,7 +698,7 @@ def _card(view: Dict, rule: Dict, ctx: ReportContext) -> str:
     return (
         f'<div class="card{"" if ok else " card-ne"}"><div class="card-h">'
         f'<span class="mono rid">{esc(rule["rule_id"])}</span>'
-        f'<b class="card-t">{esc(rule["name"])}</b>{blocking}{status}'
+        f'<b class="card-t">{esc(rule["name"])}</b>{status}'
         f'<span class="muted">w={_f1(rule["weight"])}% · {esc(rule["type"])}</span>'
         f"</div>\n{reason}{desc}{notes}\n"
         f'<div class="cols3 cfg"><div><h4>Options</h4>'
@@ -927,7 +925,6 @@ def _config_page(view: Dict, ctx: ReportContext) -> str:
     rows = "".join(
         f'<tr><td class="mono"><b>{esc(rule["rule_id"])}</b></td>'
         f"<td>{esc(rule['name'])}</td><td class=\"muted\">{esc(rule['type'])}</td>"
-        f"<td>{'yes' if rule['blocking'] else ''}</td>"
         f'<td class="num">{_f1(rule["weight"])}%</td>'
         f'<td class="mono sm">{params_html(rule)}</td>'
         f'<td class="mono sm">'
@@ -938,9 +935,9 @@ def _config_page(view: Dict, ctx: ReportContext) -> str:
     weight_sum = sum(rule["weight"] for rule in view["dqrs"])
     table = (
         '<table class="t compact cfgt"><colgroup><col style="width:38px">'
-        '<col style="width:30%"><col style="width:13%"><col style="width:58px">'
+        '<col style="width:30%"><col style="width:13%">'
         '<col style="width:56px"><col><col style="width:22%"></colgroup>'
-        "<thead><tr><th>Rule</th><th>Name</th><th>Type</th><th>Blocking</th>"
+        "<thead><tr><th>Rule</th><th>Name</th><th>Type</th>"
         '<th class="num">Weight</th><th>Options</th><th>Columns</th></tr></thead>'
         f"<tbody>{rows}</tbody></table>"
         if rows else '<p class="muted">No DQRs configured.</p>'

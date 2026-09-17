@@ -59,7 +59,6 @@ def custom_rule_rows(system_code: str, cfg, result) -> List[Dict]:
             "rule_id": a.rule_id,
             "name": rule.name if rule is not None else a.rule_id,
             "type": rule.type if rule is not None else "-",
-            "blocking": bool(rule is not None and rule.blocking),
             "weight": float(a.weight),
             "params": dict(getattr(a, "params", None) or {}),
             "rule": rule,

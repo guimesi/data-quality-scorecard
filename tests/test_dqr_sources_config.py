@@ -1,6 +1,6 @@
 """Tests for the DQR source constants and the custom-rule catalog wiring.
 
-Covers user-spec scenarios 6 (EPT → E1), 7 (ADR → A2), 8 (ACCE → empty).
+Covers user-spec scenarios 6 (EPT → E1), 7 (ADR → DQ-ADR-2), 8 (ACCE → empty).
 """
 from __future__ import annotations
 
@@ -35,21 +35,20 @@ def test_ept_catalog_includes_e1_e2_e3_e4_e5_e6_e7():
 
 
 def test_adr_catalog_includes_a1_through_a8():
-    """ADR exposes A1 (blocking Completeness - ISO COR + SAB lookup), A2
-    / A4 (Completeness & Validity), A3 (Statistical Outlier - WBC-to-ISO mapping
-    aggregation), A5 / A6 (Consistency - design detail / construction
-    hours vs. quantity), A7 (Statistical Outlier - within-discipline
-    hours-per-quantity), and A8 (Statistical Outlier - cross-discipline
+    """ADR exposes DQ-ADR-1 (Completeness - ISO COR + SAB lookup), DQ-ADR-2
+    / DQ-ADR-4 (Completeness & Validity), DQ-ADR-3 (Statistical Outlier - WBC-to-ISO mapping
+    aggregation), DQ-ADR-5 / DQ-ADR-6 (Consistency - design detail / construction
+    hours vs. quantity), DQ-ADR-7 (Statistical Outlier - within-discipline
+    hours-per-quantity), and DQ-ADR-8 (Statistical Outlier - cross-discipline
     quantity ratios at the project level)."""
     rules = get_available_custom_dqr_rules("ADR")
     assert [r.id for r in rules] == [
-        "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"
+        "DQ-ADR-1", "DQ-ADR-2", "DQ-ADR-3", "DQ-ADR-4", "DQ-ADR-5", "DQ-ADR-6", "DQ-ADR-7", "DQ-ADR-8", "DQ-ADR-9"
     ]
     by_id = {r.id: r for r in rules}
 
-    a1 = by_id["A1"]
+    a1 = by_id["DQ-ADR-1"]
     assert a1.type == "Completeness"
-    assert a1.blocking is True
     assert a1.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Complete WBC": "COMPLETE_WBC",
@@ -61,9 +60,8 @@ def test_adr_catalog_includes_a1_through_a8():
         "lookup_column": "ISO_COR / SAB",
     }
 
-    a2 = by_id["A2"]
+    a2 = by_id["DQ-ADR-2"]
     assert a2.type == "Completeness & Validity"
-    assert a2.blocking is False
     assert a2.required_columns == {
         "Estimate Basis Date": "COST_UPDATE",
         "Project Key": "PLANVIEW_ID",
@@ -75,9 +73,8 @@ def test_adr_catalog_includes_a1_through_a8():
         "lookup_column": "COUNTRY",
     }
 
-    a3 = by_id["A3"]
+    a3 = by_id["DQ-ADR-3"]
     assert a3.type == "Statistical Outlier"
-    assert a3.blocking is False
     assert a3.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Complete WBC": "COMPLETE_WBC",
@@ -91,9 +88,8 @@ def test_adr_catalog_includes_a1_through_a8():
         "lookup_column": "ISO_COR / SAB",
     }
 
-    a4 = by_id["A4"]
+    a4 = by_id["DQ-ADR-4"]
     assert a4.type == "Completeness & Validity"
-    assert a4.blocking is False
     assert a4.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Item Type": "ITEM_TYPE",
@@ -103,9 +99,8 @@ def test_adr_catalog_includes_a1_through_a8():
     }
     assert a4.reference is None
 
-    a5 = by_id["A5"]
+    a5 = by_id["DQ-ADR-5"]
     assert a5.type == "Consistency"
-    assert a5.blocking is False
     assert a5.required_columns == {
         "Quantity": "QTY_QUANTITY",
         "Item Type": "ITEM_TYPE",
@@ -113,9 +108,8 @@ def test_adr_catalog_includes_a1_through_a8():
     }
     assert a5.reference is None
 
-    a6 = by_id["A6"]
+    a6 = by_id["DQ-ADR-6"]
     assert a6.type == "Consistency"
-    assert a6.blocking is False
     assert a6.required_columns == {
         "Quantity": "QTY_QUANTITY",
         "Construction Hours": "COST_TOTAL_HOURS",
@@ -123,9 +117,8 @@ def test_adr_catalog_includes_a1_through_a8():
     }
     assert a6.reference is None
 
-    a7 = by_id["A7"]
+    a7 = by_id["DQ-ADR-7"]
     assert a7.type == "Statistical Outlier"
-    assert a7.blocking is False
     assert a7.required_columns == {
         "Item Type": "ITEM_TYPE",
         "Quantity": "QTY_QUANTITY",
@@ -134,9 +127,8 @@ def test_adr_catalog_includes_a1_through_a8():
     }
     assert a7.reference is None
 
-    a8 = by_id["A8"]
+    a8 = by_id["DQ-ADR-8"]
     assert a8.type == "Statistical Outlier"
-    assert a8.blocking is False
     assert a8.required_columns == {
         "Item Type": "ITEM_TYPE",
         "Root Item Name": "ROOT_ITEM_NAME",
@@ -149,13 +141,12 @@ def test_adr_catalog_includes_a1_through_a8():
 def test_acce_exposes_ac1():
     """ACCE exposes AC1 - blocking Completeness rule that joins
     ``COA`` directly to ``ACCE_COA_MASTER.ICARUS_COA`` (no WBC split,
-    unlike ADR A1)."""
+    unlike ADR DQ-ADR-1)."""
     rules = get_available_custom_dqr_rules("ACCE")
     by_id = {r.id: r for r in rules}
     assert "AC1" in by_id
     ac1 = by_id["AC1"]
     assert ac1.type == "Completeness"
-    assert ac1.blocking is True
     assert ac1.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Code of Account": "COA",
@@ -200,7 +191,6 @@ def test_catalog_keys_are_known_data_products():
 
 def test_ept_e4_blocking_flag_is_false():
     rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E4")
-    assert rule.blocking is False
 
 
 def test_ept_e7_reference_metadata_is_complete():
@@ -222,11 +212,10 @@ def test_custom_rule_def_reference_defaults_to_none():
 
 
 def test_ept_e3_catalog_metadata():
-    """E3 is a non-blocking statistical-outlier rule; required columns cover
+    """E3 is a statistical-outlier rule; required columns cover
     the WBC/ISO key and the materiality drivers (hours + cost)."""
     rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E3")
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.reference is None
     assert rule.required_columns == {
         "WBC Level 5": "WBC_LEVEL_5",
@@ -295,7 +284,7 @@ def test_effective_required_columns_for_rule_without_options_is_identity():
 
 def test_sqs_catalog_includes_dq_inspection_12(monkeypatch):
     """SQS (Quality domain) exposes dq-inspection-12 with the documented
-    metadata: a non-blocking Completeness rule on ``TOTAL_CONSUMED_HOURS``
+    metadata: a Completeness rule on ``TOTAL_CONSUMED_HOURS``
     scoped to Completed inspections, no reference dataset, no options."""
     from config.domains import DOMAIN_QUALITY
 
@@ -309,7 +298,6 @@ def test_sqs_catalog_includes_dq_inspection_12(monkeypatch):
     rule = by_id["dq-inspection-12"]
     assert rule.name == "Mandatory on Completion"
     assert rule.type == "Completeness"
-    assert rule.blocking is False
     assert rule.reference is None
     assert rule.required_columns == {
         "Status": "STATUS",
@@ -334,7 +322,6 @@ def test_sqs_catalog_includes_dq_inspection_13(monkeypatch):
     rule = by_id["dq-inspection-13"]
     assert rule.name == "Mandatory Approved Hours"
     assert rule.type == "Completeness"
-    assert rule.blocking is False
     assert rule.reference is None
     assert rule.required_columns == {"Alloted Hours": "ALLOTED_HOURS"}
     assert rule.options == []

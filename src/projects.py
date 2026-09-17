@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.models import CustomDQRAssignment, DataProductConfig, DQRAssignment
+from config.custom_dqr._shared import canonical_custom_rule_id
 from src.persistence import (
     list_project_versions,
     log_event,
@@ -73,7 +74,8 @@ def deserialize_config(data: Dict[str, Any]) -> DataProductConfig:
         },
         custom_assignments=[
             CustomDQRAssignment(
-                rule_id=a["rule_id"],
+                # Saved before the DQ-ADR-# rename may still carry A1..A9.
+                rule_id=canonical_custom_rule_id(a["rule_id"]),
                 weight=float(a.get("weight", 0.0)),
                 params=dict(a.get("params") or {}),
             )

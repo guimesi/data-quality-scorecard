@@ -733,7 +733,7 @@ def test_render_allows_progression_when_all_selections_valid():
 
 
 def test_every_statistical_outlier_rule_exposes_threshold_select_option():
-    """Each statistical-outlier rule (E3, E6, A3, A7, A8) must expose a
+    """Each statistical-outlier rule (E3, E6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8) must expose a
     selectbox threshold option so the user can override the recommended
     default at Step 4.2."""
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
@@ -742,7 +742,7 @@ def test_every_statistical_outlier_rule_exposes_threshold_select_option():
     adr = {r.id: r for r in get_available_custom_dqr_rules("ADR")}
     for code, by_id, rule_ids in (
         ("EPT", ept, ("E3", "E6")),
-        ("ADR", adr, ("A3", "A7", "A8")),
+        ("ADR", adr, ("DQ-ADR-3", "DQ-ADR-7", "DQ-ADR-8")),
     ):
         for rid in rule_ids:
             rule = by_id[rid]
@@ -816,7 +816,7 @@ def test_render_rule_card_e6_persists_segmentation_toggle_on():
 
 
 def test_render_rule_card_a3_persists_user_picked_percentile():
-    """When the user picks P95 from the A3 threshold selectbox, the new
+    """When the user picks P95 from the DQ-ADR-3 threshold selectbox, the new
     value flows into the params dict (and would be persisted on the
     assignment)."""
     import ui.step_04_2_custom_dqr as s4_2
@@ -826,11 +826,11 @@ def test_render_rule_card_a3_persists_user_picked_percentile():
         ADR_A3_THRESHOLD_PARAM,
     )
 
-    a3 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "A3")
+    a3 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-3")
     p95_label = dict(ADR_A3_THRESHOLD_CHOICES)[0.95]
     fake_st = _make_fake_st(
-        checkboxes={"custom_ADR_A3_enabled": True},
-        selectboxes={f"custom_ADR_A3_sel_{ADR_A3_THRESHOLD_PARAM}": p95_label},
+        checkboxes={"custom_ADR_DQ-ADR-3_enabled": True},
+        selectboxes={f"custom_ADR_DQ-ADR-3_sel_{ADR_A3_THRESHOLD_PARAM}": p95_label},
     )
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
@@ -850,7 +850,7 @@ def test_render_rule_card_a3_persists_user_picked_percentile():
 
 
 def test_render_rule_card_a3_persists_project_scope_toggle_on():
-    """User flips A3's project-scope toggle on → params capture
+    """User flips DQ-ADR-3's project-scope toggle on → params capture
     project_scoped=True (alongside the recommended threshold default)
     and the values would survive into the assignment."""
     import ui.step_04_2_custom_dqr as s4_2
@@ -862,10 +862,10 @@ def test_render_rule_card_a3_persists_project_scope_toggle_on():
         ADR_A3_THRESHOLD_PARAM,
     )
 
-    a3 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "A3")
+    a3 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-3")
     fake_st = _make_fake_st(
-        checkboxes={"custom_ADR_A3_enabled": True},
-        toggles={f"custom_ADR_A3_opt_{ADR_A3_PROJECT_SCOPED_PARAM}": True},
+        checkboxes={"custom_ADR_DQ-ADR-3_enabled": True},
+        toggles={f"custom_ADR_DQ-ADR-3_opt_{ADR_A3_PROJECT_SCOPED_PARAM}": True},
     )
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
@@ -881,8 +881,8 @@ def test_render_rule_card_a3_persists_project_scope_toggle_on():
 
 
 def test_dp_block_a3_project_scope_flags_planview_id_gap_when_not_a_cde():
-    """Turning on A3's project-scope toggle adds PLANVIEW_ID to the rule's
-    effective required columns; the static A3 required map already includes
+    """Turning on DQ-ADR-3's project-scope toggle adds PLANVIEW_ID to the rule's
+    effective required columns; the static DQ-ADR-3 required map already includes
     PLANVIEW_ID, so a CDE list without it must fail validation regardless
     of the toggle - verify the validator still flags the gap when the
     toggle is on."""
@@ -899,14 +899,14 @@ def test_dp_block_a3_project_scope_flags_planview_id_gap_when_not_a_cde():
         custom_assignments=[],
     )
     fake_st = _make_fake_st(
-        checkboxes={"custom_ADR_A3_enabled": True},
-        toggles={f"custom_ADR_A3_opt_{ADR_A3_PROJECT_SCOPED_PARAM}": True},
+        checkboxes={"custom_ADR_DQ-ADR-3_enabled": True},
+        toggles={f"custom_ADR_DQ-ADR-3_opt_{ADR_A3_PROJECT_SCOPED_PARAM}": True},
     )
     with patch.object(s4_2, "st", fake_st):
         valid, gaps = s4_2._render_dp_block("ADR", cfg)
 
     assert valid is False
-    assert "PLANVIEW_ID" in dict(gaps)["A3"]
+    assert "PLANVIEW_ID" in dict(gaps)["DQ-ADR-3"]
 
 
 def test_render_rule_card_a7_threshold_selectbox_hidden_when_unticked():
@@ -915,8 +915,8 @@ def test_render_rule_card_a7_threshold_selectbox_hidden_when_unticked():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    a7 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "A7")
-    fake_st = _make_fake_st(checkboxes={"custom_ADR_A7_enabled": False})
+    a7 = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-7")
+    fake_st = _make_fake_st(checkboxes={"custom_ADR_DQ-ADR-7_enabled": False})
     fake_st.selectbox = MagicMock()
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
@@ -942,7 +942,7 @@ def test_dp_block_round_trips_existing_threshold_param_to_widget():
         cdes=["PLANVIEW_ID", "COMPLETE_WBC", "COST_TOTAL_HOURS", "COST_TOTAL_COST"],
         custom_assignments=[
             CustomDQRAssignment(
-                rule_id="A3", weight=10.0,
+                rule_id="DQ-ADR-3", weight=10.0,
                 params={ADR_A3_THRESHOLD_PARAM: 0.95},
             ),
         ],
@@ -954,12 +954,12 @@ def test_dp_block_round_trips_existing_threshold_param_to_widget():
         captured_index[key] = index
         return options[index]
 
-    fake_st = _make_fake_st(checkboxes={"custom_ADR_A3_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_ADR_DQ-ADR-3_enabled": True})
     fake_st.selectbox = capture_selectbox
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("ADR", cfg)
 
-    widget_key = f"custom_ADR_A3_sel_{ADR_A3_THRESHOLD_PARAM}"
+    widget_key = f"custom_ADR_DQ-ADR-3_sel_{ADR_A3_THRESHOLD_PARAM}"
     expected_index = [v for v, _ in ADR_A3_THRESHOLD_CHOICES].index(0.95)
     assert captured_index[widget_key] == expected_index
     from src.custom_dqr_engine import (
@@ -1033,7 +1033,7 @@ def test_dp_block_falls_back_to_default_when_stored_value_not_in_choices():
         cdes=["PLANVIEW_ID", "COMPLETE_WBC", "COST_TOTAL_HOURS", "COST_TOTAL_COST"],
         custom_assignments=[
             CustomDQRAssignment(
-                rule_id="A3", weight=10.0,
+                rule_id="DQ-ADR-3", weight=10.0,
                 # 0.42 is not in ADR_A3_THRESHOLD_CHOICES.
                 params={ADR_A3_THRESHOLD_PARAM: 0.42},
             ),
@@ -1046,12 +1046,12 @@ def test_dp_block_falls_back_to_default_when_stored_value_not_in_choices():
         captured_index[key] = index
         return options[index]
 
-    fake_st = _make_fake_st(checkboxes={"custom_ADR_A3_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_ADR_DQ-ADR-3_enabled": True})
     fake_st.selectbox = capture_selectbox
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("ADR", cfg)
 
-    widget_key = f"custom_ADR_A3_sel_{ADR_A3_THRESHOLD_PARAM}"
+    widget_key = f"custom_ADR_DQ-ADR-3_sel_{ADR_A3_THRESHOLD_PARAM}"
     default_index = [v for v, _ in ADR_A3_THRESHOLD_CHOICES].index(
         ADR_A3_PERCENTILE
     )

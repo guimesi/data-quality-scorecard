@@ -184,7 +184,7 @@ def test_clear_reference_cache_noop_when_key_absent(fake_st):
 # ---------------------------------------------------------------------------
 
 def test_required_reference_datasets_for_known_system(fake_st):
-    """EPT uses E7 which depends on VWS_GP_STANDARD_SHARE; ADR uses A1
+    """EPT uses E7 which depends on VWS_GP_STANDARD_SHARE; ADR uses DQ-ADR-1
     which depends on ACCE_COA_MASTER. The helper returns the union."""
     out = rd.required_reference_datasets_for_systems(["EPT"])
     assert "VWS_GP_STANDARD_SHARE" in out

@@ -4,7 +4,7 @@
 - :func:`validate_completeness_rule`: row passes when every required column
   is non-null and non-blank (used by E1, E4, etc.).
 - :func:`validate_referential_integrity_rule`: row passes when the source
-  value resolves against a reference dataset column (used by E7, A1, AC1).
+  value resolves against a reference dataset column (used by E7, DQ-ADR-1, AC1).
 """
 from __future__ import annotations
 

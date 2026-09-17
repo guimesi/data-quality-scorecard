@@ -111,9 +111,9 @@ _ITEM_ACCT: Dict[str, str] = {}
 def _assign_item_types() -> List:
     """Assign an ``ITEM_TYPE`` to each estimate item (~5% nulls). The pool
     is small and weighted so a handful of dominant types get enough
-    population in the (ITEM_TYPE, QTY_UOM) segmentation A7 uses for IQR
+    population in the (ITEM_TYPE, QTY_UOM) segmentation DQ-ADR-7 uses for IQR
     outlier detection. The names mirror the production "Estimate*"
-    labels referenced by the A8 cross-discipline classifier so demo
+    labels referenced by the DQ-ADR-8 cross-discipline classifier so demo
     mode can also exercise that rule."""
     types = [
         "EstimateFoundation",
@@ -132,9 +132,9 @@ def _assign_item_types() -> List:
 
 def _assign_root_item_names() -> List:
     """Assign a ``ROOT_ITEM_NAME`` to each estimate item, the project /
-    scope grouping key A8 uses to aggregate cross-discipline quantities.
+    scope grouping key DQ-ADR-8 uses to aggregate cross-discipline quantities.
     A small pool concentrates the population per project so the IQR
-    population test for A8 has enough samples in mock mode."""
+    population test for DQ-ADR-8 has enough samples in mock mode."""
     names = [f"PROJECT-{i:03d}" for i in range(1, 21)]   # 20 projects
     assigned = RNG.choice(names, size=N_ITEMS).astype(object).tolist()
     null_idx = RNG.choice(N_ITEMS, size=max(1, int(0.04 * N_ITEMS)), replace=False)
@@ -162,7 +162,7 @@ def _assign_item_uoms() -> List[str]:
     keep all of an item's quantity rows on the same UOM (real estimates
     almost always do). Without this, the data product builder's "first"
     aggregation would surface a near-random UOM per ROW_ID and shatter the
-    A7 segmentation. The pool is intentionally small and weighted to
+    DQ-ADR-7 segmentation. The pool is intentionally small and weighted to
     concentrate population per (ITEM_TYPE, UOM) segment."""
     uoms = ["CY", "T", "M", "FT"]
     weights = [0.32, 0.24, 0.24, 0.20]
@@ -209,14 +209,14 @@ def _mock_adr_dim_estimateitemrecord() -> pd.DataFrame:
     estimate_classes = ["CLASS_1", "CLASS_2", "CLASS_3", "CLASS_4", "CLASS_5", "BAD"]
     statuses = ["DRAFT", "APPROVED", "LOCKED", "ARCHIVED", "UNKNOWN"]
     # COST_UPDATE is a fiscal quarter-year period in prod (e.g. "2Q2019"),
-    # not a calendar date - A2 checks both Completeness and that the value
+    # not a calendar date - DQ-ADR-2 checks both Completeness and that the value
     # matches the [1-4]Q<YYYY> shape (Validity).
     cost_update = [
         f"{int(RNG.integers(1, 5))}Q{int(RNG.integers(2015, 2025))}"
         for _ in range(n)
     ]
-    # Inject ~5% null COST_UPDATE so A2 has estimate-basis-date gaps to flag
-    # (Completeness), plus ~2% malformed values so A2's Validity branch has
+    # Inject ~5% null COST_UPDATE so DQ-ADR-2 has estimate-basis-date gaps to flag
+    # (Completeness), plus ~2% malformed values so DQ-ADR-2's Validity branch has
     # something to flag too (e.g. "5Q2019", "2019", "Q2-2019").
     cost_update_null_idx = RNG.choice(n, size=max(1, int(0.05 * n)), replace=False)
     for i in cost_update_null_idx:
@@ -229,20 +229,20 @@ def _mock_adr_dim_estimateitemrecord() -> pd.DataFrame:
     )
     for i in cost_update_bad_idx:
         cost_update[i] = _bad_cost_update_pool[int(RNG.integers(0, len(_bad_cost_update_pool)))]
-    # COMPLETE_WBC drives A1 (ISO COR + SAB lookup). Most rows reference
+    # COMPLETE_WBC drives DQ-ADR-1 (ISO COR + SAB lookup). Most rows reference
     # COA groups present in the ACCE_COA_MASTER mock; ~3% are null/blank
-    # and ~5% reference an "orphan" COA group (no master row → A1 FAIL).
+    # and ~5% reference an "orphan" COA group (no master row → DQ-ADR-1 FAIL).
     valid_coa_pool = [
         "311", "312", "313", "314", "317", "318", "321", "322",
         "323", "324", "325", "326", "327", "328", "329", "330",
     ]
     error_coa_pool = [
-        "315",   # ISO_COR has 'ERROR: #N/A' in master → A1 FAIL
-        "316",   # SAB has 'ERROR: #N/A' in master    → A1 FAIL
-        "319",   # ISO_COR is NULL in master          → A1 FAIL
-        "320",   # SAB is NULL in master              → A1 FAIL
+        "315",   # ISO_COR has 'ERROR: #N/A' in master → DQ-ADR-1 FAIL
+        "316",   # SAB has 'ERROR: #N/A' in master    → DQ-ADR-1 FAIL
+        "319",   # ISO_COR is NULL in master          → DQ-ADR-1 FAIL
+        "320",   # SAB is NULL in master              → DQ-ADR-1 FAIL
     ]
-    orphan_coa_pool = ["909", "888"]   # not in ACCE_COA_MASTER → A1 FAIL
+    orphan_coa_pool = ["909", "888"]   # not in ACCE_COA_MASTER → DQ-ADR-1 FAIL
     coa_choices = (
         [(g, 0.85 / len(valid_coa_pool)) for g in valid_coa_pool]
         + [(g, 0.10 / len(error_coa_pool)) for g in error_coa_pool]
@@ -310,7 +310,7 @@ _MOCK_MFC_BASE: Dict[str, Tuple[float, str]] = {
     "349.01": (9.0, "Paint"),
 }
 # ISO-2 prefix → (sites, location multiplier). The Planview mock uses
-# ``UK`` for Great Britain; A9 normalises it to ``GB``. ``NL`` and ``ZZ``
+# ``UK`` for Great Britain; DQ-ADR-9 normalises it to ``GB``. ``NL`` and ``ZZ``
 # from the Planview mock are absent here on purpose: NL items resolve a
 # location but find no EMMA rows (NO_REFERENCE), ZZ never resolves.
 _MOCK_MFC_LOCATIONS: Dict[str, Tuple[Tuple[str, ...], float]] = {
@@ -334,7 +334,7 @@ def _mock_mfc_factor(code: str, iso2: str) -> float:
 
 
 def _mock_mfc() -> pd.DataFrame:
-    """EMMA Market Analysis reference used by A9: one row per (code,
+    """EMMA Market Analysis reference used by DQ-ADR-9: one row per (code,
     locationCode, period) with the canonical column names the loader
     exposes (``CODE``, ``DESCRIPTION``, ``LOCATION_CODE``, ``PERIOD``,
     ``FACTOR_VALUE``). Deterministic (no RNG draws) so fixtures can rely
@@ -412,7 +412,7 @@ def _mock_adr_fact_estimatecostresults() -> pd.DataFrame:
     vsf_ratio = np.array([vsf_ratio_by_item[rid] for rid in exploded])
     df = pd.DataFrame({
         "ROW_ID": exploded,
-        # Material factor codes + localized / database costs - drive A9.
+        # Material factor codes + localized / database costs - drive DQ-ADR-9.
         # The ratio is constant per parent item so the builder's SUM over
         # child rows preserves it.
         "BASE_MATERIAL_MFC": [bm_code_by_item[rid] for rid in exploded],
@@ -427,12 +427,12 @@ def _mock_adr_fact_estimatecostresults() -> pd.DataFrame:
         "CURRENCY": RNG.choice(["USD", "EUR", "GBP", "CAD", "XXX"], size=n, p=[0.5, 0.25, 0.1, 0.1, 0.05]),
         "COST_AMOUNT": RNG.lognormal(mean=13, sigma=1.3, size=n).round(6),  # excess decimals
         "ESCALATION_PCT": RNG.uniform(-5, 15, size=n).round(2),
-        # Construction hours - drives A6. Lognormal so the bulk of rows have
+        # Construction hours - drives DQ-ADR-6. Lognormal so the bulk of rows have
         # positive hours and a minority of items end up with both hours
         # columns at zero (FAIL when their quantity is non-zero).
         "TOTAL_HOURS": RNG.lognormal(mean=3.5, sigma=1.0, size=n).round(2),
         "DB_TOTAL_HOURS": RNG.lognormal(mean=3.0, sigma=1.0, size=n).round(2),
-        # TOTAL_COST - separate from COST_AMOUNT so A3's materiality
+        # TOTAL_COST - separate from COST_AMOUNT so DQ-ADR-3's materiality
         # filter (SUM(TOTAL_COST) >= threshold) operates on the
         # spec-named column without conflating with the existing
         # currency-tagged COST_AMOUNT.
@@ -442,13 +442,13 @@ def _mock_adr_fact_estimatecostresults() -> pd.DataFrame:
     null_idx = RNG.choice(n, size=int(0.05 * n), replace=False)
     df.loc[null_idx, "COST_AMOUNT"] = np.nan
     # Zero-out both hours columns on ~6% of cost rows so a chunk of items
-    # end up with HAS_CONSTRUCTION_HOURS = 0 → A6 has real FAIL cases
+    # end up with HAS_CONSTRUCTION_HOURS = 0 → DQ-ADR-6 has real FAIL cases
     # whenever the matching QTY row has a non-zero quantity.
     zero_hours_idx = RNG.choice(n, size=max(1, int(0.06 * n)), replace=False)
     df.loc[zero_hours_idx, "TOTAL_HOURS"] = 0.0
     df.loc[zero_hours_idx, "DB_TOTAL_HOURS"] = 0.0
     # Null patterns on each hours column independently - exercises the
-    # "either-or" branch of A6 (one column null, the other populated).
+    # "either-or" branch of DQ-ADR-6 (one column null, the other populated).
     null_total_idx = RNG.choice(n, size=max(1, int(0.04 * n)), replace=False)
     df.loc[null_total_idx, "TOTAL_HOURS"] = np.nan
     null_db_idx = RNG.choice(n, size=max(1, int(0.04 * n)), replace=False)
@@ -461,7 +461,7 @@ def _mock_adr_fact_estimateqtyresults() -> pd.DataFrame:
     exploded = _explode_children(parent_ids)
     n = len(exploded)
     # All child rows for the same parent share the parent's UOM - drives
-    # the (ITEM_TYPE, QTY_UOM) segmentation A7 needs to find populations
+    # the (ITEM_TYPE, QTY_UOM) segmentation DQ-ADR-7 needs to find populations
     # large enough for IQR outlier detection. Falls back to "EA" only if
     # the lookup misses (shouldn't happen unless mock keys diverge).
     row_uoms = [_UOM_BY_ROW_ID.get(rid, "EA") for rid in exploded]
@@ -482,7 +482,7 @@ def _assign_design_parameter_names() -> List[str]:
     """One ``DESIGN_PARAMETER_NAME`` per estimate item, aligned with
     ``_ITEM_TYPE``. Mapped item types get their expected COA prefix most
     of the time (``<prefix>-<label>``), a minority get an unrelated
-    prefix so A5 fails on them; unmapped types get a generic name."""
+    prefix so DQ-ADR-5 fails on them; unmapped types get a generic name."""
     from src.custom_dqr._adr_rules import _A5_KEY_DESIGN_PREFIX
 
     labels = ["Line Size", "Material Type", "Design Pressure", "Rating"]
@@ -511,12 +511,12 @@ def _mock_adr_dim_estimatedesigndetails() -> pd.DataFrame:
     services = ["GAS", "OIL", "WATER", "STEAM", "MIXED"]
     design_codes = ["ASME-B31.3", "ASME-B31.4", "ASME-B31.8", "API-650", "BAD-CODE"]
     # Free-text design parameter (e.g. material grade, schedule, nominal size).
-    # Drives A5: row passes when populated, fails when null/blank and a non-zero
+    # Drives DQ-ADR-5: row passes when populated, fails when null/blank and a non-zero
     # quantity exists for the same ROW_ID.
     parameter_values = [
         f"PARAM-{int(RNG.integers(1, 999)):03d}" for _ in range(n)
     ]
-    # Design parameter *name* carrying the ACCE COA prefix A5 expects per
+    # Design parameter *name* carrying the ACCE COA prefix DQ-ADR-5 expects per
     # ITEM_TYPE (e.g. ``313.1-Line Size`` for aboveground piping). ~15% of
     # the mapped items get an off-prefix name so the type-aware check has
     # real FAIL cases; unmapped / null item types get a generic name and
@@ -540,7 +540,7 @@ def _mock_adr_dim_estimatedesigndetails() -> pd.DataFrame:
     df.loc[null_mat_idx, "MATERIAL_SPEC"] = None
     null_pres_idx = RNG.choice(n, size=int(0.03 * n), replace=False)
     df.loc[null_pres_idx, "DESIGN_PRESSURE_BAR"] = np.nan
-    # Inject ~8% null + ~3% blank/whitespace DESIGN_PARAMETER_VALUE so A5 has
+    # Inject ~8% null + ~3% blank/whitespace DESIGN_PARAMETER_VALUE so DQ-ADR-5 has
     # real FAIL cases in mock mode (quantity is non-zero for ~all rows).
     null_param_idx = RNG.choice(n, size=max(1, int(0.08 * n)), replace=False)
     df.loc[null_param_idx, "DESIGN_PARAMETER_VALUE"] = None
@@ -1105,23 +1105,23 @@ def _mock_onshore_cetdata() -> pd.DataFrame:
 
 
 def _mock_acce_coa_master() -> pd.DataFrame:
-    """Reference dataset used by A1 and A3 - maps the leading 3-digit
+    """Reference dataset used by DQ-ADR-1 and DQ-ADR-3 - maps the leading 3-digit
     COA group derived from ``COMPLETE_WBC`` to ``ISO_COR`` and ``SAB``.
 
     The pool is deterministic so unit-test fixtures don't have to mock
     the whole loader. A handful of error / null entries mirror the
-    production COA master's "I haven't been mapped yet" rows (so A1 has
+    production COA master's "I haven't been mapped yet" rows (so DQ-ADR-1 has
     FAIL cases against every documented invalid marker), and the valid
-    pool is intentionally large enough, and overlapping - to give A3
+    pool is intentionally large enough, and overlapping - to give DQ-ADR-3
     enough distinct ``(ISO_COR, SAB)`` buckets to cross its
     population threshold and exhibit at least one over-aggregating
     mapping in mock mode.
     """
     rows = [
-        # Valid mappings - A1 PASS. The (ISO_COR, SAB) buckets are
+        # Valid mappings - DQ-ADR-1 PASS. The (ISO_COR, SAB) buckets are
         # mostly unique so each COA group has its own ISO mapping;
         # ICARUS_COA 313 / 322 / 327 deliberately collapse onto the
-        # *same* ISO bucket to give A3 an over-aggregating example
+        # *same* ISO bucket to give DQ-ADR-3 an over-aggregating example
         # (multiple distinct WBCs flowing through one ISO mapping).
         ("311", "C1.6",     "S3.2.2"),
         ("312", "C1.7",     "S3.2.3"),
@@ -1139,12 +1139,12 @@ def _mock_acce_coa_master() -> pd.DataFrame:
         ("328", "C7.1",     "S7.1"),
         ("329", "C7.2",     "S7.2"),
         ("330", "C7.3",     "S7.3"),
-        # Error / null markers - A1 FAIL on lookup.
+        # Error / null markers - DQ-ADR-1 FAIL on lookup.
         ("315", "ERROR: #N/A", "S2.1"),     # invalid ISO_COR
         ("316", "C3.1",     "ERROR: #N/A"), # invalid SAB
         ("319", None,       "S3.1"),         # null ISO_COR
         ("320", "C4.1",     None),           # null SAB
-        # Multiple rows for the same ICARUS_COA - A1 must prefer the
+        # Multiple rows for the same ICARUS_COA - DQ-ADR-1 must prefer the
         # valid mapping per spec §9 (FIRST_VALUE ORDER BY invalid-flag).
         ("314", "ERROR: stale", "ERROR: stale"),
         ("321", None, None),

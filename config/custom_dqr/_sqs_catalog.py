@@ -42,7 +42,6 @@ SQS_RULES = [
             "'Completed' -> Total Consumed Hours IS NOT NULL*."
         ),
         required_columns=dict(SQS_DQ_INSPECTION_12_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_sqs_dq_inspection_12,
     ),
     CustomRuleDef(
@@ -65,7 +64,6 @@ SQS_RULES = [
             "NULL*."
         ),
         required_columns=dict(SQS_DQ_INSPECTION_13_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_sqs_dq_inspection_13,
     ),
 ]

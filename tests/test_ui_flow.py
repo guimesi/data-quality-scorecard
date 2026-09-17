@@ -890,7 +890,7 @@ def test_step4_2_renders_ac1_card_for_acce():
 
 
 def test_step4_2_renders_a2_card_for_adr():
-    """ADR ships A2 (Location + estimate date present), the rule card is
+    """ADR ships DQ-ADR-2 (Location + estimate date present), the rule card is
     rendered when ADR opts into the Custom source."""
     from src.models import DataProductConfig
     dp = _build_data_product_for("ADR")
@@ -907,7 +907,7 @@ def test_step4_2_renders_a2_card_for_adr():
         configs={"ADR": cfg},
     )
     markdowns = [m.value for m in at.markdown]
-    assert any("A2" in m and "Location" in m for m in markdowns)
+    assert any("DQ-ADR-2" in m and "Location" in m for m in markdowns)
 
 
 def test_step4_2_when_no_dp_uses_custom_shows_info():
@@ -1200,7 +1200,7 @@ def test_step2_prefetches_acce_reference_datasets():
 
 
 def test_step2_prefetches_planview_share_for_adr():
-    """ADR now ships A2, which depends on VWS_GP_STANDARD_SHARE, the
+    """ADR now ships DQ-ADR-2, which depends on VWS_GP_STANDARD_SHARE, the
     Step 2 prefetch must seed the same reference dataset as for EPT."""
     from src.reference_data import _SESSION_STATE_KEY
 

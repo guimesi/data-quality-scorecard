@@ -61,7 +61,6 @@ def _render_custom_rules_table(code: str, result) -> None:
             "Rule ID": r["rule_id"],
             "Name": r["name"],
             "Type": r["type"],
-            "Blocking": "Yes" if r["blocking"] else "No",
             "Status": r["status"],
             "Weight (%)": round(r["weight"], 2),
             "Pass rate (%)": (

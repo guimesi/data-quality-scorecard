@@ -311,8 +311,6 @@ _GLOBAL_CSS = """
         font-size: 0.72em; font-weight: 600; margin-right: 0.25em; vertical-align: middle;
     }
     .tag-type   { background: rgba(15, 23, 42, 0.06); color: #334155; }
-    .tag-block  { background: rgba(220, 38, 38, 0.12); color: #991b1b; }
-    .tag-noblock{ background: rgba(14, 165, 233, 0.12); color: #075985; }
 
     /* ===== Source summary / section heads / weight rows (Step 5) ===== */
     .src-summary {

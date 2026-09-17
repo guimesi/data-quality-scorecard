@@ -121,7 +121,6 @@ def toolbar_dqrs() -> str:
         '<button type="button" class="tb" data-filter="not-evaluated">'
         "Not evaluated</button>"
         '<button type="button" class="tb" data-filter="below">Below Green</button>'
-        '<button type="button" class="tb" data-filter="blocking">Blocking</button>'
         "</span>"
         '<span class="tb-group">'
         '<button type="button" class="tb" data-sort="score" data-dir="asc">'
@@ -212,8 +211,6 @@ def dqr_list(view: Dict) -> str:
         score_attr = f"{r['pass_rate']:.2f}" if evaluated else "-1"
         status_attr = "evaluated" if evaluated else "not-evaluated"
         below = "1" if evaluated and r["pass_rate"] < g else "0"
-        blocking_cell = ('<span class="pill p-err">Blocking</span>'
-                         if r["blocking"] else '<span class="muted">No</span>')
         src_cols = r.get("source_columns") or {}
         search = " ".join(
             [r["rule_id"], r["name"], r["type"]] + [str(c) for c in src_cols.values()]
@@ -273,13 +270,11 @@ def dqr_list(view: Dict) -> str:
             f'<details class="gl-row" data-name="{esc(r["rule_id"].lower())}" '
             f'data-score="{score_attr}" data-weight="{r["weight"]:g}" '
             f'data-status="{status_attr}" '
-            f'data-blocking="{1 if r["blocking"] else 0}" '
             f'data-below="{below}" data-search="{esc(search)}">\n'
             f'<summary class="gl-grid cus-grid">'
             f'<span><code class="rid">{esc(r["rule_id"])}</code></span>'
             f'<span class="c-name"><span class="tv">{esc(r["name"])}</span></span>'
             f'<span class="muted"><span class="tv">{esc(r["type"])}</span></span>'
-            f"<span>{blocking_cell}</span>"
             f"<span>{status_pill(r['status'])}</span>"
             f'<span class="num">{r["weight"]:.1f}%</span>'
             f"{bar}{tail}</summary>\n"
@@ -287,7 +282,6 @@ def dqr_list(view: Dict) -> str:
             '<div class="two"><div><h5>Configuration used</h5><dl class="kv">'
             f"<dt>Rule ID</dt><dd><code>{esc(r['rule_id'])}</code></dd>"
             f"<dt>Type</dt><dd>{esc(r['type'])}</dd>"
-            f"<dt>Blocking</dt><dd>{'Yes' if r['blocking'] else 'No'}</dd>"
             f"<dt>Weight</dt><dd>{r['weight']:.1f}%</dd>"
             f"<dt>Status</dt><dd>{esc(r['status'])}</dd>{kv_tail}</dl>"
             f"<h5>Selected options</h5>{selected_options_kv(rule, r['params'])}"
@@ -296,7 +290,7 @@ def dqr_list(view: Dict) -> str:
         )
     head = (
         '<div class="gl-head gl-grid cus-grid"><span>ID</span><span>Name</span>'
-        "<span>Type</span><span>Blocking</span><span>Status</span>"
+        "<span>Type</span><span>Status</span>"
         '<span class="num">Weight</span><span>Pass rate</span>'
         '<span class="num">Pass</span><span class="num">Failing rows</span></div>'
     )

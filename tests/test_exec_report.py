@@ -297,9 +297,10 @@ def test_report_covers_dqrs_only():
     assert all(c["header"].startswith("DQR · ")
                for c in data["dps"]["EPT"]["ruleColumns"])
 
-    # The DQR list uses the DQR toolbar (blocking filter, sort by ID).
+    # The DQR list uses the DQR toolbar (status filters, sort by ID); the
+    # retired blocking filter is gone.
     dqrs = section_of(html, "EPT-dqrs")
-    assert 'data-filter="blocking"' in dqrs
+    assert 'data-filter="blocking"' not in dqrs
     assert 'data-filter="not-evaluated"' in dqrs
     assert 'data-filter="not-computed"' not in html
     assert "Sort: ID" in dqrs
@@ -865,7 +866,7 @@ def test_pdf_dp_pages_carry_heatmap_tables_and_config():
     table = pages["EPT · EPT Cost Data · DQRs"]
     assert "2 rules · sorted by pass rate · weights sum to 100%" in table
     assert table.count("<tr") == 3
-    assert "Blocking" in table                        # E1 is blocking
+    assert "Blocking" not in table                    # flag retired
 
     config = pages["EPT · EPT Cost Data · Configuration used for this run"]
     assert '<span class="chip">CODE_OF_RESOURCE</span>' in config
@@ -890,7 +891,7 @@ def test_pdf_detail_cards_show_config_and_sample_rows():
     assert "<h4>Options</h4>" in e1 and "<h4>Source columns</h4>" in e1
     assert "<h4>Reference dataset</h4>" in e1 and "<h4>Pass / fail</h4>" in e1
     assert "CODE_<wbr>OF_<wbr>RESOURCE" in e1
-    assert '<span class="pill p-err">Blocking</span>' in e1
+    assert 'Blocking' not in e1
     assert "% pass</span>" in e1
     assert "Sample of failing rows" in e1
     sample = re.search(r'<table class="t compact sample">(.*?)</table>', e1,

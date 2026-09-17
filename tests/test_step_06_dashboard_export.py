@@ -263,7 +263,7 @@ def test_build_rowscores_csv_neutralizes_spreadsheet_formula_injection():
     trigger set) are prefixed with a single quote so they cannot execute as
     formulas when the CSV is opened in Excel/Sheets. The leading control char
     must be checked on the raw value, so "\\t=2+2" is caught too."""
-    notes = ["=1+1", "+SUM(A1)", "-2+3", "@cmd|'/C calc'!A0", "\t=2+2"]
+    notes = ["=1+1", "+SUM(DQ-ADR-1)", "-2+3", "@cmd|'/C calc'!A0", "\t=2+2"]
     dp, cfg = _ept_dp_with_note(notes)
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
     csv_bytes = _build_rowscores_csv(dp, result, cfg)
@@ -271,7 +271,7 @@ def test_build_rowscores_csv_neutralizes_spreadsheet_formula_injection():
     # the stored literal (CSV escaping uses double quotes, not single).
     out = pd.read_csv(io.BytesIO(csv_bytes), dtype=str)
     assert out["NOTE"].tolist() == [
-        "'=1+1", "'+SUM(A1)", "'-2+3", "'@cmd|'/C calc'!A0", "'\t=2+2",
+        "'=1+1", "'+SUM(DQ-ADR-1)", "'-2+3", "'@cmd|'/C calc'!A0", "'\t=2+2",
     ]
 
 

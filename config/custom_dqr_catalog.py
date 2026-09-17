@@ -2,7 +2,7 @@
 
 Each entry is a :class:`CustomRuleDef` carrying the metadata shown to the
 user in Step 4.2 (id, name, type, description, notes, required columns,
-optional reference dataset, blocking flag) plus a ``check`` callable that
+optional reference dataset) plus a ``check`` callable that
 evaluates the rule row-by-row.
 
 The implementation has been partitioned by system into
@@ -29,9 +29,11 @@ from config.custom_dqr._acce_catalog import ACCE_RULES
 from config.custom_dqr._adr_catalog import ADR_RULES
 from config.custom_dqr._ept_catalog import EPT_RULES
 from config.custom_dqr._shared import (
+    LEGACY_CUSTOM_RULE_IDS,
     CustomRuleDef,
     CustomRuleOption,
     CustomRuleSelectOption,
+    canonical_custom_rule_id,
     effective_required_columns,
 )
 
@@ -63,6 +65,8 @@ def get_available_custom_dqr_rules(data_product: str) -> List[CustomRuleDef]:
 
 __all__ = [
     "CUSTOM_DQR_RULES",
+    "LEGACY_CUSTOM_RULE_IDS",
+    "canonical_custom_rule_id",
     "CustomRuleDef",
     "CustomRuleOption",
     "CustomRuleSelectOption",

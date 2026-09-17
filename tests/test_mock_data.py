@@ -141,18 +141,18 @@ def test_quality_sqs_inspection_status_has_null_blank_and_offlist_values():
 # ---------------------------------------------------------------------------
 
 def test_acce_coa_master_has_iso_lookup_columns():
-    """A1 / AC1 join on (ICARUS_COA → ISO_COR, SAB); both must be present."""
+    """DQ-ADR-1 / AC1 join on (ICARUS_COA → ISO_COR, SAB); both must be present."""
     df = mock_data._mock_acce_coa_master()
     for col in ("ICARUS_COA", "ISO_COR", "SAB"):
         assert col in df.columns, col
     assert not df.empty
-    # The mock intentionally repeats some ICARUS_COA codes so the A1/AC1
+    # The mock intentionally repeats some ICARUS_COA codes so the DQ-ADR-1/AC1
     # validator gets to exercise its "multiple ISO mappings per COA"
     # branch; the joiner handles duplicates downstream.
 
 
 def test_vws_gp_standard_share_has_project_lookup_columns():
-    """E7 joins PLANVIEW_ID → PROJECT_ID; E2 reads COUNTRY; E6 / A7 segment
+    """E7 joins PLANVIEW_ID → PROJECT_ID; E2 reads COUNTRY; E6 / DQ-ADR-7 segment
     by E05_DEPARTMENT + BUSINESS."""
     df = mock_data._mock_vws_gp_standard_share()
     for col in ("PROJECT_ID", "COUNTRY", "E05_DEPARTMENT", "BUSINESS"):
@@ -166,7 +166,7 @@ def test_vws_gp_standard_share_has_project_lookup_columns():
 # ---------------------------------------------------------------------------
 
 def test_adr_primary_contains_some_null_planview_ids():
-    """A primary table without any null PLANVIEW_IDs would let A2 pass on
+    """A primary table without any null PLANVIEW_IDs would let DQ-ADR-2 pass on
     every row and defeat the demo's purpose."""
     df = mock_data.fetch_mock_table("ADR_DIM_ESTIMATEITEMRECORD")
     assert df["PLANVIEW_ID"].isna().any() or (

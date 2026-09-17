@@ -140,7 +140,7 @@ def test_cost_estimate_domain_keeps_full_custom_rule_catalog(monkeypatch):
     adr_rules = get_available_custom_dqr_rules("ADR")
     acce_rules = get_available_custom_dqr_rules("ACCE")
     ept_rules = get_available_custom_dqr_rules("EPT")
-    # 9 + 8 + 7 = 24 custom rules (ADR A1-A9, ACCE AC1-AC8, EPT E1-E7).
+    # 9 + 8 + 7 = 24 custom rules (ADR DQ-ADR-1..9, ACCE AC1-AC8, EPT E1-E7).
     assert len(adr_rules) + len(acce_rules) + len(ept_rules) == 24
 
 
@@ -199,7 +199,6 @@ def test_quality_domain_exposes_dq_inspection_12(monkeypatch):
     rule = by_id["dq-inspection-12"]
     assert rule.name == "Mandatory on Completion"
     assert rule.type == "Completeness"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Status": "STATUS",
         "Total Consumed Hours": "TOTAL_CONSUMED_HOURS",
@@ -216,7 +215,6 @@ def test_quality_domain_exposes_dq_inspection_13(monkeypatch):
     rule = by_id["dq-inspection-13"]
     assert rule.name == "Mandatory Approved Hours"
     assert rule.type == "Completeness"
-    assert rule.blocking is False
     assert rule.required_columns == {"Alloted Hours": "ALLOTED_HOURS"}
 
 

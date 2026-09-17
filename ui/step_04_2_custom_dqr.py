@@ -3,7 +3,7 @@ Step 4.2: Custom DQR rules.
 
 For each Data Product that selected the "custom" source in Step 4, render
 the catalog of data-product-specific rules as cards. Visible by default:
-rule id, name, type, short description, blocking flag, and a checkbox to
+rule id, name, type, short description, and a checkbox to
 opt the rule into the scoring. Inside an expander: notes, required source
 columns, and the technical mapping.
 
@@ -173,8 +173,6 @@ def _render_rule_card(
     carries the values of every option toggle, ready to be persisted on
     the assignment so the engine's dispatcher can route them to the
     rule's ``check`` callable."""
-    blocking_class = "tag-block" if rule.blocking else "tag-noblock"
-    blocking_label = "🚫 Blocking" if rule.blocking else "ℹ Non-blocking"
     current_params = dict(current_params or {})
     with st.container(border=True):
         header_cols = st.columns([6, 1])
@@ -187,7 +185,6 @@ def _render_rule_card(
                 </div>
                 <div style="margin-bottom: 0.4em;">
                     <span class="rule-tag tag-type">type: {html.escape(str(rule.type))}</span>
-                    <span class="rule-tag {blocking_class}">{blocking_label}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,

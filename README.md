@@ -69,16 +69,16 @@ automates the same pipeline end-to-end).
    - **Custom DQR Rules**: data-product-specific rules curated for that
      system. EPT currently ships seven rules (E1–E7) covering completeness,
      referential integrity, FEED/Engineering consistency and statistical
-     outliers; ADR ships eight rules (A1 covering blocking ISO COR + SAB
-     lookup completeness, A2 covering location + estimate date
-     completeness, A3 covering statistical WBC-to-ISO mapping
-     aggregation, A4 covering core-quantity completeness per project
-     scope, A5 covering design-detail/quantity consistency, A6 covering
-     construction-hours/quantity consistency, A7 covering
-     within-discipline hours-per-quantity outlier detection, A8 covering
+     outliers; ADR ships eight rules (DQ-ADR-1 covering the ISO COR + SAB
+     lookup completeness, DQ-ADR-2 covering location + estimate date
+     completeness, DQ-ADR-3 covering statistical WBC-to-ISO mapping
+     aggregation, DQ-ADR-4 covering core-quantity completeness per project
+     scope, DQ-ADR-5 covering design-detail/quantity consistency, DQ-ADR-6 covering
+     construction-hours/quantity consistency, DQ-ADR-7 covering
+     within-discipline hours-per-quantity outlier detection, DQ-ADR-8 covering
      cross-discipline quantity-ratio outlier detection at the project
-     level). ACCE ships the AC1–AC8 series that mirrors A1–A8 against
-     the ACCE schema, e.g. AC1 is the blocking ISO COR + SAB lookup,
+     level). ACCE ships the AC1–AC8 series that mirrors DQ-ADR-1..8 against
+     the ACCE schema, e.g. AC1 is the ISO COR + SAB lookup,
      joining the first three characters of the 4-character `ACCE.COA`
      to the 3-character `ICARUS_COA` group in the master (the analog
      of ADR's `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation). The
@@ -106,12 +106,12 @@ automates the same pipeline end-to-end).
      DP card also exposes a **✓ Select all Custom DQRs** shortcut that
      ticks every rule available for that data product on click (not
      pre-applied; persisted weights / option params survive the bulk-select).
-     Statistical-outlier rules (E3, E6, A3, A7, A8, AC3, AC7, AC8)
+     Statistical-outlier rules (E3, E6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8, AC3, AC7, AC8)
      additionally surface a **threshold selectbox** on each card -
      pick the percentile (P75 / **P90 default** / P95 / P99 for
-     E3 / A3 / AC3) or the IQR multiplier (**1.5× default** / 2.0× /
-     3.0× for E6 / A7 / A8 / AC7 / AC8) used to decide what counts
-     as an outlier. E3 and A3 also expose two behavioural toggles -
+     E3 / DQ-ADR-3 / AC3) or the IQR multiplier (**1.5× default** / 2.0× /
+     3.0× for E6 / DQ-ADR-7 / DQ-ADR-8 / AC7 / AC8) used to decide what counts
+     as an outlier. E3 and DQ-ADR-3 also expose two behavioural toggles -
      **project_scoped** (per-`PLANVIEW_ID` percentile baseline) and
      **detect_uniform_mapping** (also fail material 1:1 buckets).
      AC3 only exposes **detect_uniform_mapping**, gated by an
@@ -355,7 +355,7 @@ data_quality_app/
 │   └── custom_dqr/              # M6 split (per system)
 │       ├── _shared.py           # CustomRuleDef + option-builder helpers
 │       ├── _ept_catalog.py      # EPT_RULES list (E1-E7)
-│       ├── _adr_catalog.py      # ADR_RULES list (A1-A8)
+│       ├── _adr_catalog.py      # ADR_RULES list (DQ-ADR-1..8)
 │       ├── _acce_catalog.py     # ACCE_RULES list (AC1-AC8)
 │       └── _sqs_catalog.py      # SQS_RULES list (Quality domain - dq-inspection-*)
 ├── src/
@@ -379,7 +379,7 @@ data_quality_app/
 │       ├── _shared.py           # CustomRuleNotEvaluated + reusable helpers
 │       ├── _validators.py       # validate_completeness / referential_integrity
 │       ├── _ept_rules.py        # E1-E7 checks + constants + EPTE3/E6Params
-│       ├── _adr_rules.py        # A1-A8 checks + constants + ADRA3/A7/A8Params
+│       ├── _adr_rules.py        # DQ-ADR-1..8 checks + constants + ADRA3/A7/A8Params
 │       ├── _acce_rules.py       # AC1-AC8 checks + constants + ACCEAC3/AC7/AC8Params
 │       ├── _sqs_rules.py        # dq-inspection-* checks + constants (Quality domain)
 │       └── _dispatcher.py       # evaluate_custom_rules(df, assignments, dp)
@@ -435,14 +435,14 @@ data_quality_app/
     ├── test_dqr_validation.py
     ├── test_dqr_sources_config.py
     ├── test_custom_dqr_engine.py
-    ├── test_custom_dqr_catalogs.py        # M6 catalog invariants (A6)
+    ├── test_custom_dqr_catalogs.py        # M6 catalog invariants (DQ-ADR-6)
     ├── test_step_04_source_selection_ui.py
     ├── test_step_04_2_custom_ui.py
     ├── test_scorecard.py
     ├── test_data_product_builder.py
-    ├── test_models.py                     # dataclass contracts (A6)
-    ├── test_reference_data.py             # cache + loader contracts (A6)
-    ├── test_mock_data.py                  # mock builder shape (A6)
+    ├── test_models.py                     # dataclass contracts (DQ-ADR-6)
+    ├── test_reference_data.py             # cache + loader contracts (DQ-ADR-6)
+    ├── test_mock_data.py                  # mock builder shape (DQ-ADR-6)
     ├── test_domains.py                    # registry + active-domain helpers
     ├── test_helpers.py
     ├── test_session_state.py
@@ -686,31 +686,31 @@ wiring" note). To add a rule for an existing Cost Estimate data product:
      reference_df, reference_column)` - used by E7 and any future
      Referential Integrity rule.
 
-   Statistical-outlier rules (E3, E6, A3, A7, A8, AC3, AC7, AC8)
+   Statistical-outlier rules (E3, E6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8, AC3, AC7, AC8)
    compute group-level metrics inside their own `check` function and
    propagate the per-group verdict back to every row of the failing
    group. Each one accepts a `params` argument and reads its
    threshold from `params[<RULE>_THRESHOLD_PARAM]` so the user can
-   pick a percentile (P75 / **P90 default** / P95 / P99 for E3 / A3 /
+   pick a percentile (P75 / **P90 default** / P95 / P99 for E3 / DQ-ADR-3 /
    AC3) or IQR multiplier (**1.5× default** / 2.0× / 3.0× for E6 /
-   A7 / A8 / AC7 / AC8) in Step 4.2.
+   DQ-ADR-7 / DQ-ADR-8 / AC7 / AC8) in Step 4.2.
 2. Add a `CustomRuleDef(...)` entry to the relevant list in
    `CUSTOM_DQR_RULES`. Required fields: `id`, `name`, `type` (e.g.
    `"Completeness"`, `"Consistency"`, `"Referential Integrity"`,
    `"Statistical Outlier"`), `description`, `notes`, `required_columns`
-   (alias → physical column), `blocking` flag, and `check` callable.
+   (alias → physical column) and `check` callable.
    Referential-integrity rules also set the optional `reference` field -
    `{"reference_dataset": "...", "source_column": "...",
    "reference_column": "...", "lookup_column": "..."}`, which the UI
    surfaces in Step 4.2. Per-rule **options** come in two flavours:
-   `CustomRuleOption` renders as a toggle (used by E3 / A3 for the
+   `CustomRuleOption` renders as a toggle (used by E3 / DQ-ADR-3 for the
    `project_scoped` and `detect_uniform_mapping` switches), and
    `CustomRuleSelectOption` renders as a selectbox (used by every
    statistical-outlier rule to expose a customizable threshold -
-   percentile for E3 / A3, IQR multiplier for E6 / A7 / A8). Values flow
+   percentile for E3 / DQ-ADR-3, IQR multiplier for E6 / DQ-ADR-7 / DQ-ADR-8). Values flow
    through to the `check` callable's `params` argument and can extend
    the rule's required CDEs when enabled (E3's project-scope toggle
-   demands `PLANVIEW_ID` only when the user turns it on; A3's
+   demands `PLANVIEW_ID` only when the user turns it on; DQ-ADR-3's
    project-scope toggle has no extra coverage cost since `PLANVIEW_ID`
    is already required; threshold selectboxes never extend required
    columns, they only customize numeric cutoffs).
@@ -725,54 +725,54 @@ wiring" note). To add a rule for an existing Cost Estimate data product:
    "Not evaluated" status) in the "Custom Rules" tab.
 
 EPT seeds **seven** custom rules, ADR seeds **eight**, and ACCE seeds
-its parallel AC1… catalog (mirroring A1–A8 against the ACCE schema)
+its parallel AC1… catalog (mirroring DQ-ADR-1..8 against the ACCE schema)
 out of the box. Full per-rule documentation lives in
 [documents/CUSTOM_RULES.md](documents/CUSTOM_RULES.md); the headline list is:
 
-| Data Product | ID | Name | Type | Blocking |
-|--------------|----|------|------|----------|
-| EPT | E1 | ISO Code of Account Present (COR + SAB)               | Completeness         | Yes |
-| EPT | E2 | Location + estimate date present                       | Completeness         | No  |
-| EPT | E3 | Statistical Excessive WBC to ISO Mapping               | Statistical Outlier  | No  |
-| EPT | E4 | Level 1 cost category populated                        | Completeness         | No  |
-| EPT | E5 | FEED / Engineering hours estimate present when cost exists | Consistency      | No  |
-| EPT | E6 | Cost-to-hours ratio outlier check                      | Statistical Outlier  | No  |
-| EPT | E7 | Project Key linkage                                    | Referential Integrity| Yes |
-| ADR | A1 | ISO Code of Account present (COR + SAB)                | Completeness         | Yes |
-| ADR | A2 | Location + estimate date present & valid               | Completeness & Validity | No  |
-| ADR | A3 | Statistical WBC-to-ISO mapping ratio                   | Statistical Outlier  | No  |
-| ADR | A4 | Core quantities populated & non-negative project totals | Completeness & Validity | No  |
-| ADR | A5 | Design details present when quantity exists           | Consistency          | No  |
-| ADR | A6 | Construction hours present when quantity exists       | Consistency          | No  |
-| ADR | A7 | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  | No  |
-| ADR | A8 | Cross-discipline quantity ratios                       | Statistical Outlier  | No  |
-| ACCE | AC1 | ISO Code of Account present (COR + SAB) - `COA[:3]` lookup    | Completeness | Yes |
-| ACCE | AC2 | Location + estimate date present & valid (uses `JOB_NO`)   | Completeness & Validity | No  |
-| ACCE | AC3 | Statistical COA-to-ISO mapping ratio                       | Statistical Outlier | No |
-| ACCE | AC4 | Core quantities populated & non-negative project totals (via `DESCRIPTION`) | Completeness & Validity | No |
-| ACCE | AC5 | Design details present when quantity exists                | Consistency | No |
-| ACCE | AC6 | Construction hours present when quantity exists (`COST_MH`) | Consistency | No |
-| ACCE | AC7 | Within-discipline quantity / hour ratio outlier (`DESCRIPTION`; optional project-type segmentation) | Statistical Outlier | No |
-| ACCE | AC8 | Cross-discipline quantity ratios (`COMPONENT_SOURCE`; optional project-type segmentation) | Statistical Outlier | No |
-| SQS | dq-inspection-12 | Mandatory on Completion (`STATUS = 'Completed'` → `TOTAL_CONSUMED_HOURS` not NULL) | Completeness | No |
-| SQS | dq-inspection-13 | Mandatory Approved Hours (`ALLOTED_HOURS` not NULL)     | Completeness        | No |
+| Data Product | ID | Name | Type |
+|--------------|----|------|------|
+| EPT | E1 | ISO Code of Account Present (COR + SAB)               | Completeness         |
+| EPT | E2 | Location + estimate date present                       | Completeness         |
+| EPT | E3 | Statistical Excessive WBC to ISO Mapping               | Statistical Outlier  |
+| EPT | E4 | Level 1 cost category populated                        | Completeness         |
+| EPT | E5 | FEED / Engineering hours estimate present when cost exists | Consistency      |
+| EPT | E6 | Cost-to-hours ratio outlier check                      | Statistical Outlier  |
+| EPT | E7 | Project Key linkage                                    | Referential Integrity|
+| ADR | DQ-ADR-1 | ISO Code of Account present (COR + SAB)                | Completeness         |
+| ADR | DQ-ADR-2 | Location + estimate date present & valid               | Completeness & Validity |
+| ADR | DQ-ADR-3 | Statistical WBC-to-ISO mapping ratio                   | Statistical Outlier  |
+| ADR | DQ-ADR-4 | Core quantities populated & non-negative project totals | Completeness & Validity |
+| ADR | DQ-ADR-5 | Design details present when quantity exists           | Consistency          |
+| ADR | DQ-ADR-6 | Construction hours present when quantity exists       | Consistency          |
+| ADR | DQ-ADR-7 | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  |
+| ADR | DQ-ADR-8 | Cross-discipline quantity ratios                       | Statistical Outlier  |
+| ACCE | AC1 | ISO Code of Account present (COR + SAB) - `COA[:3]` lookup    | Completeness |
+| ACCE | AC2 | Location + estimate date present & valid (uses `JOB_NO`)   | Completeness & Validity |
+| ACCE | AC3 | Statistical COA-to-ISO mapping ratio                       | Statistical Outlier |
+| ACCE | AC4 | Core quantities populated & non-negative project totals (via `DESCRIPTION`) | Completeness & Validity |
+| ACCE | AC5 | Design details present when quantity exists                | Consistency |
+| ACCE | AC6 | Construction hours present when quantity exists (`COST_MH`) | Consistency |
+| ACCE | AC7 | Within-discipline quantity / hour ratio outlier (`DESCRIPTION`; optional project-type segmentation) | Statistical Outlier |
+| ACCE | AC8 | Cross-discipline quantity ratios (`COMPONENT_SOURCE`; optional project-type segmentation) | Statistical Outlier |
+| SQS | dq-inspection-12 | Mandatory on Completion (`STATUS = 'Completed'` → `TOTAL_CONSUMED_HOURS` not NULL) | Completeness |
+| SQS | dq-inspection-13 | Mandatory Approved Hours (`ALLOTED_HOURS` not NULL)     | Completeness        |
 
-E2 / E7 / A2 / AC2 depend on the `VWS_GP_STANDARD_SHARE` reference
+E2 / E7 / DQ-ADR-2 / AC2 depend on the `VWS_GP_STANDARD_SHARE` reference
 table (loaded from the same Unity Catalog namespace as the
 primary table in Databricks mode, or from the deterministic project
-pool in mock mode); E6, A7, A8, AC7, and AC8 optionally depend on
+pool in mock mode); E6, DQ-ADR-7, DQ-ADR-8, AC7, and AC8 optionally depend on
 the same table when their `segment_by_project_type` toggle is on
 (lookup `E05_DEPARTMENT` + `BUSINESS` to derive the project archetype
-the IQR is computed within); A1, A3, AC1, and AC3 depend on
+the IQR is computed within); DQ-ADR-1, DQ-ADR-3, AC1, and AC3 depend on
 `ACCE_COA_MASTER`
 (loaded from the same configured namespace in Databricks mode, or from a
-fixed COA-group pool in mock mode). A1 / AC1 validate the COR/SAB
+fixed COA-group pool in mock mode). DQ-ADR-1 / AC1 validate the COR/SAB
 resolution by joining a 3-character ICARUS_COA group against the
 master - ADR derives the group via `SPLIT_PART(COMPLETE_WBC, '.', 1)`,
-ACCE via the first three characters of the 4-character `COA`. A3 /
-AC3 measure distinct-source-code aggregation per resolved bucket (A3
+ACCE via the first three characters of the 4-character `COA`. DQ-ADR-3 /
+AC3 measure distinct-source-code aggregation per resolved bucket (DQ-ADR-3
 counts distinct `COMPLETE_WBC`, AC3 counts distinct `COA` over the
-*full* 4-character value); A2 / AC2 validate `COUNTRY` +
+*full* 4-character value); DQ-ADR-2 / AC2 validate `COUNTRY` +
 estimate-basis date (present **and** in the fiscal quarter-year format)
 / gate via the Planview join. The reference
 tables are **eager-loaded in Step 2** alongside the system tables and
@@ -857,8 +857,8 @@ In addition to this README, see:
   reference for the 10 Standard DQRs (semantics, parameters, supported
   column types, edge cases).
 - [documents/CUSTOM_RULES.md](documents/CUSTOM_RULES.md) - per-rule reference
-  for the EPT custom catalog (E1–E7), the ADR custom catalog (A1, A2,
-  A3, A4, A5, A6, A7, A8), the ACCE custom catalog (AC1, …), and the
+  for the EPT custom catalog (E1–E7), the ADR custom catalog (DQ-ADR-1, DQ-ADR-2,
+  DQ-ADR-3, DQ-ADR-4, DQ-ADR-5, DQ-ADR-6, DQ-ADR-7, DQ-ADR-8), the ACCE custom catalog (AC1, …), and the
   SQS / Quality custom catalog (dq-inspection-12, dq-inspection-13)
   - including required columns, reference data, options, and pass/fail
   conventions.

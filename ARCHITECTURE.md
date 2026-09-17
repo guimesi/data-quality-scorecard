@@ -91,7 +91,7 @@ src/
     _validators.py             # validate_completeness_rule,
                                #   validate_referential_integrity_rule
     _ept_rules.py              # E1-E7 checks + constants
-    _adr_rules.py              # A1-A8 checks + constants
+    _adr_rules.py              # DQ-ADR-1..8 checks + constants
     _acce_rules.py             # AC1-AC8 checks + constants
     _sqs_rules.py              # dq-inspection-* checks + constants (Quality domain)
     _dispatcher.py             # evaluate_custom_rules(df, assignments, dp)
@@ -495,13 +495,13 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   IDE aid, not a CI gate.
 
 - **`_resolve_planview_segment_map`** is shared across families (E6,
-  A7, A8, AC7, AC8) so it lives in [src/custom_dqr/_shared.py](src/custom_dqr/_shared.py),
+  DQ-ADR-7, DQ-ADR-8, AC7, AC8) so it lives in [src/custom_dqr/_shared.py](src/custom_dqr/_shared.py),
   not in the EPT module where it was originally defined.
 
 - **ACCE -> ADR dependency**: AC1 and AC8 reuse `_a1_value_valid`,
   `_resolve_coa_master_lookups`, and `_A8_UOM_ALIASES` from
   [src/custom_dqr/_adr_rules.py](src/custom_dqr/_adr_rules.py). Don't
-  remove these from ADR even if A1/A8 stop using them.
+  remove these from ADR even if DQ-ADR-1/DQ-ADR-8 stop using them.
 
 - **Quality (SQS) catalog wiring**: SQS rules live in the Quality
   domain's `custom_rules` map (set up inside `_build_quality_domain` in

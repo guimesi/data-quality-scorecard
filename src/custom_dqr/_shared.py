@@ -86,7 +86,7 @@ def _resolve_planview_segment_map(
     reference_config: SegmentReferenceConfig, rule_label: str
 ) -> Dict[str, Tuple[str, str]]:
     """Build the ``PLANVIEW_ID → (E05_DEPARTMENT, BUSINESS)`` lookup used by
-    the project-type segmentation toggle on E6, A7, A8, AC7 and AC8. Every
+    the project-type segmentation toggle on E6, DQ-ADR-7, DQ-ADR-8, AC7 and AC8. Every
     one of those rules joins PLANVIEW_ID to the same Planview reference
     table and reads the same segment columns, so the resolution logic is
     shared across families.
@@ -129,7 +129,7 @@ def _resolve_planview_segment_map(
     # null/blank, and pre-strip every value. The resulting dict's
     # ``.get(pv)`` returns either a fully-resolved ``(dept, business)``
     # tuple of stripped strings, or ``None``, callers never need to
-    # re-check fillness per-row, which matters because A7 / A8 may face
+    # re-check fillness per-row, which matters because DQ-ADR-7 / DQ-ADR-8 may face
     # ADR's ~866k-row scale.
     ref = (
         reference_df[[ref_col, *seg_cols]]

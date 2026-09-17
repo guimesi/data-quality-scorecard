@@ -55,10 +55,9 @@ EPT_RULES = [
         ),
         notes=(
             "Without COR/SAB, cost data cannot be normalized. This is a "
-            "blocking gap."
+            "critical gap."
         ),
         required_columns=dict(EPT_E1_REQUIRED_COLUMNS),
-        blocking=True,
         check=check_ept_e1,
     ),
     CustomRuleDef(
@@ -78,7 +77,6 @@ EPT_RULES = [
             "select the correct CU period for EMMA normalization."
         ),
         required_columns=dict(EPT_E2_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_ept_e2,
         reference=dict(EPT_E2_REFERENCE),
     ),
@@ -105,7 +103,6 @@ EPT_RULES = [
             "switches the percentile to a per-PLANVIEW_ID baseline."
         ),
         required_columns=dict(EPT_E3_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_ept_e3,
         select_options=[
             _percentile_threshold_option(
@@ -163,7 +160,6 @@ EPT_RULES = [
             "minimum acceptable granularity."
         ),
         required_columns=dict(EPT_E4_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_ept_e4,
     ),
     CustomRuleDef(
@@ -186,7 +182,6 @@ EPT_RULES = [
             "Non-FEED rows are Not Applicable and pass."
         ),
         required_columns=dict(EPT_E5_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_ept_e5,
     ),
     CustomRuleDef(
@@ -215,7 +210,6 @@ EPT_RULES = [
             "deepwater FPSO is not pooled with an onshore refinery."
         ),
         required_columns=dict(EPT_E6_REQUIRED_COLUMNS),
-        blocking=False,
         check=check_ept_e6,
         select_options=[
             _iqr_threshold_option(
@@ -273,7 +267,6 @@ EPT_RULES = [
             "orphaned and cannot be used in the integrated data product."
         ),
         required_columns=dict(EPT_E7_REQUIRED_COLUMNS),
-        blocking=True,
         check=check_ept_e7,
         reference=dict(EPT_E7_REFERENCE),
     ),

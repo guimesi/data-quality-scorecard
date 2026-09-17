@@ -34,7 +34,6 @@ def test_ept_has_custom_rule_e1_available():
     assert "E1" in by_id
     rule = by_id["E1"]
     assert rule.type == "Completeness"
-    assert rule.blocking is True
     assert rule.required_columns == {
         "COR": "CODE_OF_RESOURCE",
         "SAB": "STANDARD_ACTIVITY_BREAKDOWN",
@@ -188,13 +187,12 @@ def _make_e3_df(rows):
 
 
 def test_ept_has_custom_rule_e3_available():
-    """EPT catalog exposes E3 as a non-blocking statistical-outlier rule."""
+    """EPT catalog exposes E3 as a statistical-outlier rule."""
     rules = get_available_custom_dqr_rules("EPT")
     by_id = {r.id: r for r in rules}
     assert "E3" in by_id
     rule = by_id["E3"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.reference is None
     assert rule.required_columns == {
         "WBC Level 5": "WBC_LEVEL_5",
@@ -958,13 +956,13 @@ def test_required_reference_datasets_unchanged_when_e2_added():
 
 
 # =============================================================================
-# A1: ISO Code of Account Present (COR + SAB) for ADR
+# DQ-ADR-1: ISO Code of Account Present (COR + SAB) for ADR
 # =============================================================================
 
 @pytest.fixture
 def _a1_coa_master_with_known_groups(monkeypatch):
     """Pin the COA master to a known ICARUS_COA → ISO_COR / SAB mapping
-    so A1 row-level assertions don't depend on the mock's RNG. Includes
+    so DQ-ADR-1 row-level assertions don't depend on the mock's RNG. Includes
     one row each for: valid mapping, invalid ISO_COR, invalid SAB, and
     duplicate-COA-with-best-pick semantics."""
     import src.reference_data as ref_mod
@@ -992,14 +990,13 @@ def _a1_coa_master_with_known_groups(monkeypatch):
 
 
 def test_adr_has_custom_rule_a1_available():
-    """ADR catalog exposes A1 as a *blocking* Completeness rule with a
+    """ADR catalog exposes DQ-ADR-1 as a Completeness rule with a
     reference dataset linkage to ACCE_COA_MASTER."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A1" in by_id
-    rule = by_id["A1"]
+    assert "DQ-ADR-1" in by_id
+    rule = by_id["DQ-ADR-1"]
     assert rule.type == "Completeness"
-    assert rule.blocking is True
     assert rule.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Complete WBC": "COMPLETE_WBC",
@@ -1013,7 +1010,7 @@ def test_adr_has_custom_rule_a1_available():
 def test_adr_a1_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A1_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A1"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-1"
     )
     assert rule.required_columns == ADR_A1_REQUIRED_COLUMNS
 
@@ -1046,7 +1043,7 @@ def test_adr_a1_fails_when_iso_cor_is_invalid_marker(
     _a1_coa_master_with_known_groups,
 ):
     """COA group 315 has ``ISO_COR = 'ERROR: #N/A'`` in the master -
-    should fail A1 even though SAB is valid."""
+    should fail DQ-ADR-1 even though SAB is valid."""
     from src.custom_dqr_engine import check_adr_a1
     df = pd.DataFrame({
         "PLANVIEW_ID": ["PV-1"],
@@ -1058,7 +1055,7 @@ def test_adr_a1_fails_when_iso_cor_is_invalid_marker(
 def test_adr_a1_fails_when_sab_is_invalid_marker(
     _a1_coa_master_with_known_groups,
 ):
-    """COA group 316 has ``SAB = 'ERROR: #N/A'`` - should fail A1 even
+    """COA group 316 has ``SAB = 'ERROR: #N/A'`` - should fail DQ-ADR-1 even
     though ISO_COR is valid."""
     from src.custom_dqr_engine import check_adr_a1
     df = pd.DataFrame({
@@ -1128,7 +1125,7 @@ def test_adr_a1_fails_for_all_rows_when_planview_id_column_missing(
 
 
 def test_adr_a1_raises_not_evaluated_when_reference_unavailable(monkeypatch):
-    """If the COA master loader returns None, A1 must raise
+    """If the COA master loader returns None, DQ-ADR-1 must raise
     CustomRuleNotEvaluated rather than silently passing."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import CustomRuleNotEvaluated, check_adr_a1
@@ -1167,21 +1164,21 @@ def test_adr_a1_fails_for_all_rows_when_reference_missing_required_columns(
 def test_evaluate_custom_rules_dispatches_to_a1(
     _a1_coa_master_with_known_groups,
 ):
-    """End-to-end: dispatcher routes an A1 assignment through check_adr_a1."""
+    """End-to-end: dispatcher routes an DQ-ADR-1 assignment through check_adr_a1."""
     df = pd.DataFrame({
         "PLANVIEW_ID": ["PV-1", "PV-2", "PV-3"],
         "COMPLETE_WBC": ["313.1.10.10", "315.0.5.18", None],
     })
-    assignments = [CustomDQRAssignment(rule_id="A1", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-1", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A1" in out.columns
+    assert "DQ-ADR-1" in out.columns
     # 313 → valid PASS; 315 → invalid ISO_COR; null WBC → FAIL.
-    assert out["A1"].tolist() == [True, False, False]
+    assert out["DQ-ADR-1"].tolist() == [True, False, False]
     assert not_evaluated == {}
 
 
 def test_required_reference_datasets_for_adr_now_includes_coa_master():
-    """A1 introduces a second reference dataset for ADR
+    """DQ-ADR-1 introduces a second reference dataset for ADR
     (``ACCE_COA_MASTER`` alongside ``VWS_GP_STANDARD_SHARE``). Step 2
     must prefetch both."""
     from src.reference_data import required_reference_datasets_for_systems
@@ -1191,8 +1188,8 @@ def test_required_reference_datasets_for_adr_now_includes_coa_master():
 
 def test_acce_coa_master_loader_resolves_in_mock_mode():
     """The mock-mode loader returns a populated DataFrame with the
-    three columns A1 needs. Sanity check so future regressions don't
-    silently break A1 in demo mode."""
+    three columns DQ-ADR-1 needs. Sanity check so future regressions don't
+    silently break DQ-ADR-1 in demo mode."""
     from src.reference_data import _load_acce_coa_master
     df = _load_acce_coa_master()
     assert df is not None
@@ -1206,20 +1203,19 @@ def test_acce_coa_master_loader_resolves_in_mock_mode():
 
 # Reuses the ``_a1_coa_master_with_known_groups`` fixture above: same COA
 # master schema, same best-available-mapping semantics. AC1 differs from
-# A1 only in the source column (``COA``, used directly), so the same
+# DQ-ADR-1 only in the source column (``COA``, used directly), so the same
 # pinned reference fixture covers both rules.
 
 
 def test_acce_has_custom_rule_ac1_available():
-    """ACCE catalog exposes AC1 as a *blocking* Completeness rule with a
+    """ACCE catalog exposes AC1 as a Completeness rule with a
     reference dataset linkage to ACCE_COA_MASTER on the direct ``COA``
-    column (no WBC split, unlike ADR's A1)."""
+    column (no WBC split, unlike ADR's DQ-ADR-1)."""
     rules = get_available_custom_dqr_rules("ACCE")
     by_id = {r.id: r for r in rules}
     assert "AC1" in by_id
     rule = by_id["AC1"]
     assert rule.type == "Completeness"
-    assert rule.blocking is True
     assert rule.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Code of Account": "COA",
@@ -1306,7 +1302,7 @@ def test_acce_ac1_picks_best_available_mapping_for_duplicate_coa(
 ):
     """COA 317 has two rows in the master, one fully invalid, one with
     valid ISO_COR + valid SAB. The rule prefers the valid pair, so a
-    317 row must PASS, same FIRST_VALUE-by-invalid-flag semantics as A1."""
+    317 row must PASS, same FIRST_VALUE-by-invalid-flag semantics as DQ-ADR-1."""
     from src.custom_dqr_engine import check_acce_ac1
     df = pd.DataFrame({
         "PLANVIEW_ID": ["PV-1"],
@@ -1462,17 +1458,17 @@ def test_required_reference_datasets_for_acce_includes_coa_master():
 
 
 # =============================================================================
-# AC2: Location + Estimate Date Present (ACCE; mirrors ADR A2 with JOB_NO)
+# AC2: Location + Estimate Date Present (ACCE; mirrors ADR DQ-ADR-2 with JOB_NO)
 # =============================================================================
 
 # Reuses the ``_a2_reference_with_countries`` fixture defined below in
-# the ADR A2 block. AC2 differs from A2 only in the date source column
+# the ADR DQ-ADR-2 block. AC2 differs from DQ-ADR-2 only in the date source column
 # (``JOB_NO`` vs ``COST_UPDATE``), so the same pinned reference
 # dataset covers both rules.
 
 
 def test_acce_has_custom_rule_ac2_available():
-    """ACCE catalog exposes AC2 - non-blocking Completeness & Validity rule
+    """ACCE catalog exposes AC2 - Completeness & Validity rule
     that joins ``PLANVIEW_ID`` to ``VWS_GP_STANDARD_SHARE.PROJECT_ID`` and
     requires ``JOB_NO`` filled and well-formed (ACCE's estimate-basis-date
     proxy)."""
@@ -1481,7 +1477,6 @@ def test_acce_has_custom_rule_ac2_available():
     assert "AC2" in by_id
     rule = by_id["AC2"]
     assert rule.type == "Completeness & Validity"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Estimate Job Number": "JOB_NO",
         "Project Key": "PLANVIEW_ID",
@@ -1538,7 +1533,7 @@ def test_acce_ac2_fails_when_job_no_null(_ac2_reference_with_countries):
 
 def test_acce_ac2_fails_when_job_no_blank_string(_ac2_reference_with_countries):
     """Blank/whitespace strings count as missing - AC2 piggy-backs on
-    ``_is_filled``, same as A2. (The empty-string value seen in the live
+    ``_is_filled``, same as DQ-ADR-2. (The empty-string value seen in the live
     JOB_NO column lands here.)"""
     from src.custom_dqr_engine import check_acce_ac2
     df = pd.DataFrame({
@@ -1699,7 +1694,7 @@ def test_required_reference_datasets_for_acce_now_includes_planview_share():
 
 
 # =============================================================================
-# AC3: Statistical COA-to-ISO mapping ratio (ACCE; mirrors ADR A3 with COA)
+# AC3: Statistical COA-to-ISO mapping ratio (ACCE; mirrors ADR DQ-ADR-3 with COA)
 # =============================================================================
 
 def _ac3_required_cols():
@@ -1779,14 +1774,13 @@ def _ac3_baseline_population(hours: float = 100.0, cost: float = 50.0):
 # ----- Catalog metadata ------------------------------------------------------
 
 def test_acce_has_custom_rule_ac3_available():
-    """ACCE catalog exposes AC3 as a non-blocking Statistical Outlier
+    """ACCE catalog exposes AC3 as a Statistical Outlier
     rule joined to the COA master through the direct ``COA`` column."""
     rules = get_available_custom_dqr_rules("ACCE")
     by_id = {r.id: r for r in rules}
     assert "AC3" in by_id
     rule = by_id["AC3"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Code of Account": "COA",
@@ -1823,7 +1817,7 @@ def test_acce_ac3_constants_are_documented_defaults():
 def test_acce_ac3_does_not_expose_project_scope_option():
     """Per the AC3 spec, the rule ships only the percentile selector
     and the uniform-detection toggle, no project-scope option (unlike
-    ADR A3). This guards against accidentally adding it in the future,
+    ADR DQ-ADR-3). This guards against accidentally adding it in the future,
     which would change the rule's user contract."""
     rule = next(
         r for r in get_available_custom_dqr_rules("ACCE") if r.id == "AC3"
@@ -2225,7 +2219,7 @@ def test_acce_ac3_stale_threshold_param_falls_back_to_default(
 ):
     """A non-numeric / out-of-range threshold value must fall back to
     ACCE_AC3_PERCENTILE (P90) via _coerce_threshold, same contract as
-    E3 / A3."""
+    E3 / DQ-ADR-3."""
     from src.custom_dqr_engine import (
         ACCE_AC3_THRESHOLD_PARAM,
         check_acce_ac3,
@@ -2381,7 +2375,7 @@ def test_acce_ac3_uniform_detection_respects_materiality(
     """Toggle on AND ≥80% of buckets are 1:1, but the 1:1 buckets are
     immaterial (hours = 0 AND cost < materiality) → those buckets
     PASS. Materiality gates both the percentile and uniform branches,
-    same as A3."""
+    same as DQ-ADR-3."""
     from src.custom_dqr_engine import (
         ACCE_AC3_DETECT_UNIFORM_MAPPING_PARAM,
         check_acce_ac3,
@@ -2434,14 +2428,13 @@ def _ac4_row(planview, description, qty=None, uom=None, *, slot="key"):
 # ----- Catalog metadata ------------------------------------------------------
 
 def test_acce_has_custom_rule_ac4_available():
-    """ACCE catalog exposes AC4 as a non-blocking Completeness & Validity
-    rule with no reference dataset (same as A4)."""
+    """ACCE catalog exposes AC4 as a Completeness & Validity
+    rule with no reference dataset (same as DQ-ADR-4)."""
     rules = get_available_custom_dqr_rules("ACCE")
     by_id = {r.id: r for r in rules}
     assert "AC4" in by_id
     rule = by_id["AC4"]
     assert rule.type == "Completeness & Validity"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Item Description": "DESCRIPTION",
@@ -2862,7 +2855,7 @@ def test_acce_ac4_does_not_add_reference_dataset_to_prefetch():
 
 
 # =============================================================================
-# AC5: Design details present when quantity exists (ACCE; mirrors ADR A5)
+# AC5: Design details present when quantity exists (ACCE; mirrors ADR DQ-ADR-5)
 # =============================================================================
 
 def _ac5_required_cols():
@@ -2890,7 +2883,7 @@ def _ac5_row(qty=None, value=None, prop="DESIGN PRESSURE", *, slot="key"):
 
 
 def test_acce_has_custom_rule_ac5_available():
-    """ACCE catalog exposes AC5 as a non-blocking Consistency rule
+    """ACCE catalog exposes AC5 as a Consistency rule
     with the documented physical column mapping (split qty + named
     design parameter)."""
     rules = get_available_custom_dqr_rules("ACCE")
@@ -2898,7 +2891,6 @@ def test_acce_has_custom_rule_ac5_available():
     assert "AC5" in by_id
     rule = by_id["AC5"]
     assert rule.type == "Consistency"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Key Quantity": "QTY_KEY_QTY",
         "Other Quantity": "QTY_OTHER_QTY",
@@ -3077,7 +3069,7 @@ def test_acce_ac5_does_not_add_reference_dataset_to_prefetch():
 
 
 # =============================================================================
-# AC6: Construction hours present when quantity exists (ACCE; mirrors A6)
+# AC6: Construction hours present when quantity exists (ACCE; mirrors DQ-ADR-6)
 # =============================================================================
 
 def _ac6_required_cols():
@@ -3108,7 +3100,7 @@ def _ac6_row(qty=None, mh=None, *, slot="key"):
 
 
 def test_acce_has_custom_rule_ac6_available():
-    """ACCE catalog exposes AC6 as a non-blocking Consistency rule
+    """ACCE catalog exposes AC6 as a Consistency rule
     with the documented physical column mapping (split qty +
     ``COST_MH``)."""
     rules = get_available_custom_dqr_rules("ACCE")
@@ -3116,7 +3108,6 @@ def test_acce_has_custom_rule_ac6_available():
     assert "AC6" in by_id
     rule = by_id["AC6"]
     assert rule.type == "Consistency"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Key Quantity": "QTY_KEY_QTY",
         "Other Quantity": "QTY_OTHER_QTY",
@@ -3293,7 +3284,7 @@ def test_acce_ac6_does_not_add_reference_dataset_to_prefetch():
 
 
 # =============================================================================
-# AC7: Within-discipline quantity / hour ratio outlier (ACCE; mirrors A7)
+# AC7: Within-discipline quantity / hour ratio outlier (ACCE; mirrors DQ-ADR-7)
 # =============================================================================
 
 def _ac7_required_cols():
@@ -3355,7 +3346,7 @@ def _ac7_segment_with_outlier(
 
 
 def test_acce_has_custom_rule_ac7_available():
-    """ACCE catalog exposes AC7 as a non-blocking Statistical Outlier
+    """ACCE catalog exposes AC7 as a Statistical Outlier
     rule with the documented physical column mapping (raw
     ``DESCRIPTION`` + effective UOM segment, split qty, ``COST_MH``,
     IQR-multiplier selectbox, and a project-type segmentation toggle)."""
@@ -3364,7 +3355,6 @@ def test_acce_has_custom_rule_ac7_available():
     assert "AC7" in by_id
     rule = by_id["AC7"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Item Description": "DESCRIPTION",
         "Key Quantity": "QTY_KEY_QTY",
@@ -3375,7 +3365,7 @@ def test_acce_has_custom_rule_ac7_available():
     }
     assert rule.reference is None
     # AC7 surfaces the IQR-multiplier selectbox and the
-    # segment_by_project_type toggle (mirrors A7).
+    # segment_by_project_type toggle (mirrors DQ-ADR-7).
     select_keys = {opt.key for opt in (rule.select_options or ())}
     assert "threshold_iqr_multiplier" in select_keys
     option_keys = {opt.key for opt in (rule.options or ())}
@@ -3420,7 +3410,7 @@ def test_acce_ac7_flags_outlier_in_well_populated_segment():
 
 def test_acce_ac7_flags_low_side_outlier_below_mild_lower_bound():
     """Outliers below ``Q1 - 1.5*IQR`` must also FAIL - AC7 is
-    two-sided, same as A7."""
+    two-sided, same as DQ-ADR-7."""
     from src.custom_dqr_engine import check_acce_ac7
     df = _ac7_segment_with_outlier(
         n_baseline=12, baseline_ratio=5.0, outlier_ratio=0.05
@@ -3819,7 +3809,7 @@ def test_acce_ac7_segmented_passes_rows_without_resolved_segment(monkeypatch):
     """Rows whose PLANVIEW_ID does not match the reference, or whose
     matched segment has a null/blank ``E05_DEPARTMENT`` / ``BUSINESS``,
     are NOT_APPLICABLE → PASS so segmentation never double-penalises
-    the referential-integrity gap AC2 / blocking AC1 already cover."""
+    the referential-integrity gap AC2 / AC1 already cover."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import (
         ACCE_AC7_SEGMENT_BY_PROJECT_TYPE_PARAM,
@@ -4001,7 +3991,7 @@ def _ac8_steel_concrete_population(
 # ----- Catalog metadata ------------------------------------------------------
 
 def test_acce_has_custom_rule_ac8_available():
-    """ACCE catalog exposes AC8 as a non-blocking Statistical Outlier
+    """ACCE catalog exposes AC8 as a Statistical Outlier
     rule with the documented physical column mapping (DESCRIPTION +
     COMPONENT_SOURCE + split qty/unit slots, IQR-multiplier selectbox,
     and a project-type segmentation toggle)."""
@@ -4010,7 +4000,6 @@ def test_acce_has_custom_rule_ac8_available():
     assert "AC8" in by_id
     rule = by_id["AC8"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Project Scope": "COMPONENT_SOURCE",
         "Item Description": "DESCRIPTION",
@@ -4021,7 +4010,7 @@ def test_acce_has_custom_rule_ac8_available():
     }
     assert rule.reference is None
     # AC8 surfaces the IQR-multiplier selectbox and the
-    # segment_by_project_type toggle (mirrors A8).
+    # segment_by_project_type toggle (mirrors DQ-ADR-8).
     select_keys = {opt.key for opt in (rule.select_options or ())}
     assert "threshold_iqr_multiplier" in select_keys
     option_keys = {opt.key for opt in (rule.options or ())}
@@ -4660,18 +4649,17 @@ def test_acce_ac8_segmented_fails_when_planview_id_column_missing(monkeypatch):
 
 
 # =============================================================================
-# A2: Location + Estimate Date Present (ADR; mirrors EPT E2 with COST_UPDATE)
+# DQ-ADR-2: Location + Estimate Date Present (ADR; mirrors EPT E2 with COST_UPDATE)
 # =============================================================================
 
 def test_adr_has_custom_rule_a2_available():
-    """ADR catalog exposes A2 with the documented Planview reference metadata.
+    """ADR catalog exposes DQ-ADR-2 with the documented Planview reference metadata.
     Mirrors EPT E2 but swaps CENTROID_DATE for COST_UPDATE."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A2" in by_id
-    rule = by_id["A2"]
+    assert "DQ-ADR-2" in by_id
+    rule = by_id["DQ-ADR-2"]
     assert rule.type == "Completeness & Validity"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Estimate Basis Date": "COST_UPDATE",
         "Project Key": "PLANVIEW_ID",
@@ -4686,7 +4674,7 @@ def test_adr_has_custom_rule_a2_available():
 @pytest.fixture
 def _a2_reference_with_countries(monkeypatch):
     """Pin the Planview reference to a known PROJECT_ID → COUNTRY mapping so
-    A2 row-level assertions don't depend on the mock's RNG."""
+    DQ-ADR-2 row-level assertions don't depend on the mock's RNG."""
     import src.reference_data as ref_mod
     ref_df = pd.DataFrame({
         "PROJECT_ID": ["PV-00001", "PV-00002", "PV-00003"],
@@ -4699,7 +4687,7 @@ def _a2_reference_with_countries(monkeypatch):
 def test_adr_a2_passes_when_cost_update_and_country_present(
     _a2_reference_with_countries,
 ):
-    """A2 passes when COST_UPDATE is filled AND PLANVIEW_ID joins to a
+    """DQ-ADR-2 passes when COST_UPDATE is filled AND PLANVIEW_ID joins to a
     project whose COUNTRY is populated."""
     from src.custom_dqr_engine import check_adr_a2
     df = pd.DataFrame({
@@ -4719,7 +4707,7 @@ def test_adr_a2_fails_when_cost_update_null(_a2_reference_with_countries):
 
 
 def test_adr_a2_fails_when_cost_update_blank_string(_a2_reference_with_countries):
-    """Blank/whitespace strings count as missing - A2 piggy-backs on
+    """Blank/whitespace strings count as missing - DQ-ADR-2 piggy-backs on
     `_is_filled`, mirroring the shelf Completeness semantics."""
     from src.custom_dqr_engine import check_adr_a2
     df = pd.DataFrame({
@@ -4733,7 +4721,7 @@ def test_adr_a2_fails_when_cost_update_filled_but_invalid_format(
     _a2_reference_with_countries,
 ):
     """Validity: a populated COST_UPDATE that does not match the fiscal
-    quarter-year shape [1-4]Q<YYYY> fails A2 even though it satisfies
+    quarter-year shape [1-4]Q<YYYY> fails DQ-ADR-2 even though it satisfies
     Completeness."""
     from src.custom_dqr_engine import check_adr_a2
     df = pd.DataFrame({
@@ -4775,7 +4763,7 @@ def test_adr_a2_fails_when_planview_id_does_not_match_reference(monkeypatch):
 
 
 def test_adr_a2_fails_when_country_null_after_join(monkeypatch):
-    """A matched PLANVIEW_ID whose project has a null COUNTRY fails A2."""
+    """A matched PLANVIEW_ID whose project has a null COUNTRY fails DQ-ADR-2."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import check_adr_a2
     monkeypatch.setattr(
@@ -4816,7 +4804,7 @@ def test_adr_a2_fails_for_all_rows_when_planview_id_column_missing():
 
 
 def test_adr_a2_raises_not_evaluated_when_reference_unavailable(monkeypatch):
-    """If the Planview reference loader returns None, A2 must raise
+    """If the Planview reference loader returns None, DQ-ADR-2 must raise
     CustomRuleNotEvaluated rather than silently passing."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import CustomRuleNotEvaluated, check_adr_a2
@@ -4851,22 +4839,22 @@ def test_adr_a2_fails_for_all_rows_when_reference_missing_country_column(monkeyp
 
 
 def test_evaluate_custom_rules_dispatches_to_a2(_a2_reference_with_countries):
-    """End-to-end: dispatcher routes an A2 assignment through check_adr_a2
+    """End-to-end: dispatcher routes an DQ-ADR-2 assignment through check_adr_a2
     against a known reference dataset for the ADR data product."""
     df = pd.DataFrame({
         "PLANVIEW_ID": ["PV-00001", "PV-00002"],
         "COST_UPDATE": ["2Q2019", "4Q2015"],
     })
-    assignments = [CustomDQRAssignment(rule_id="A2", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-2", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A2" in out.columns
-    assert out["A2"].tolist() == [True, True]
+    assert "DQ-ADR-2" in out.columns
+    assert out["DQ-ADR-2"].tolist() == [True, True]
     assert not_evaluated == {}
 
 
 def test_required_reference_datasets_for_adr_includes_planview_share():
-    """A2 makes ADR depend on VWS_GP_STANDARD_SHARE, the same reference
-    used by EPT E2 / E7, and A1 adds ACCE_COA_MASTER. Step 2 must
+    """DQ-ADR-2 makes ADR depend on VWS_GP_STANDARD_SHARE, the same reference
+    used by EPT E2 / E7, and DQ-ADR-1 adds ACCE_COA_MASTER. Step 2 must
     prefetch both for ADR."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
@@ -4877,7 +4865,7 @@ def test_required_reference_datasets_for_adr_includes_planview_share():
 
 
 # =============================================================================
-# A3: Statistical WBC-to-ISO mapping ratio (ADR; mirrors EPT E3)
+# DQ-ADR-3: Statistical WBC-to-ISO mapping ratio (ADR; mirrors EPT E3)
 # =============================================================================
 
 def _a3_required_cols():
@@ -4899,7 +4887,7 @@ def _make_a3_df(rows):
 
 @pytest.fixture
 def _a3_coa_master_with_population(monkeypatch):
-    """Pin the COA master to a known mapping so A3 row-level assertions
+    """Pin the COA master to a known mapping so DQ-ADR-3 row-level assertions
     don't depend on the mock's RNG. Provides 11 distinct ICARUS_COAs
     mapping to 10 distinct (ISO_COR, SAB) buckets - just enough to
     cross ``ADR_A3_MIN_MAPPING_POPULATION`` (10) and let the P90 be
@@ -4929,7 +4917,7 @@ def _a3_baseline_population(
     hours: float = 100.0,
     cost: float = 50.0,
 ):
-    """Build A3 rows for each of the 10 baseline (ISO_COR, SAB) buckets
+    """Build DQ-ADR-3 rows for each of the 10 baseline (ISO_COR, SAB) buckets
     used by the ``_a3_coa_master_with_population`` fixture. Each row
     has a unique COMPLETE_WBC, so the per-bucket
     ``COUNT(DISTINCT COMPLETE_WBC)`` ratio defaults to ``rows_per_bucket``.
@@ -4953,14 +4941,13 @@ def _a3_baseline_population(
 # ----- Catalog metadata ------------------------------------------------------
 
 def test_adr_has_custom_rule_a3_available():
-    """ADR catalog exposes A3 as a non-blocking Statistical Outlier
+    """ADR catalog exposes DQ-ADR-3 as a Statistical Outlier
     rule with the COA-master reference linkage."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A3" in by_id
-    rule = by_id["A3"]
+    assert "DQ-ADR-3" in by_id
+    rule = by_id["DQ-ADR-3"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Complete WBC": "COMPLETE_WBC",
@@ -4976,7 +4963,7 @@ def test_adr_has_custom_rule_a3_available():
 def test_adr_a3_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A3_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A3"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-3"
     )
     assert rule.required_columns == ADR_A3_REQUIRED_COLUMNS
 
@@ -5083,7 +5070,7 @@ def test_adr_a3_passes_when_population_below_min_threshold(monkeypatch):
 
 def test_adr_a3_passes_when_wbc_does_not_resolve(_a3_coa_master_with_population):
     """Rows whose WBC is missing or whose COA group has no master entry
-    are NOT_APPLICABLE - A3 must PASS them (A1 covers the gap)."""
+    are NOT_APPLICABLE - DQ-ADR-3 must PASS them (DQ-ADR-1 covers the gap)."""
     from src.custom_dqr_engine import check_adr_a3
     rows = _a3_baseline_population(rows_per_bucket=1)
     # NOT_APPLICABLE rows mixed in alongside an ordinary baseline.
@@ -5103,7 +5090,7 @@ def test_adr_a3_passes_when_wbc_does_not_resolve(_a3_coa_master_with_population)
 
 def test_adr_a3_passes_rows_whose_iso_or_sab_is_invalid(monkeypatch):
     """If the COA master row carries ERROR / null in ISO_COR or SAB,
-    the row's mapping is invalid → A3 NOT_APPLICABLE → PASS."""
+    the row's mapping is invalid → DQ-ADR-3 NOT_APPLICABLE → PASS."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import check_adr_a3
     ref_df = pd.DataFrame({
@@ -5172,8 +5159,8 @@ def test_adr_a3_empty_dataframe_returns_empty_pass_series():
 
 
 def test_adr_a3_raises_not_evaluated_when_reference_unavailable(monkeypatch):
-    """If the COA master loader returns None, A3 must raise
-    CustomRuleNotEvaluated (same convention A1 / E2 / E7 follow)."""
+    """If the COA master loader returns None, DQ-ADR-3 must raise
+    CustomRuleNotEvaluated (same convention DQ-ADR-1 / E2 / E7 follow)."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import CustomRuleNotEvaluated, check_adr_a3
     monkeypatch.setattr(ref_mod, "get_reference_dataset", lambda name: None)
@@ -5209,7 +5196,7 @@ def test_adr_a3_fails_for_all_rows_when_reference_missing_required_columns(
 
 
 def test_evaluate_custom_rules_dispatches_to_a3(_a3_coa_master_with_population):
-    """End-to-end: dispatcher routes an A3 assignment through check_adr_a3."""
+    """End-to-end: dispatcher routes an DQ-ADR-3 assignment through check_adr_a3."""
     rows = _a3_baseline_population(rows_per_bucket=1)
     # Outlier bucket: 30 distinct WBCs through 313.
     for sub in range(30):
@@ -5220,18 +5207,18 @@ def test_evaluate_custom_rules_dispatches_to_a3(_a3_coa_master_with_population):
             "COST_TOTAL_COST": 500_000.0,
         })
     df = _make_a3_df(rows)
-    assignments = [CustomDQRAssignment(rule_id="A3", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-3", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A3" in out.columns
+    assert "DQ-ADR-3" in out.columns
     is_outlier = df["COMPLETE_WBC"].fillna("").str.startswith("313.")
-    assert (~out["A3"][is_outlier]).all()
-    assert out["A3"][~is_outlier].all()
+    assert (~out["DQ-ADR-3"][is_outlier]).all()
+    assert out["DQ-ADR-3"][~is_outlier].all()
     assert not_evaluated == {}
 
 
 def test_adr_a3_reuses_acce_coa_master_reference():
-    """A3 declares ACCE_COA_MASTER as its reference dataset, so the
-    ADR prefetch list is unchanged from what A1 already requires."""
+    """DQ-ADR-3 declares ACCE_COA_MASTER as its reference dataset, so the
+    ADR prefetch list is unchanged from what DQ-ADR-1 already requires."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
@@ -5241,7 +5228,7 @@ def test_adr_a3_reuses_acce_coa_master_reference():
 
 
 # -----------------------------------------------------------------------------
-# A3: project-scoped percentile (params={"project_scoped": True})
+# DQ-ADR-3: project-scoped percentile (params={"project_scoped": True})
 # -----------------------------------------------------------------------------
 
 def test_adr_a3_project_scope_isolates_per_project_p90(
@@ -5345,7 +5332,7 @@ def test_adr_a3_project_scope_passes_rows_with_null_planview_id(
     _a3_coa_master_with_population,
 ):
     """Rows lacking PLANVIEW_ID can't be assigned to a project; in project
-    scope they PASS (A2 already covers the missing-project linkage)."""
+    scope they PASS (DQ-ADR-2 already covers the missing-project linkage)."""
     from src.custom_dqr_engine import (
         ADR_A3_PROJECT_SCOPED_PARAM,
         check_adr_a3,
@@ -5397,7 +5384,7 @@ def test_adr_a3_default_params_match_global_scope(
 
 
 # -----------------------------------------------------------------------------
-# A3: uniform 1:1 mapping detection (params={"detect_uniform_mapping": True})
+# DQ-ADR-3: uniform 1:1 mapping detection (params={"detect_uniform_mapping": True})
 # -----------------------------------------------------------------------------
 
 def test_adr_a3_uniform_detection_off_by_default_passes_uniform_buckets(
@@ -5447,7 +5434,7 @@ def test_adr_a3_uniform_detection_respects_materiality(
 
 
 # =============================================================================
-# A4: Core quantities populated (ADR; project-level completeness rule)
+# DQ-ADR-4: Core quantities populated (ADR; project-level completeness rule)
 # =============================================================================
 
 def _a4_required_cols():
@@ -5471,13 +5458,12 @@ def _make_a4_df(rows):
 # ----- Catalog metadata ------------------------------------------------------
 
 def test_adr_has_custom_rule_a4_available():
-    """ADR catalog exposes A4 as a non-blocking Completeness & Validity rule."""
+    """ADR catalog exposes DQ-ADR-4 as a Completeness & Validity rule."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A4" in by_id
-    rule = by_id["A4"]
+    assert "DQ-ADR-4" in by_id
+    rule = by_id["DQ-ADR-4"]
     assert rule.type == "Completeness & Validity"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Project Key": "PLANVIEW_ID",
         "Item Type": "ITEM_TYPE",
@@ -5491,7 +5477,7 @@ def test_adr_has_custom_rule_a4_available():
 def test_adr_a4_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A4_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A4"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-4"
     )
     assert rule.required_columns == ADR_A4_REQUIRED_COLUMNS
 
@@ -5530,7 +5516,7 @@ def test_a4_scope_classifier_unrecognised_inputs_return_empty_set():
 
 
 def test_a4_scope_classifier_piperack_does_not_imply_piping_scope():
-    """A4 distinguishes piping (length) from steel (weight) - Piperack
+    """DQ-ADR-4 distinguishes piping (length) from steel (weight) - Piperack
     is steel scope only, not piping."""
     from src.custom_dqr_engine import _classify_a4_scope
     scopes = _classify_a4_scope("EstimatePiperack", "")
@@ -5539,7 +5525,7 @@ def test_a4_scope_classifier_piperack_does_not_imply_piping_scope():
 
 
 def test_a4_scope_classifier_cable_length_does_not_match_field_instrument():
-    """Spec §8.4 - A4 keeps CABLE_LENGTH conservative: only ITEM_TYPE
+    """Spec §8.4 - DQ-ADR-4 keeps CABLE_LENGTH conservative: only ITEM_TYPE
     containing 'Electrical' implies cable scope. FieldInstrument is
     transmitter-count scope, not cable scope."""
     from src.custom_dqr_engine import _classify_a4_scope
@@ -5943,7 +5929,7 @@ def test_adr_a4_handles_object_dtyped_numeric_quantities():
 
 
 def test_evaluate_custom_rules_dispatches_to_a4():
-    """End-to-end: dispatcher routes an A4 assignment through check_adr_a4."""
+    """End-to-end: dispatcher routes an DQ-ADR-4 assignment through check_adr_a4."""
     df = _make_a4_df([
         {"PLANVIEW_ID": "P1",
          "ITEM_TYPE": "EstimateFoundation", "ITEM_DESCRIPTION": "",
@@ -5953,16 +5939,16 @@ def test_evaluate_custom_rules_dispatches_to_a4():
          "ITEM_DESCRIPTION": "",
          "QTY_QUANTITY": 100.0, "QTY_UOM": "t"},   # piping scope, wrong UOM
     ])
-    assignments = [CustomDQRAssignment(rule_id="A4", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-4", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A4" in out.columns
-    assert out["A4"].tolist() == [True, False]
+    assert "DQ-ADR-4" in out.columns
+    assert out["DQ-ADR-4"].tolist() == [True, False]
     assert not_evaluated == {}
 
 
 def test_adr_a4_does_not_add_reference_dataset_to_prefetch():
-    """A4 has no ``reference`` dataset, so the ADR system's prefetch
-    list is the same one A1 + A2 already require."""
+    """DQ-ADR-4 has no ``reference`` dataset, so the ADR system's prefetch
+    list is the same one DQ-ADR-1 + DQ-ADR-2 already require."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
@@ -5972,7 +5958,7 @@ def test_adr_a4_does_not_add_reference_dataset_to_prefetch():
 
 
 # =============================================================================
-# A5: Key design details present when quantity exists (ADR; consistency rule)
+# DQ-ADR-5: Key design details present when quantity exists (ADR; consistency rule)
 # =============================================================================
 
 _A5_COLS = ["QTY_QUANTITY", "ITEM_TYPE", "DESIGN_KEY_PARAMETER_NAMES"]
@@ -5996,28 +5982,27 @@ def _a5_row(qty, item_type=None, names=None):
 
 
 def test_adr_has_custom_rule_a5_available():
-    """ADR catalog exposes A5 as a non-blocking Consistency rule with the
+    """ADR catalog exposes DQ-ADR-5 as a Consistency rule with the
     documented physical column mapping."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A5" in by_id
-    rule = by_id["A5"]
+    assert "DQ-ADR-5" in by_id
+    rule = by_id["DQ-ADR-5"]
     assert rule.name == "Key design details present when quantity exists"
     assert rule.type == "Consistency"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Quantity": "QTY_QUANTITY",
         "Item Type": "ITEM_TYPE",
         "Key Parameter Names": "DESIGN_KEY_PARAMETER_NAMES",
     }
-    # A5 does not consult an external reference dataset.
+    # DQ-ADR-5 does not consult an external reference dataset.
     assert rule.reference is None
 
 
 def test_adr_a5_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A5_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A5"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-5"
     )
     assert rule.required_columns == ADR_A5_REQUIRED_COLUMNS
 
@@ -6030,7 +6015,7 @@ def test_adr_a5_prefix_map_uses_production_item_type_spellings():
     keys = set(_A5_KEY_DESIGN_PREFIX)
     assert all(k.startswith("Estimate") for k in keys)
     assert not any("Eletric" in k for k in keys)
-    # Spellings shared with the A4 / A8 classifiers and the mock data.
+    # Spellings shared with the DQ-ADR-4 / DQ-ADR-8 classifiers and the mock data.
     for label in (
         "EstimateElectricMotor", "EstimateElectricalPowerGroup",
         "EstimateAbovegroundInstrumentPiping", "EstimatePump",
@@ -6233,7 +6218,7 @@ def test_adr_a5_handles_object_dtyped_numeric_quantities():
 @pytest.mark.parametrize("missing", _A5_COLS)
 def test_adr_a5_fails_for_all_rows_when_required_column_missing(missing):
     """Schema-level structural incompleteness fails every row, same
-    convention as the other custom rules (E1, E4, A2, ...)."""
+    convention as the other custom rules (E1, E4, DQ-ADR-2, ...)."""
     from src.custom_dqr_engine import check_adr_a5
     df = _make_a5_df([
         _a5_row(10.0, "EstimatePump", "324.0-Pump Type"),
@@ -6254,7 +6239,7 @@ def test_adr_a5_empty_dataframe_returns_empty_pass_series():
 
 
 def test_adr_a5_mock_data_product_exercises_both_branches():
-    """Mock mode must expose ``DESIGN_KEY_PARAMETER_NAMES`` so A5 can be
+    """Mock mode must expose ``DESIGN_KEY_PARAMETER_NAMES`` so DQ-ADR-5 can be
     unlocked in the CDE grid, with both PASS and FAIL rows present."""
     import os
     os.environ["DATA_SOURCE"] = "mock"
@@ -6270,22 +6255,22 @@ def test_adr_a5_mock_data_product_exercises_both_branches():
 
 
 def test_evaluate_custom_rules_dispatches_to_a5():
-    """End-to-end: dispatcher routes an A5 assignment through check_adr_a5
+    """End-to-end: dispatcher routes an DQ-ADR-5 assignment through check_adr_a5
     for the ADR data product."""
     df = _make_a5_df([
         _a5_row(10.0, "EstimatePump", "324.0-Pump Type"),
         _a5_row(7.0, "EstimatePump", "301.0-Driver"),
         _a5_row(0.0, "EstimatePump", None),
     ])
-    assignments = [CustomDQRAssignment(rule_id="A5", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-5", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A5" in out.columns
-    assert out["A5"].tolist() == [True, False, True]
+    assert "DQ-ADR-5" in out.columns
+    assert out["DQ-ADR-5"].tolist() == [True, False, True]
     assert not_evaluated == {}
 
 
 def test_adr_a5_does_not_add_reference_dataset_to_prefetch():
-    """A5 has no ``reference`` dataset, so adding it must not change the set
+    """DQ-ADR-5 has no ``reference`` dataset, so adding it must not change the set
     of references Step 2 needs to prefetch for the ADR system."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
@@ -6296,7 +6281,7 @@ def test_adr_a5_does_not_add_reference_dataset_to_prefetch():
 
 
 # =============================================================================
-# A6: Construction hours present when quantity exists (ADR; consistency rule)
+# DQ-ADR-6: Construction hours present when quantity exists (ADR; consistency rule)
 # =============================================================================
 
 def _make_a6_df(rows):
@@ -6308,27 +6293,26 @@ def _make_a6_df(rows):
 
 
 def test_adr_has_custom_rule_a6_available():
-    """ADR catalog exposes A6 as a non-blocking Consistency rule with the
+    """ADR catalog exposes DQ-ADR-6 as a Consistency rule with the
     documented physical column mapping."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A6" in by_id
-    rule = by_id["A6"]
+    assert "DQ-ADR-6" in by_id
+    rule = by_id["DQ-ADR-6"]
     assert rule.type == "Consistency"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Quantity": "QTY_QUANTITY",
         "Construction Hours": "COST_TOTAL_HOURS",
         "Construction Hours (DB)": "COST_DB_TOTAL_HOURS",
     }
-    # A6 does not consult an external reference dataset.
+    # DQ-ADR-6 does not consult an external reference dataset.
     assert rule.reference is None
 
 
 def test_adr_a6_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A6_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A6"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-6"
     )
     assert rule.required_columns == ADR_A6_REQUIRED_COLUMNS
 
@@ -6423,7 +6407,7 @@ def test_adr_a6_passes_when_quantity_null_regardless_of_hours():
 
 def test_adr_a6_negative_quantity_counts_as_quantity_present():
     """A negative aggregated quantity counts as 'quantity exists' (same
-    as A5 / spec §13). A negative-quantity row with no hours must FAIL."""
+    as DQ-ADR-5 / spec §13). A negative-quantity row with no hours must FAIL."""
     from src.custom_dqr_engine import check_adr_a6
     df = _make_a6_df([
         {"QTY_QUANTITY": -3.0, "COST_TOTAL_HOURS": 0.0,
@@ -6510,7 +6494,7 @@ def test_adr_a6_empty_dataframe_returns_empty_pass_series():
 
 
 def test_evaluate_custom_rules_dispatches_to_a6():
-    """End-to-end: dispatcher routes an A6 assignment through check_adr_a6
+    """End-to-end: dispatcher routes an DQ-ADR-6 assignment through check_adr_a6
     for the ADR data product."""
     df = _make_a6_df([
         {"QTY_QUANTITY": 10.0, "COST_TOTAL_HOURS": 5.0,
@@ -6520,15 +6504,15 @@ def test_evaluate_custom_rules_dispatches_to_a6():
         {"QTY_QUANTITY": 0.0, "COST_TOTAL_HOURS": 0.0,
          "COST_DB_TOTAL_HOURS": 0.0},
     ])
-    assignments = [CustomDQRAssignment(rule_id="A6", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-6", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A6" in out.columns
-    assert out["A6"].tolist() == [True, False, True]
+    assert "DQ-ADR-6" in out.columns
+    assert out["DQ-ADR-6"].tolist() == [True, False, True]
     assert not_evaluated == {}
 
 
 def test_adr_a6_does_not_add_reference_dataset_to_prefetch():
-    """A6 has no ``reference`` dataset, so adding it must not change the
+    """DQ-ADR-6 has no ``reference`` dataset, so adding it must not change the
     set of references Step 2 needs to prefetch for the ADR system."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
@@ -6539,7 +6523,7 @@ def test_adr_a6_does_not_add_reference_dataset_to_prefetch():
 
 
 # =============================================================================
-# A7: Within-discipline quantity / hour ratio outlier (ADR; statistical rule)
+# DQ-ADR-7: Within-discipline quantity / hour ratio outlier (ADR; statistical rule)
 # =============================================================================
 
 def _a7_required_cols():
@@ -6565,7 +6549,7 @@ def _a7_segment_with_outlier(
     rows clustered tightly around ``baseline_ratio`` plus one row at
     ``outlier_ratio``. With Q1 ≈ Q3 ≈ baseline (tight cluster) the IQR
     is small, so the outlier sits well outside ``Q3 + 1.5*IQR`` and
-    A7 should flag it as FAIL while every baseline row passes."""
+    DQ-ADR-7 should flag it as FAIL while every baseline row passes."""
     rows = []
     for i in range(n_baseline):
         # Mild jitter keeps IQR strictly > 0 (so the segment doesn't
@@ -6588,13 +6572,12 @@ def _a7_segment_with_outlier(
 
 
 def test_adr_has_custom_rule_a7_available():
-    """ADR catalog exposes A7 as a non-blocking Statistical Outlier rule."""
+    """ADR catalog exposes DQ-ADR-7 as a Statistical Outlier rule."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A7" in by_id
-    rule = by_id["A7"]
+    assert "DQ-ADR-7" in by_id
+    rule = by_id["DQ-ADR-7"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Item Type": "ITEM_TYPE",
         "Quantity": "QTY_QUANTITY",
@@ -6607,7 +6590,7 @@ def test_adr_has_custom_rule_a7_available():
 def test_adr_a7_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A7_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A7"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-7"
     )
     assert rule.required_columns == ADR_A7_REQUIRED_COLUMNS
 
@@ -6639,7 +6622,7 @@ def test_adr_a7_flags_outlier_in_well_populated_segment():
 
 
 def test_adr_a7_flags_low_side_outlier_below_mild_lower_bound():
-    """Outliers below ``Q1 - 1.5*IQR`` must also FAIL - A7 is two-sided."""
+    """Outliers below ``Q1 - 1.5*IQR`` must also FAIL - DQ-ADR-7 is two-sided."""
     from src.custom_dqr_engine import check_adr_a7
     df = _a7_segment_with_outlier(
         n_baseline=12, baseline_ratio=5.0, outlier_ratio=0.05
@@ -6846,20 +6829,20 @@ def test_adr_a7_handles_object_dtyped_numeric_inputs():
 
 
 def test_evaluate_custom_rules_dispatches_to_a7():
-    """End-to-end: dispatcher routes an A7 assignment through check_adr_a7
+    """End-to-end: dispatcher routes an DQ-ADR-7 assignment through check_adr_a7
     for the ADR data product."""
     df = _a7_segment_with_outlier(
         n_baseline=12, baseline_ratio=5.0, outlier_ratio=50.0
     )
-    assignments = [CustomDQRAssignment(rule_id="A7", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-7", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A7" in out.columns
-    assert out["A7"].tolist() == [True] * 12 + [False]
+    assert "DQ-ADR-7" in out.columns
+    assert out["DQ-ADR-7"].tolist() == [True] * 12 + [False]
     assert not_evaluated == {}
 
 
 def test_adr_a7_does_not_add_reference_dataset_to_prefetch():
-    """A7 has no ``reference`` dataset, so adding it must not change the
+    """DQ-ADR-7 has no ``reference`` dataset, so adding it must not change the
     set of references Step 2 needs to prefetch for the ADR system."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
@@ -6870,7 +6853,7 @@ def test_adr_a7_does_not_add_reference_dataset_to_prefetch():
 
 
 # -----------------------------------------------------------------------------
-# A7: project-type segmentation (toggle: segment_by_project_type)
+# DQ-ADR-7: project-type segmentation (toggle: segment_by_project_type)
 # -----------------------------------------------------------------------------
 
 
@@ -6880,7 +6863,7 @@ def _a7_required_cols_with_planview():
 
 def _make_a7_segmented_df(rows):
     """Build an ADR-shaped DataFrame that also carries ``PLANVIEW_ID`` so the
-    A7 segment-by-project-type lookup can resolve each row to a segment.
+    DQ-ADR-7 segment-by-project-type lookup can resolve each row to a segment.
     Missing keys default to None so the rule sees them as null."""
     cols = _a7_required_cols_with_planview()
     completed = [{**{c: None for c in cols}, **r} for r in rows]
@@ -6889,7 +6872,7 @@ def _make_a7_segmented_df(rows):
 
 def _a7_segment_reference(rows):
     """Build a Planview reference DataFrame with the segmentation columns
-    A7 reads when the segment-by-project-type toggle is on.
+    DQ-ADR-7 reads when the segment-by-project-type toggle is on.
 
     ``rows`` is a list of ``(PROJECT_ID, E05_DEPARTMENT, BUSINESS)`` tuples.
     """
@@ -6922,18 +6905,18 @@ def _a7_baseline_rows(
 
 
 def test_adr_a7_segment_param_constants_match_catalog():
-    """The segmentation toggle exposed on the A7 catalog rule card carries
+    """The segmentation toggle exposed on the DQ-ADR-7 catalog rule card carries
     the same key the engine reads from ``params``, and the rule declares
     PLANVIEW_ID as a required-when-enabled column."""
     from src.custom_dqr_engine import ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A7"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-7"
     )
     by_key = {opt.key: opt for opt in rule.options}
     assert ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM in by_key
     opt = by_key[ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM]
     # PLANVIEW_ID is needed only when the toggle is on (it is not in the
-    # static A7 required_columns) - Step 4.2's CDE-coverage check picks
+    # static DQ-ADR-7 required_columns) - Step 4.2's CDE-coverage check picks
     # this up via ``effective_required_columns``.
     assert "PLANVIEW_ID" in opt.required_columns_when_enabled.values()
 
@@ -7035,7 +7018,7 @@ def test_adr_a7_segmented_passes_rows_without_resolved_segment(monkeypatch):
     """Rows whose PLANVIEW_ID does not match the reference, or whose matched
     segment has a null/blank ``E05_DEPARTMENT`` / ``BUSINESS``, are
     NOT_APPLICABLE → PASS so segmentation never double-penalises the
-    referential-integrity gap A2 / blocking A1 already cover."""
+    referential-integrity gap DQ-ADR-2 / DQ-ADR-1 already cover."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import (
         ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM,
@@ -7124,7 +7107,7 @@ def test_adr_a7_unsegmented_does_not_touch_reference(monkeypatch):
 
     def _boom(_name):
         raise AssertionError(
-            "Unsegmented A7 must not call get_reference_dataset"
+            "Unsegmented DQ-ADR-7 must not call get_reference_dataset"
         )
 
     monkeypatch.setattr(ref_mod, "get_reference_dataset", _boom)
@@ -7160,7 +7143,7 @@ def test_adr_a7_segmented_fails_when_planview_id_column_missing(monkeypatch):
 
 
 # =============================================================================
-# A8: Cross-discipline quantity ratios (ADR; project-level statistical rule)
+# DQ-ADR-8: Cross-discipline quantity ratios (ADR; project-level statistical rule)
 # =============================================================================
 
 def _a8_required_cols():
@@ -7183,7 +7166,7 @@ def _a8_steel_concrete_population(
     outlier_steel: float = 100.0,
     outlier_concrete: float = 5.0,
 ):
-    """Build an A8-shaped DataFrame containing two rows per project
+    """Build an DQ-ADR-8-shaped DataFrame containing two rows per project
     (one steel, one concrete), with ``n_normal`` projects clustered
     tightly around the same ratio plus one project whose ratio is far
     outside the mild IQR bound. Returns the DataFrame ready for
@@ -7219,13 +7202,12 @@ def _a8_steel_concrete_population(
 # ----- Catalog metadata ------------------------------------------------------
 
 def test_adr_has_custom_rule_a8_available():
-    """ADR catalog exposes A8 as a non-blocking Statistical Outlier rule."""
+    """ADR catalog exposes DQ-ADR-8 as a Statistical Outlier rule."""
     rules = get_available_custom_dqr_rules("ADR")
     by_id = {r.id: r for r in rules}
-    assert "A8" in by_id
-    rule = by_id["A8"]
+    assert "DQ-ADR-8" in by_id
+    rule = by_id["DQ-ADR-8"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Item Type": "ITEM_TYPE",
         "Root Item Name": "ROOT_ITEM_NAME",
@@ -7238,7 +7220,7 @@ def test_adr_has_custom_rule_a8_available():
 def test_adr_a8_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A8_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A8"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-8"
     )
     assert rule.required_columns == ADR_A8_REQUIRED_COLUMNS
 
@@ -7512,20 +7494,20 @@ def test_adr_a8_handles_object_dtyped_numeric_inputs():
 
 
 def test_evaluate_custom_rules_dispatches_to_a8():
-    """End-to-end: dispatcher routes an A8 assignment through check_adr_a8."""
+    """End-to-end: dispatcher routes an DQ-ADR-8 assignment through check_adr_a8."""
     df, outlier_project = _a8_steel_concrete_population(outlier_concrete=5.0)
-    assignments = [CustomDQRAssignment(rule_id="A8", weight=100.0)]
+    assignments = [CustomDQRAssignment(rule_id="DQ-ADR-8", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ADR")
-    assert "A8" in out.columns
+    assert "DQ-ADR-8" in out.columns
     is_outlier = df["ROOT_ITEM_NAME"] == outlier_project
-    assert (~out["A8"][is_outlier]).all()
-    assert out["A8"][~is_outlier].all()
+    assert (~out["DQ-ADR-8"][is_outlier]).all()
+    assert out["DQ-ADR-8"][~is_outlier].all()
     assert not_evaluated == {}
 
 
 def test_adr_a8_does_not_add_reference_dataset_to_prefetch():
-    """A8 has no ``reference`` dataset, so the ADR system's prefetch
-    list is the same one A1 + A2 already require."""
+    """DQ-ADR-8 has no ``reference`` dataset, so the ADR system's prefetch
+    list is the same one DQ-ADR-1 + DQ-ADR-2 already require."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
@@ -7535,7 +7517,7 @@ def test_adr_a8_does_not_add_reference_dataset_to_prefetch():
 
 
 # -----------------------------------------------------------------------------
-# A8: project-type segmentation (toggle: segment_by_project_type)
+# DQ-ADR-8: project-type segmentation (toggle: segment_by_project_type)
 # -----------------------------------------------------------------------------
 
 
@@ -7544,7 +7526,7 @@ def _a8_required_cols_with_planview():
 
 
 def _make_a8_segmented_df(rows):
-    """Build an A8-shaped DataFrame that also carries ``PLANVIEW_ID`` so
+    """Build an DQ-ADR-8-shaped DataFrame that also carries ``PLANVIEW_ID`` so
     the segment-by-project-type lookup can resolve each project to a
     segment. Missing keys default to None so the rule sees them as null."""
     cols = _a8_required_cols_with_planview()
@@ -7554,7 +7536,7 @@ def _make_a8_segmented_df(rows):
 
 def _a8_segment_reference(rows):
     """Build a Planview reference DataFrame with the segmentation columns
-    A8 reads when the segment-by-project-type toggle is on.
+    DQ-ADR-8 reads when the segment-by-project-type toggle is on.
 
     ``rows`` is a list of ``(PROJECT_ID, E05_DEPARTMENT, BUSINESS)`` tuples.
     """
@@ -7597,18 +7579,18 @@ def _a8_steel_concrete_segment_rows(
 
 
 def test_adr_a8_segment_param_constants_match_catalog():
-    """The segmentation toggle exposed on the A8 catalog rule card carries
+    """The segmentation toggle exposed on the DQ-ADR-8 catalog rule card carries
     the same key the engine reads from ``params``, and the rule declares
     PLANVIEW_ID as a required-when-enabled column."""
     from src.custom_dqr_engine import ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM
     rule = next(
-        r for r in get_available_custom_dqr_rules("ADR") if r.id == "A8"
+        r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-8"
     )
     by_key = {opt.key: opt for opt in rule.options}
     assert ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM in by_key
     opt = by_key[ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM]
     # PLANVIEW_ID is needed only when the toggle is on (it is not in the
-    # static A8 required_columns) - Step 4.2's CDE-coverage check picks
+    # static DQ-ADR-8 required_columns) - Step 4.2's CDE-coverage check picks
     # this up via ``effective_required_columns``.
     assert "PLANVIEW_ID" in opt.required_columns_when_enabled.values()
 
@@ -7738,7 +7720,7 @@ def test_adr_a8_segmented_passes_projects_without_resolved_segment(monkeypatch):
     """Projects whose PLANVIEW_ID does not match the reference, or whose
     matched segment has a null/blank ``E05_DEPARTMENT`` / ``BUSINESS``,
     are NOT_APPLICABLE → PASS so segmentation never double-penalises the
-    referential / completeness gap A1 / A2 already cover."""
+    referential / completeness gap DQ-ADR-1 / DQ-ADR-2 already cover."""
     import src.reference_data as ref_mod
     from src.custom_dqr_engine import (
         ADR_A8_SEGMENT_BY_PROJECT_TYPE_PARAM,
@@ -7852,7 +7834,7 @@ def test_adr_a8_unsegmented_does_not_touch_reference(monkeypatch):
 
     def _boom(_name):
         raise AssertionError(
-            "Unsegmented A8 must not call get_reference_dataset"
+            "Unsegmented DQ-ADR-8 must not call get_reference_dataset"
         )
 
     monkeypatch.setattr(ref_mod, "get_reference_dataset", _boom)
@@ -7911,13 +7893,12 @@ def _make_e5_df(rows):
 
 
 def test_ept_has_custom_rule_e5_available():
-    """EPT catalog exposes E5 as a non-blocking Consistency rule."""
+    """EPT catalog exposes E5 as a Consistency rule."""
     rules = get_available_custom_dqr_rules("EPT")
     by_id = {r.id: r for r in rules}
     assert "E5" in by_id
     rule = by_id["E5"]
     assert rule.type == "Consistency"
-    assert rule.blocking is False
     assert rule.required_columns == {
         "Level 1": "WBC_LEVEL_1",
         "Total Hours": "TOTAL_HOURS",
@@ -8164,13 +8145,12 @@ def _e6_normal_population(planview_prefix="P-NORMAL", n=6, ratio=50.0):
 
 
 def test_ept_has_custom_rule_e6_available():
-    """EPT catalog exposes E6 as a non-blocking statistical-outlier rule."""
+    """EPT catalog exposes E6 as a statistical-outlier rule."""
     rules = get_available_custom_dqr_rules("EPT")
     by_id = {r.id: r for r in rules}
     assert "E6" in by_id
     rule = by_id["E6"]
     assert rule.type == "Statistical Outlier"
-    assert rule.blocking is False
     assert rule.reference is None
     assert rule.required_columns == {
         "Project Key": "PLANVIEW_ID",
@@ -8633,7 +8613,6 @@ def test_ept_has_custom_rule_e7_available():
     assert "E7" in by_id
     rule = by_id["E7"]
     assert rule.type == "Referential Integrity"
-    assert rule.blocking is True
     assert rule.required_columns == {"Project Key": "PLANVIEW_ID"}
     assert rule.reference is not None
     assert rule.reference["reference_dataset"] == "VWS_GP_STANDARD_SHARE"
@@ -8778,8 +8757,8 @@ def test_get_reference_dataset_returns_none_for_unknown_name():
 def test_required_reference_datasets_collects_unique_names():
     """Step 2 uses this to know what to prefetch for the selected systems."""
     from src.reference_data import required_reference_datasets_for_systems
-    # EPT has E2/E7 with VWS_GP_STANDARD_SHARE; ADR has A1 (ACCE_COA_MASTER)
-    # plus A2 (VWS_GP_STANDARD_SHARE); ACCE has AC1 (ACCE_COA_MASTER) plus
+    # EPT has E2/E7 with VWS_GP_STANDARD_SHARE; ADR has DQ-ADR-1 (ACCE_COA_MASTER)
+    # plus DQ-ADR-2 (VWS_GP_STANDARD_SHARE); ACCE has AC1 (ACCE_COA_MASTER) plus
     # AC2 (VWS_GP_STANDARD_SHARE).
     assert required_reference_datasets_for_systems(["EPT"]) == ["VWS_GP_STANDARD_SHARE"]
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
@@ -9026,7 +9005,7 @@ def test_clear_reference_cache_no_runtime_is_silent(monkeypatch):
 
 
 # =============================================================================
-# Custom outlier-rule threshold customization (E3 / E6 / A3 / A7 / A8)
+# Custom outlier-rule threshold customization (E3 / E6 / DQ-ADR-3 / DQ-ADR-7 / DQ-ADR-8)
 #
 # Each statistical-outlier rule reads its threshold from
 # ``params[<RULE>_THRESHOLD_PARAM]`` and falls back to the catalog default
@@ -9507,7 +9486,7 @@ def test_evaluate_custom_rules_records_segmented_rule_not_evaluated(monkeypatch)
 
 
 # =============================================================================
-# A9: Base material factor validation - MFC vs EMMA (ADR; validity rule)
+# DQ-ADR-9: Base material factor validation - MFC vs EMMA (ADR; validity rule)
 # =============================================================================
 
 _A9_COLS = [
@@ -9580,10 +9559,9 @@ def test_adr_has_custom_rule_a9_available():
         ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
     )
     by_id = {r.id: r for r in get_available_custom_dqr_rules("ADR")}
-    assert "A9" in by_id
-    rule = by_id["A9"]
+    assert "DQ-ADR-9" in by_id
+    rule = by_id["DQ-ADR-9"]
     assert rule.type == "Validity"
-    assert rule.blocking is False
     assert rule.reference["reference_dataset"] == "MFC"
     assert set(rule.required_columns.values()) == set(_A9_COLS)
     keys = [o.key for o in rule.select_options]
@@ -9599,7 +9577,7 @@ def test_adr_has_custom_rule_a9_available():
 
 def test_adr_a9_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ADR_A9_REQUIRED_COLUMNS
-    rule = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "A9")
+    rule = next(r for r in get_available_custom_dqr_rules("ADR") if r.id == "DQ-ADR-9")
     assert rule.required_columns == ADR_A9_REQUIRED_COLUMNS
 
 
@@ -9883,20 +9861,20 @@ def test_evaluate_custom_rules_dispatches_to_a9_with_params(_a9_references):
         _a9_row(bm="80", bm_cost=600.0, bm_db=100.0),
     ])
     out, not_evaluated = evaluate_custom_rules(
-        df, [CustomDQRAssignment(rule_id="A9", weight=100.0)], "ADR"
+        df, [CustomDQRAssignment(rule_id="DQ-ADR-9", weight=100.0)], "ADR"
     )
-    assert out["A9"].tolist() == [False, False]
+    assert out["DQ-ADR-9"].tolist() == [False, False]
     assert not_evaluated == {}
     out, _ = evaluate_custom_rules(
         df,
-        [CustomDQRAssignment(rule_id="A9", weight=100.0, params={ADR_A9_TOLERANCE_PARAM: 0.25})],
+        [CustomDQRAssignment(rule_id="DQ-ADR-9", weight=100.0, params={ADR_A9_TOLERANCE_PARAM: 0.25})],
         "ADR",
     )
-    assert out["A9"].tolist() == [True, False]
+    assert out["DQ-ADR-9"].tolist() == [True, False]
 
 
 def test_adr_a9_mock_data_product_exercises_every_outcome():
-    """Demo mode must expose every A9 outcome so the rule can be
+    """Demo mode must expose every DQ-ADR-9 outcome so the rule can be
     unlocked and its drill-down is meaningful."""
     import os
     os.environ["DATA_SOURCE"] = "mock"
