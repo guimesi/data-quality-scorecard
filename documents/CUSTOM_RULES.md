@@ -111,7 +111,7 @@ the check callable.
 | **DQ-ADR-3** *(inactive)* | `threshold_percentile` | P75, **P90**, P95, P99 | `ADR_A3_PERCENTILE = 0.90` |
 | **DQ-ADR-7** *(retired 2026-09)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A7_MILD_IQR_MULTIPLIER = 1.5` |
 | **DQ-ADR-8** *(retired 2026-09)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A8_MILD_IQR_MULTIPLIER = 1.5` |
-| **DQ-ADR-9** | `tolerance_pct` | **±10%**, ±15%, ±20%, ±25% (calibration) | `ADR_A9_TOLERANCE = 0.10` |
+| **DQ-ADR-9** | `tolerance_pct` | ±10% (strict), ±15%, ±20%, **±25%** | `ADR_A9_TOLERANCE = 0.25` |
 | **DQ-ADR-9** | `period_policy` | **nearest EMMA period**, exact only | `ADR_A9_PERIOD_POLICY = "nearest"` |
 | **AC3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ACCE_AC3_PERCENTILE = 0.90` |
 | **AC7** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC7_MILD_IQR_MULTIPLIER = 1.5` |
@@ -192,7 +192,7 @@ id out of `ADR_RETIRED_RULE_IDS`.
 | **DQ-ADR-6** | Construction hours present when quantity exists        | Consistency          | `QTY_QUANTITY`, `COST_TOTAL_HOURS`, `COST_DB_TOTAL_HOURS` | - | - |
 | **DQ-ADR-7** *(retired 2026-09)* | Within-discipline quantity / hour ratio outlier        | Statistical Outlier  | `ITEM_TYPE`, `QTY_QUANTITY`, `QTY_UOM`, `COST_TOTAL_HOURS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 | **DQ-ADR-8** *(retired 2026-09)* | Cross-discipline quantity ratios                       | Statistical Outlier  | `ITEM_TYPE`, `ROOT_ITEM_NAME`, `QTY_QUANTITY`, `QTY_UOM` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
-| **DQ-ADR-9** | Base material factor validation (MFC vs EMMA)          | Validity             | `PLANVIEW_ID`, `COST_UPDATE`, `COST_BASE_MATERIAL_MFC`, `COST_VENDOR_SHOP_FAB_MFC`, `COST_BASE_MATERIAL_COST`, `COST_DB_BASE_MATERIAL_COST`, `COST_VENDOR_SHOP_FAB_COST`, `COST_DB_VENDOR_SHOP_FAB_COST` | `MFC` (EMMA: `CODE`, `LOCATION_CODE`, `PERIOD`, `FACTOR_VALUE`) + `VWS_GP_STANDARD_SHARE` (`PLANVIEW_ID → PROJECT_ID`, lookup `COUNTRY`) | `tolerance_pct` (select, default ±10%), `period_policy` (select, default nearest), `fail_without_reference` (bool) |
+| **DQ-ADR-9** | Base material factor validation (MFC vs EMMA)          | Validity             | `PLANVIEW_ID`, `COST_UPDATE`, `COST_BASE_MATERIAL_MFC`, `COST_VENDOR_SHOP_FAB_MFC`, `COST_BASE_MATERIAL_COST`, `COST_DB_BASE_MATERIAL_COST`, `COST_VENDOR_SHOP_FAB_COST`, `COST_DB_VENDOR_SHOP_FAB_COST` | `MFC` (EMMA: `CODE`, `LOCATION_CODE`, `PERIOD`, `FACTOR_VALUE`) + `VWS_GP_STANDARD_SHARE` (`PLANVIEW_ID → PROJECT_ID`, lookup `COUNTRY`) | `tolerance_pct` (select, default ±25%), `period_policy` (select, default nearest), `fail_without_reference` (bool) |
 
 ## Quick reference (ACCE)
 
@@ -1837,7 +1837,7 @@ also fail.
 
 | Option | Kind | Default | Effect |
 |---|---|---|---|
-| `tolerance_pct` | select | **0.10** (±10%) | Relative deviation allowed between the applied factor and the closest EMMA factor. ±25% mirrors the gap observed in the estimates and is meant for calibration runs. |
+| `tolerance_pct` | select | **0.25** (±25%) | Relative deviation allowed between the applied factor and the closest EMMA factor. ±25% mirrors the gap observed between EMMA and the estimates (default since 2026-09-18); ±10% is the strict setting the data owner first suggested. |
 | `period_policy` | select | **`nearest`** | `nearest`: closest EMMA period to `COST_UPDATE`. `exact`: same period only - today every ADR item becomes NO_REFERENCE. |
 | `fail_without_reference` | toggle | off | Turn NO_REFERENCE rows into FAIL so the score reflects estimations that cannot be validated. Off: they pass and are counted in the drill-down. |
 

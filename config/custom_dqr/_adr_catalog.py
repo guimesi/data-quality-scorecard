@@ -550,7 +550,7 @@ _ADR_RULE_DEFS = [
             "(code, location, period) → NO_REFERENCE (passes unless the "
             "toggle below is on); DB cost null / non-positive → not "
             "applicable; closest EMMA factor deviating more than the "
-            "tolerance (default ±10%, per the data owner) → FAIL. A row "
+            "tolerance (default ±25%; ±10% available as strict) → FAIL. A row "
             "fails when any field fails. ``SPEC_S_C_MFC`` is excluded: "
             "specialty contractor cost is estimated from labour hours "
             "and its MFC is not used. Raises ``CustomRuleNotEvaluated`` "
@@ -571,7 +571,7 @@ _ADR_RULE_DEFS = [
                 help=(
                     "Maximum relative deviation between the applied "
                     "factor and the closest EMMA factor before the row "
-                    "fails. ±10% is the data owner's recommendation."
+                    "fails. ±25% is the default; ±10% is the strict setting."
                 ),
                 description=(
                     "**How this option works**\n\n"
@@ -581,9 +581,10 @@ _ADR_RULE_DEFS = [
                     "adjusted for project specifics, so small "
                     "differences are expected; a deviation above this "
                     "tolerance flags the row for investigation. "
-                    "**±10%** is the recommended baseline; **±25%** "
-                    "matches the gap observed between EMMA and the "
-                    "estimates and is meant for calibration runs."
+                    "**±25%** is the default: it matches the gap "
+                    "observed between EMMA and the estimates while the "
+                    "calibration settles. **±10%** is the strict setting "
+                    "originally suggested by the data owner."
                 ),
             ),
             CustomRuleSelectOption(

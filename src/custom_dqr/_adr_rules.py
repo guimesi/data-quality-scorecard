@@ -518,7 +518,7 @@ ADR_A8_SEGMENT_REQUIRED_COLUMNS = {
 #   5. compares the effective factor with every EMMA factor of that code
 #      in the country's sites for the period and fails when the *closest*
 #      one still deviates more than the tolerance (card option, default
-#      ±10% per the data owner).
+#      ±25%; ±10% available as the strict setting).
 #
 # ``SPEC_S_C_MFC`` is deliberately not validated: Specialty Contractor
 # cost is estimated from labour hours, the MFC there is not used.
@@ -566,14 +566,17 @@ ADR_A9_FACTOR_FIELDS: Tuple[Tuple[str, str, str, str], ...] = (
     ("VSF", "COST_VENDOR_SHOP_FAB_MFC",
      "COST_VENDOR_SHOP_FAB_COST", "COST_DB_VENDOR_SHOP_FAB_COST"),
 )
-# Tolerance on the relative deviation |effective - EMMA| / EMMA.
+# Tolerance on the relative deviation |effective - EMMA| / EMMA. The data
+# owner's first instinct was ±10%; the default was moved to ±25% on
+# 2026-09-18 to match the gap observed between EMMA and the estimates
+# (owner comment 2) until the calibration settles. ±10% stays available.
 ADR_A9_TOLERANCE_PARAM = "tolerance_pct"
-ADR_A9_TOLERANCE = 0.10
+ADR_A9_TOLERANCE = 0.25
 ADR_A9_TOLERANCE_CHOICES: Tuple[Tuple[float, str], ...] = (
-    (0.10, "±10% - recommended"),
+    (0.10, "±10% - strict"),
     (0.15, "±15%"),
     (0.20, "±20%"),
-    (0.25, "±25% - calibration"),
+    (0.25, "±25% - recommended"),
 )
 # Which EMMA period to compare against. ``nearest`` picks the EMMA period
 # closest to the item's COST_UPDATE (ties → the earlier one); ``exact``
@@ -2183,7 +2186,7 @@ def check_adr_a9(
       ``params[fail_without_reference]``);
     - ``DB_COST`` null / non-positive → NOT_APPLICABLE;
     - closest EMMA factor deviates more than ``params[tolerance_pct]``
-      (default ±10%) → FAIL, otherwise PASS.
+      (default ±25%) → FAIL, otherwise PASS.
 
     Row verdict: FAIL when any factor field fails; otherwise PASS
     (NOT_APPLICABLE and NO_REFERENCE rows pass). ``SPEC_S_C_MFC`` is not

@@ -9588,8 +9588,9 @@ def test_adr_has_custom_rule_a9_available():
     keys = [o.key for o in rule.select_options]
     assert keys == [ADR_A9_TOLERANCE_PARAM, ADR_A9_PERIOD_POLICY_PARAM]
     tol = rule.select_options[0]
-    assert tol.default == 0.10
+    assert tol.default == 0.25
     assert "recommended" in dict(tol.choices)[tol.default].lower()
+    assert 0.10 in dict(tol.choices)
     pol = rule.select_options[1]
     assert pol.default == "nearest"
     assert [o.key for o in rule.options] == [ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM]
@@ -9622,25 +9623,31 @@ def test_adr_a9_passes_when_effective_factor_within_tolerance(_a9_references):
 
 
 def test_adr_a9_fails_when_deviation_exceeds_tolerance(_a9_references):
+    """Default tolerance is ±25%: 8.5 vs 6.5 (31%) and 4.0 vs 6.0 (33%)
+    fail; 8.0 vs 6.5 (23%) passes."""
     from src.custom_dqr_engine import _evaluate_adr_a9, check_adr_a9
     df = _make_a9_df([
-        _a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0),     # 8.0 vs 6.5 → 23%
+        _a9_row(bm="313.01", bm_cost=850.0, bm_db=100.0),     # 8.5 vs 6.5 → 31%
         _a9_row(bm="313.01", bm_cost=400.0, bm_db=100.0),     # 4.0 vs 6.0 → 33%
+        _a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0),     # 8.0 vs 6.5 → 23%
     ])
-    assert check_adr_a9(df).tolist() == [False, False]
+    assert check_adr_a9(df).tolist() == [False, False, True]
     ev = _evaluate_adr_a9(df)
-    assert ev["bm_reason"].tolist() == ["DEVIATION_GT_TOLERANCE"] * 2
-    assert ev["bm_reference"].tolist() == [6.5, 6.0]
-    assert ev["bm_deviation"].round(4).tolist() == [0.2308, 0.3333]
+    assert ev["bm_reason"].tolist() == [
+        "DEVIATION_GT_TOLERANCE", "DEVIATION_GT_TOLERANCE", "WITHIN_TOLERANCE",
+    ]
+    assert ev["bm_reference"].tolist() == [6.5, 6.0, 6.5]
+    assert ev["bm_deviation"].round(4).tolist() == [0.3077, 0.3333, 0.2308]
 
 
-def test_adr_a9_tolerance_param_widens_the_pass_band(_a9_references):
+def test_adr_a9_tolerance_param_narrows_the_pass_band(_a9_references):
     from src.custom_dqr_engine import ADR_A9_TOLERANCE_PARAM, check_adr_a9
     df = _make_a9_df([_a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0)])  # 23%
-    assert check_adr_a9(df).tolist() == [False]
-    assert check_adr_a9(df, {ADR_A9_TOLERANCE_PARAM: 0.25}).tolist() == [True]
+    assert check_adr_a9(df).tolist() == [True]                                  # default ±25%
+    assert check_adr_a9(df, {ADR_A9_TOLERANCE_PARAM: 0.10}).tolist() == [False]  # strict
+    assert check_adr_a9(df, {ADR_A9_TOLERANCE_PARAM: 0.20}).tolist() == [False]
     # Malformed threshold falls back to the default.
-    assert check_adr_a9(df, {ADR_A9_TOLERANCE_PARAM: "abc"}).tolist() == [False]
+    assert check_adr_a9(df, {ADR_A9_TOLERANCE_PARAM: "abc"}).tolist() == [True]
 
 
 def test_adr_a9_sentinel_codes_fail(_a9_references):
@@ -9878,20 +9885,20 @@ def test_adr_a9_reference_columns_are_case_insensitive(monkeypatch):
 def test_evaluate_custom_rules_dispatches_to_a9_with_params(_a9_references):
     from src.custom_dqr_engine import ADR_A9_TOLERANCE_PARAM
     df = _make_a9_df([
-        _a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0),   # 23% → FAIL at 10%, PASS at 25%
+        _a9_row(bm="313.01", bm_cost=800.0, bm_db=100.0),   # 23% → PASS at 25%, FAIL at 10%
         _a9_row(bm="80", bm_cost=600.0, bm_db=100.0),
     ])
     out, not_evaluated = evaluate_custom_rules(
         df, [CustomDQRAssignment(rule_id="DQ-ADR-9", weight=100.0)], "ADR"
     )
-    assert out["DQ-ADR-9"].tolist() == [False, False]
+    assert out["DQ-ADR-9"].tolist() == [True, False]
     assert not_evaluated == {}
     out, _ = evaluate_custom_rules(
         df,
-        [CustomDQRAssignment(rule_id="DQ-ADR-9", weight=100.0, params={ADR_A9_TOLERANCE_PARAM: 0.25})],
+        [CustomDQRAssignment(rule_id="DQ-ADR-9", weight=100.0, params={ADR_A9_TOLERANCE_PARAM: 0.10})],
         "ADR",
     )
-    assert out["DQ-ADR-9"].tolist() == [True, False]
+    assert out["DQ-ADR-9"].tolist() == [False, False]
 
 
 def test_adr_a9_mock_data_product_exercises_every_outcome():
