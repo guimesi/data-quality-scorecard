@@ -93,7 +93,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "runs": summary.run_ids,
         "rows": len(summary.rows),
         "links_filled": {
-            column: sum(1 for row in summary.rows if column in row)
+            column: sum(1 for row in summary.rows if row.get(column))
             for column in ("Data Product", "DQR", "CDE")
         },
         "links_blank": summary.unresolved,

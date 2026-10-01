@@ -21,10 +21,12 @@ written; lookups, formulas and automations in the table ("Rule Name",
 
 **Linked records** ("Data Product", "DQR", "CDE") are resolved here by
 reading the linked table (``AIRTABLE_*_TABLE``) and matching the app's
-value against the record's text fields (or only ``AIRTABLE_*_MATCH_FIELD``
-when set), then sent as record ids. A value with no (or an ambiguous) match is left blank and reported
-in :class:`ResultsPushSummary.unresolved` - nothing is ever auto-created
-in the governance tables.
+value against the records, then sent as record ids. When
+``AIRTABLE_*_MATCH_FIELD`` is set (CDE: "Column Name") that field decides:
+a record is matched through its other text fields only while it leaves
+the match field empty. A value with no (or an ambiguous) match is sent as
+an empty link and reported in :class:`ResultsPushSummary.unresolved` -
+nothing is ever auto-created in the governance tables.
 
 Same contract as :mod:`src.airtable_push`: every failure is an
 :class:`~src.airtable_push.AirtablePushError`.
@@ -35,7 +37,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote, urlencode
 
 from config.settings import SETTINGS
@@ -83,9 +85,9 @@ _COMPUTED_TYPES = frozenset({
 })
 
 # CDE columns whose record in the Airtable CDE table is named differently
-# from the column (per DP code -> column -> "Field Name" candidates). Only
-# needed while that table has no field holding the physical column name:
-# links match on any text field, so adding one there makes this redundant.
+# from the column (per DP code -> column -> "Field Name" candidates). A
+# fallback only: it applies to records whose "Column Name" is empty - a
+# record that names its column in Airtable is matched on that alone.
 _CDE_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "SQS": {
         "STATUS": ["Inspection Status"],
@@ -232,8 +234,7 @@ def _texts(value: Any) -> List[str]:
             and not isinstance(v, bool) and str(v) != ""]
 
 
-def _load_link_index(tables: str,
-                     match_field: str) -> List[Tuple[str, frozenset, str]]:
+def _load_link_index(tables: str, match_field: str) -> List[tuple]:
     """Index of a linked table. ``tables`` may list alternative names
     separated by ``|`` (``Data Sets|Datasets``): the first one Airtable
     accepts is used."""
@@ -249,14 +250,17 @@ def _load_link_index(tables: str,
     return []
 
 
-def _read_link_table(table: str,
-                     match_field: str) -> List[Tuple[str, frozenset, str]]:
-    """Every record of a linked table as ``(record id, match keys, blob)``.
+def _read_link_table(table: str, match_field: str) -> List[tuple]:
+    """Every record of a linked table as ``(record id, match keys, blob,
+    fallback keys)``.
 
-    ``match keys`` are the normalized values of ``match_field`` - or of
-    every text field when ``match_field`` is empty; ``blob`` is all the
-    record's text normalized, used to break ties."""
-    index: List[Tuple[str, frozenset, str]] = []
+    Without ``match_field`` the match keys are the normalized values of
+    every text field. With it they are that field's values only, and a
+    record leaving the field empty gets its other text fields as *fallback
+    keys* (tried only when no record matches on the field itself).
+    ``blob`` is all the record's text normalized, used to scope matches
+    to a Data Product."""
+    index: List[tuple] = []
     offset: Optional[str] = None
     while True:
         query = {"pageSize": 100}
@@ -267,30 +271,45 @@ def _read_link_table(table: str,
             step=f"reading linked table '{table}'")
         for rec in data.get("records") or []:
             fields = rec.get("fields") or {}
-            cells = [fields.get(match_field)] if match_field else fields.values()
-            keys = frozenset(_norm(t) for cell in cells for t in _texts(cell))
-            if not keys:
+            every = frozenset(
+                _norm(t) for cell in fields.values() for t in _texts(cell))
+            if not every:
                 continue
+            keys, fallback = every, frozenset()
+            if match_field:
+                keys = frozenset(_norm(t) for t in _texts(fields.get(match_field)))
+                fallback = frozenset() if keys else every
             blob = _norm(" ".join(
                 t for cell in fields.values() for t in _texts(cell)))
-            index.append((rec["id"], keys, blob))
+            index.append((rec["id"], keys, blob, fallback))
         offset = data.get("offset")
         if not offset:
             return index
         time.sleep(_PAUSE_S)
 
 
-def _resolve(index: List[Tuple[str, frozenset, str]], candidates: Iterable[str],
+def _resolve(index: List[tuple], candidates: Iterable[str],
              scope: Iterable[str]) -> Optional[str]:
-    """Record id matching any of ``candidates``. Several matches (the same
-    column name under two Data Products) are narrowed to the one mentioning
-    a ``scope`` label; still ambiguous = unresolved."""
+    """Record id matching any of ``candidates``, or ``None`` when there is
+    no single match.
+
+    ``scope`` holds the run's Data Product labels and its Airtable record
+    id. When the table has records of that Data Product (their text
+    mentions a label, or they link to its record), only those can match -
+    the same column name under another Data Product is not this CDE."""
     keys = {_norm(c) for c in candidates if c}
-    matches = [rec for rec in index if rec[1] & keys]
-    if len(matches) > 1:
-        labels = [_norm(s) for s in scope if s]
-        matches = [rec for rec in matches if any(lb in rec[2] for lb in labels)]
-    return matches[0][0] if len(matches) == 1 else None
+    labels = [_norm(s) for s in scope if s]
+
+    def in_scope(rec) -> bool:
+        return any(label in rec[2] for label in labels)
+
+    scoped = any(in_scope(rec) for rec in index)
+    for tier in (1, 3):  # match keys first, then the fallback keys
+        matches = [rec for rec in index
+                   if rec[tier] & keys and (not scoped or in_scope(rec))]
+        if matches:
+            return matches[0][0] if len(matches) == 1 else None
+    return None
 
 
 def _dp_aliases() -> Dict[str, str]:
@@ -303,7 +322,12 @@ def _link_rows(rows: List[Dict[str, Any]], dp_code: str, dp_labels: List[str],
                indexes: Dict[str, Optional[list]],
                unresolved: Dict[str, List[str]]) -> None:
     """Swap the app-side link values of ``rows`` for record-id lists in
-    place; links that are not configured or do not resolve are removed."""
+    place. A link whose table is not configured is removed; one that does
+    not resolve is sent empty, so re-sending a run also clears a link a
+    previous send got wrong."""
+    dp_index = indexes.get(F_DATA_PRODUCT)
+    dp_record = _resolve(dp_index, dp_labels, dp_labels) if dp_index else None
+    scope = [*dp_labels, dp_record]
     for fields in rows:
         for column in _LINK_FIELDS:
             value = fields.pop(column, None)
@@ -316,10 +340,10 @@ def _link_rows(rows: List[Dict[str, Any]], dp_code: str, dp_labels: List[str],
                 candidates = [value, *_CDE_ALIASES.get(dp_code, {}).get(value, [])]
             else:
                 candidates = [value]
-            record_id = _resolve(index, candidates, dp_labels)
-            if record_id:
-                fields[column] = [record_id]
-            elif value not in unresolved.setdefault(column, []):
+            record_id = (dp_record if column == F_DATA_PRODUCT
+                         else _resolve(index, candidates, scope))
+            fields[column] = [record_id] if record_id else []
+            if not record_id and value not in unresolved.setdefault(column, []):
                 unresolved[column].append(value)
 
 

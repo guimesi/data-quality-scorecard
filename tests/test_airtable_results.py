@@ -179,8 +179,8 @@ def test_links_are_sent_as_record_ids(airtable):
     assert sent["DQR|dq-inspection-12"]["DQR"] == ["recDQR12"]
     # Two CDE records named "Status": the one mentioning the DP wins.
     assert sent["CDE|STATUS"]["CDE"] == ["recCdeSqs"]
-    # No match -> left blank and reported, never auto-created.
-    assert "CDE" not in sent["CDE|TOTAL_CONSUMED_HOURS"]
+    # No match -> sent empty (clears a stale link) and reported.
+    assert sent["CDE|TOTAL_CONSUMED_HOURS"]["CDE"] == []
     assert summary.unresolved == {"CDE": ["TOTAL_CONSUMED_HOURS"]}
 
 
@@ -210,6 +210,70 @@ def test_cde_aliases_cover_columns_named_differently_in_airtable(airtable, monke
     assert rows["CDE|STATUS"]["CDE"] == ["recStatus"]
     assert rows["CDE|ALLOTED_HOURS"]["CDE"] == ["recAllot"]
     assert summary.unresolved == {"CDE": ["OTHER"]}
+
+
+def _adr_run(**cdes):
+    run = _run(dp_code="ADR", dp_name="ADR_DATA_PRODUCT", cde_scores=cdes,
+               rule_pass_rates={}, custom_rule_pass_rates={})
+    run["dp_code"] = "ADR"
+    return run
+
+
+def test_cde_of_another_data_product_is_not_linked(airtable, monkeypatch):
+    monkeypatch.setitem(_TABLES, "CDEs", [
+        {"id": "recSqsPv", "fields": {"Name": "CDE-Inspection-Planview ID",
+                                      "Field Name": "Planview ID"}},
+        {"id": "recAdrItem", "fields": {"Name": "CDE-ADR-Item Type",
+                                        "Field Name": "Item Type"}},
+        # No DP in its text, but linked to the ADR record of the DP table.
+        {"id": "recAdrQty", "fields": {"Field Name": "Quantity",
+                                       "Data Set": ["recDPadr"]}},
+    ])
+    summary = ar.push_runs(
+        [_adr_run(PLANVIEW_ID=1.0, ITEM_TYPE=2.0, QUANTITY=3.0)], dry_run=True)
+    rows = {r["Result ID"].split("|", 1)[1]: r for r in summary.rows}
+    assert rows["CDE|PLANVIEW_ID"]["CDE"] == []       # only an Inspection CDE
+    assert rows["CDE|ITEM_TYPE"]["CDE"] == ["recAdrItem"]
+    assert rows["CDE|QUANTITY"]["CDE"] == ["recAdrQty"]
+    assert summary.unresolved == {"CDE": ["PLANVIEW_ID"]}
+
+
+def test_match_field_decides_and_other_fields_are_only_a_fallback(airtable, monkeypatch):
+    """Airtable's "Column Name" wins: Cost Basis names COST_UPDATE as its
+    column, so the alias pointing COST_BASE_MATERIAL_COST at it is ignored;
+    a CDE with no Column Name is still reached through its Field Name."""
+    settings = _settings(airtable_cde_match_field="Column Name")
+    monkeypatch.setattr(ar, "SETTINGS", settings)
+    monkeypatch.setitem(_TABLES, "CDEs", [
+        {"id": "recBasis", "fields": {"Name": "CDE-ADR-Cost Basis",
+                                      "Field Name": "Cost Basis",
+                                      "Column Name": "COST_UPDATE"}},
+        {"id": "recHours", "fields": {"Name": "CDE-ADR-Total Hours",
+                                      "Field Name": "Total Hours"}},
+        {"id": "recType", "fields": {"Name": "CDE-ADR-Item Type",
+                                     "Field Name": "Something else",
+                                     "Column Name": "ITEM_TYPE"}},
+    ])
+    summary = ar.push_runs([_adr_run(
+        COST_UPDATE=1.0, COST_BASE_MATERIAL_COST=2.0, COST_TOTAL_HOURS=3.0,
+        ITEM_TYPE=4.0)], dry_run=True)
+    rows = {r["Result ID"].split("|", 1)[1]: r for r in summary.rows}
+    assert rows["CDE|COST_UPDATE"]["CDE"] == ["recBasis"]
+    assert rows["CDE|COST_BASE_MATERIAL_COST"]["CDE"] == []
+    assert rows["CDE|COST_TOTAL_HOURS"]["CDE"] == ["recHours"]   # alias fallback
+    assert rows["CDE|ITEM_TYPE"]["CDE"] == ["recType"]
+    assert summary.unresolved == {"CDE": ["COST_BASE_MATERIAL_COST"]}
+
+
+def test_single_match_is_enough_when_the_table_has_no_data_product_info(
+        airtable, monkeypatch):
+    monkeypatch.setitem(_TABLES, "CDEs", [
+        {"id": "recPv", "fields": {"Field Name": "Planview ID"}},
+        {"id": "recIt", "fields": {"Field Name": "Item Type"}},
+    ])
+    summary = ar.push_runs([_adr_run(PLANVIEW_ID=1.0)], dry_run=True)
+    assert summary.rows[1]["CDE"] == ["recPv"]
+    assert summary.unresolved == {}
 
 
 def test_link_table_alternative_names_first_existing_wins(airtable, monkeypatch):
