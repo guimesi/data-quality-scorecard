@@ -27,7 +27,7 @@
 # MAGIC | `want_pdf` | `true` | render the PDF (needs Chromium, see `init_chromium.sh`) |
 # MAGIC | `airtable_base_id` | `appXXXX` | Airtable base; empty = no push |
 # MAGIC | `airtable_secret_scope` / `airtable_secret_key` | `dq-scorecard` / `airtable-token` | where the Airtable token lives |
-# MAGIC | `airtable_dp_table` / `airtable_dqr_table` / `airtable_cde_table` | `Datasets` / `DQRs` / `CDEs` | Airtable tables the detailed results link to; empty = link left blank |
+# MAGIC | `airtable_dp_table` / `airtable_dqr_table` / `airtable_cde_table` | `Data Sets` / `Data Quality Rules` / `Data Quality Fields` | Airtable tables the detailed results link to; empty = the app defaults |
 
 # COMMAND ----------
 

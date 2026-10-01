@@ -20,9 +20,9 @@ written; lookups, formulas and automations in the table ("Rule Name",
 "Status", "Is Latest Run", ...) are Airtable's job.
 
 **Linked records** ("Data Product", "DQR", "CDE") are resolved here by
-reading the linked table and matching on a configured field
-(``AIRTABLE_*_TABLE`` / ``AIRTABLE_*_MATCH_FIELD``), then sent as record
-ids. A value with no (or an ambiguous) match is left blank and reported
+reading the linked table (``AIRTABLE_*_TABLE``) and matching the app's
+value against the record's text fields (or only ``AIRTABLE_*_MATCH_FIELD``
+when set), then sent as record ids. A value with no (or an ambiguous) match is left blank and reported
 in :class:`ResultsPushSummary.unresolved` - nothing is ever auto-created
 in the governance tables.
 
@@ -81,6 +81,27 @@ _COMPUTED_TYPES = frozenset({
     "createdTime", "lastModifiedTime", "createdBy", "lastModifiedBy",
     "button", "externalSyncSource", "aiText",
 })
+
+# CDE columns whose record in the Airtable CDE table is named differently
+# from the column (per DP code -> column -> "Field Name" candidates). Only
+# needed while that table has no field holding the physical column name:
+# links match on any text field, so adding one there makes this redundant.
+_CDE_ALIASES: Dict[str, Dict[str, List[str]]] = {
+    "SQS": {
+        "STATUS": ["Inspection Status"],
+        "ALLOTED_HOURS": ["Allotted Hours", "Alloted Hours"],
+    },
+    "ADR": {
+        "COMPLETE_WBC": ["Complete Work breakdown Structure (WBC)"],
+        "COST_BASE_MATERIAL_COST": ["Cost Basis"],
+        "COST_BASE_MATERIAL_MFC": ["Material Factor Code"],
+        "COST_TOTAL_HOURS": ["Total Hours"],
+        "QTY_QUANTITY": ["Quantity"],
+        "QTY_UOM": ["Quantity Unite of Measure (UOM)",
+                    "Quantity Unit of Measure (UOM)"],
+        "DESIGN_KEY_PARAMETER_NAMES": ["Design Parameter"],
+    },
+}
 
 # Airtable accepts at most 10 records per write and 5 requests/second/base.
 _BATCH_SIZE = 10
@@ -204,10 +225,38 @@ def _table_url(table: str) -> str:
     return f"{API_ROOT}/{SETTINGS.airtable_base_id}/{quote(table)}"
 
 
-def _load_link_index(table: str, match_field: str) -> List[Tuple[str, str, str]]:
-    """Every record of a linked table as ``(record id, match key, blob)``;
-    ``blob`` is all its text values normalized, used to break ties."""
-    index: List[Tuple[str, str, str]] = []
+def _texts(value: Any) -> List[str]:
+    """Text values of a cell (lookups / multi-selects come as lists)."""
+    items = value if isinstance(value, list) else [value]
+    return [str(v) for v in items if isinstance(v, (str, int, float))
+            and not isinstance(v, bool) and str(v) != ""]
+
+
+def _load_link_index(tables: str,
+                     match_field: str) -> List[Tuple[str, frozenset, str]]:
+    """Index of a linked table. ``tables`` may list alternative names
+    separated by ``|`` (``Data Sets|Datasets``): the first one Airtable
+    accepts is used."""
+    names = [t.strip() for t in tables.split("|") if t.strip()]
+    for position, name in enumerate(names, start=1):
+        try:
+            return _read_link_table(name, match_field)
+        except AirtablePushError as exc:
+            if position == len(names):
+                raise AirtablePushError(
+                    f"Could not read the linked table (tried: "
+                    f"{', '.join(names)}): {exc}") from exc
+    return []
+
+
+def _read_link_table(table: str,
+                     match_field: str) -> List[Tuple[str, frozenset, str]]:
+    """Every record of a linked table as ``(record id, match keys, blob)``.
+
+    ``match keys`` are the normalized values of ``match_field`` - or of
+    every text field when ``match_field`` is empty; ``blob`` is all the
+    record's text normalized, used to break ties."""
+    index: List[Tuple[str, frozenset, str]] = []
     offset: Optional[str] = None
     while True:
         query = {"pageSize": 100}
@@ -218,26 +267,26 @@ def _load_link_index(table: str, match_field: str) -> List[Tuple[str, str, str]]
             step=f"reading linked table '{table}'")
         for rec in data.get("records") or []:
             fields = rec.get("fields") or {}
-            value = fields.get(match_field)
-            if isinstance(value, list):
-                value = value[0] if value else None
-            if value in (None, ""):
+            cells = [fields.get(match_field)] if match_field else fields.values()
+            keys = frozenset(_norm(t) for cell in cells for t in _texts(cell))
+            if not keys:
                 continue
-            blob = _norm(" ".join(str(v) for v in fields.values()))
-            index.append((rec["id"], _norm(value), blob))
+            blob = _norm(" ".join(
+                t for cell in fields.values() for t in _texts(cell)))
+            index.append((rec["id"], keys, blob))
         offset = data.get("offset")
         if not offset:
             return index
         time.sleep(_PAUSE_S)
 
 
-def _resolve(index: List[Tuple[str, str, str]], candidates: Iterable[str],
+def _resolve(index: List[Tuple[str, frozenset, str]], candidates: Iterable[str],
              scope: Iterable[str]) -> Optional[str]:
     """Record id matching any of ``candidates``. Several matches (the same
     column name under two Data Products) are narrowed to the one mentioning
     a ``scope`` label; still ambiguous = unresolved."""
     keys = {_norm(c) for c in candidates if c}
-    matches = [rec for rec in index if rec[1] in keys]
+    matches = [rec for rec in index if rec[1] & keys]
     if len(matches) > 1:
         labels = [_norm(s) for s in scope if s]
         matches = [rec for rec in matches if any(lb in rec[2] for lb in labels)]
@@ -250,7 +299,7 @@ def _dp_aliases() -> Dict[str, str]:
     return {code.strip(): name.strip() for code, name in pairs}
 
 
-def _link_rows(rows: List[Dict[str, Any]], dp_labels: List[str],
+def _link_rows(rows: List[Dict[str, Any]], dp_code: str, dp_labels: List[str],
                indexes: Dict[str, Optional[list]],
                unresolved: Dict[str, List[str]]) -> None:
     """Swap the app-side link values of ``rows`` for record-id lists in
@@ -261,7 +310,12 @@ def _link_rows(rows: List[Dict[str, Any]], dp_labels: List[str],
             index = indexes.get(column)
             if value is None or index is None:
                 continue
-            candidates = dp_labels if column == F_DATA_PRODUCT else [value]
+            if column == F_DATA_PRODUCT:
+                candidates = dp_labels
+            elif column == F_CDE:
+                candidates = [value, *_CDE_ALIASES.get(dp_code, {}).get(value, [])]
+            else:
+                candidates = [value]
             record_id = _resolve(index, candidates, dp_labels)
             if record_id:
                 fields[column] = [record_id]
@@ -348,7 +402,7 @@ def push_runs(runs: List[Dict[str, Any]],
         dp_code = str(payload.get("dp_code") or run.get("dp_code") or "")
         dp_labels = [aliases.get(dp_code, ""), dp_code,
                      str(payload.get("dp_name") or "")]
-        _link_rows(run_rows, dp_labels, indexes, summary.unresolved)
+        _link_rows(run_rows, dp_code, dp_labels, indexes, summary.unresolved)
         rows.extend(run_rows)
         summary.run_ids.append(str(payload.get("id")))
     summary.rows = [

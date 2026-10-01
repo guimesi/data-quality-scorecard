@@ -115,16 +115,19 @@ class Settings:
         "AIRTABLE_RESULTS_TABLE", "DQ Results Integration Proposal")
     # The "Data Product" / "DQR" / "CDE" columns are links to other tables.
     # Each link is resolved by reading the linked table and matching the
-    # app's value (DP code, rule id, CDE column) against ``*_MATCH_FIELD``
-    # (case / punctuation insensitive). Empty table = that link is left
-    # blank; an unmatched value is also left blank (never auto-created).
-    airtable_dp_table: str = os.getenv("AIRTABLE_DP_TABLE", "")
-    airtable_dp_match_field: str = os.getenv("AIRTABLE_DP_MATCH_FIELD", "Name")
-    airtable_dqr_table: str = os.getenv("AIRTABLE_DQR_TABLE", "")
-    airtable_dqr_match_field: str = os.getenv("AIRTABLE_DQR_MATCH_FIELD", "Name")
-    airtable_cde_table: str = os.getenv("AIRTABLE_CDE_TABLE", "")
-    airtable_cde_match_field: str = os.getenv(
-        "AIRTABLE_CDE_MATCH_FIELD", "Field Name")
+    # app's value (DP code, rule id, CDE column) against the record's text
+    # fields - any of them, or only ``*_MATCH_FIELD`` when set (case /
+    # punctuation insensitive). Empty table = that link is left blank; a
+    # value with no single match is also left blank (never auto-created).
+    # A table setting may list alternative names separated by "|": the
+    # first one that exists in the base is used.
+    airtable_dp_table: str = os.getenv(
+        "AIRTABLE_DP_TABLE", "Data Sets|Datasets|Data Sets table")
+    airtable_dp_match_field: str = os.getenv("AIRTABLE_DP_MATCH_FIELD", "")
+    airtable_dqr_table: str = os.getenv("AIRTABLE_DQR_TABLE", "Data Quality Rules")
+    airtable_dqr_match_field: str = os.getenv("AIRTABLE_DQR_MATCH_FIELD", "")
+    airtable_cde_table: str = os.getenv("AIRTABLE_CDE_TABLE", "Data Quality Fields")
+    airtable_cde_match_field: str = os.getenv("AIRTABLE_CDE_MATCH_FIELD", "")
     # App DP code -> Data Product name in Airtable when they differ
     # ("CODE=Name" pairs, comma-separated).
     airtable_dp_aliases: str = os.getenv("AIRTABLE_DP_ALIASES", "SQS=Inspection")

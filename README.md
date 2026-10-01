@@ -301,7 +301,8 @@ what the publishers consume:
   It also upserts the latest persisted run's detailed results (one record
   per overall / rule / CDE / dimension score, keyed by `Result ID`) into
   `AIRTABLE_RESULTS_TABLE` - see `src/airtable_results.py`;
-  `python scripts/push_runs_to_airtable.py --all` backfills older runs.
+  `python scripts/push_runs_to_airtable.py --send --all` backfills older
+  runs (without `--send` it only checks and prints).
 - **Failed rows**: every recorded run also stores the rows failing at
   least one rule in `DQS_FAILS_<DOMAIN>_<DP>` (one table per domain / data
   product, `deploy/databricks/04_failed_rows_tables.sql`) when

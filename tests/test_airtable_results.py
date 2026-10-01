@@ -52,8 +52,9 @@ def _run(**payload_overrides):
 
 
 class _Resp:
-    def __init__(self, payload):
-        self._payload, self.status_code, self.ok, self.text = payload, 200, True, "ok"
+    def __init__(self, payload, status_code=200):
+        self._payload, self.status_code, self.text = payload, status_code, "ok"
+        self.ok = status_code < 400
 
     def json(self):
         return self._payload
@@ -85,6 +86,8 @@ def airtable(monkeypatch):
     def fake_request(method, url, json=None, headers=None, timeout=None):
         if method == "GET":
             table = url.split("?")[0].rsplit("/", 1)[-1]
+            if _TABLES.get(table) is None:
+                return _Resp({"error": "NOT_FOUND"}, status_code=404)
             return _Resp({"records": _TABLES[table]})
         upserts.append(json)
         return _Resp({"records": [{"id": f"rec{len(upserts)}_{i}"}
@@ -179,6 +182,55 @@ def test_links_are_sent_as_record_ids(airtable):
     # No match -> left blank and reported, never auto-created.
     assert "CDE" not in sent["CDE|TOTAL_CONSUMED_HOURS"]
     assert summary.unresolved == {"CDE": ["TOTAL_CONSUMED_HOURS"]}
+
+
+def test_links_match_any_text_field_when_no_match_field_is_set(airtable, monkeypatch):
+    settings = _settings(airtable_dp_match_field="", airtable_dqr_match_field="",
+                         airtable_cde_match_field="")
+    monkeypatch.setattr(ar, "SETTINGS", settings)
+    summary = ar.push_runs([_run()], dry_run=True)
+    rows = {r["Result ID"].split("|", 1)[1]: r for r in summary.rows}
+    assert rows["OVERALL"]["Data Product"] == ["recDP"]
+    assert rows["DQR|dq-inspection-12"]["DQR"] == ["recDQR12"]
+    assert rows["CDE|STATUS"]["CDE"] == ["recCdeSqs"]   # via "Field Name"
+    assert summary.unresolved == {"CDE": ["TOTAL_CONSUMED_HOURS"]}
+
+
+def test_cde_aliases_cover_columns_named_differently_in_airtable(airtable, monkeypatch):
+    monkeypatch.setitem(_TABLES, "CDEs", [
+        {"id": "recStatus", "fields": {"Name": "CDE-Inspection-Inspection Status",
+                                       "Field Name": "Inspection Status"}},
+        {"id": "recAllot", "fields": {"Name": "CDE-Inspection-Allotted Hours",
+                                      "Field Name": "Allotted Hours"}},
+    ])
+    summary = ar.push_runs(
+        [_run(cde_scores={"STATUS": 100.0, "ALLOTED_HOURS": 90.0, "OTHER": 1.0})],
+        dry_run=True)
+    rows = {r["Result ID"].split("|", 1)[1]: r for r in summary.rows}
+    assert rows["CDE|STATUS"]["CDE"] == ["recStatus"]
+    assert rows["CDE|ALLOTED_HOURS"]["CDE"] == ["recAllot"]
+    assert summary.unresolved == {"CDE": ["OTHER"]}
+
+
+def test_link_table_alternative_names_first_existing_wins(airtable, monkeypatch):
+    settings = _settings(airtable_dp_table="Data Sets|Datasets")
+    monkeypatch.setattr(ar, "SETTINGS", settings)
+    real = ap.requests.request.side_effect
+
+    def fake(method, url, **kwargs):
+        if method == "GET" and "/Data%20Sets?" in url:
+            return _Resp({"error": "NOT_FOUND"}, status_code=404)
+        return real(method, url, **kwargs)
+
+    monkeypatch.setattr(ap.requests, "request", MagicMock(side_effect=fake))
+    summary = ar.push_runs([_run()], dry_run=True)
+    assert summary.rows[0]["Data Product"] == ["recDP"]
+
+    settings = _settings(airtable_dp_table="Data Sets|Nope")
+    monkeypatch.setattr(ar, "SETTINGS", settings)
+    monkeypatch.setitem(_TABLES, "Nope", None)
+    with pytest.raises(ap.AirtablePushError):
+        ar.push_runs([_run()], dry_run=True)
 
 
 def test_unconfigured_link_table_leaves_the_link_blank(airtable, monkeypatch):
