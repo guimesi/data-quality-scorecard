@@ -12,6 +12,7 @@ the runtime.
 |---|---|---|
 | `databricks/01_grants.sql` | Least-privilege Unity Catalog grants for the app's service principal | catalog admin, once per environment |
 | `databricks/02_persistence_tables.sql` | DDL for the `DQS_RUNS` / `DQS_EVENTS` / `DQS_PROJECTS` app-state tables | schema owner, once per environment |
+| `databricks/04_failed_rows_tables.sql` | DDL + grants for the `DQS_FAILS_<DOMAIN>_<DP>` tables (failed rows of every recorded run, one table per domain / data product) | schema owner + catalog admin, once per environment |
 | `databricks/03_report_volume.sql` | Unity Catalog Volume `dq_reports` (+ grants) holding every run's Data Quality Report artefacts, served at `/reports/<run_id>` | schema owner, once per environment |
 
 The runtime configuration itself lives at the repo root in
@@ -41,6 +42,9 @@ resource mapping).
 3. **Create the app-state tables**: run
    `databricks/02_persistence_tables.sql` on the warehouse.
    (Alternative while testing: set `DQS_PERSISTENCE=off` in `app.yaml`.)
+   Optional: run `databricks/04_failed_rows_tables.sql` and set
+   `DQS_FAILS_MAX_ROWS` (e.g. `10000`) to also store the failed rows of
+   every recorded run; the feature is off (`0`) by default.
 4. **Grant data access**: run `databricks/01_grants.sql`, replacing
    `<APP_SERVICE_PRINCIPAL>` with the app's service principal id (shown
    on the app page).
@@ -173,6 +177,8 @@ resource mapping).
       `sql-warehouse`, Can use)
 - [ ] Run `02_persistence_tables.sql`, then `01_grants.sql` (needs the
       app's service principal id)
+- [ ] Failed rows (optional): run `04_failed_rows_tables.sql` (tables +
+      grants), then set `DQS_FAILS_MAX_ROWS`
 - [ ] Configure Airtable secrets on the app (optional feature)
 - [ ] SharePoint publishing (optional): Entra app registration with
       `Sites.Selected`, write grant on the target site, secret resource

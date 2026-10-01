@@ -18,6 +18,11 @@ One interface, three interchangeable backends selected by
   :meth:`src.databricks_client.DatabricksClient.execute`.
 - ``off`` - a no-op store: nothing is persisted, reads return empty.
 
+Besides the three record kinds, each recorded run's *failed rows* go to
+one ``DQS_FAILS_<DOMAIN>_<DP>`` table per (domain, data product) - see
+:func:`save_failed_rows` and ``deploy/databricks/04_failed_rows_tables.sql``
+(locally: one ``dqs_fails_<domain>_<dp>.jsonl`` file each).
+
 The backend is deliberately decoupled from ``DATA_SOURCE``: a local run
 can read real Databricks data while still persisting app state to local
 files.
@@ -35,6 +40,7 @@ from __future__ import annotations
 import getpass
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -57,6 +63,22 @@ _DBX_COLUMNS = {
     "events": ["ts", "username", "event_type", "domain_code"],
     "projects": ["ts", "username", "project_name", "version", "change_summary"],
 }
+
+# Failed-row tables: run-level columns (bound once per INSERT) + the
+# row-level struct that travels as one JSON array per chunk.
+_FAILS_HEADER_COLUMNS = ["run_id", "ts", "username", "domain_code", "dp_code",
+                         "config_hash", "total_failed_rows"]
+_FAILS_ROW_SCHEMA = ("array<struct<planview_id:string,row_key:string,"
+                     "row_score:double,failed_rules:string,row_data:string>>")
+_FAILS_CHUNK_ROWS = 2000
+
+
+def fails_table_name(domain_code: str, dp_code: str) -> str:
+    """``DQS_FAILS_<DOMAIN>_<DP>`` - one failed-rows table per (domain,
+    data product). Codes are reduced to ``[A-Z0-9_]`` so the name is always
+    a safe identifier."""
+    slug = re.sub(r"[^A-Z0-9]+", "_", f"{domain_code}_{dp_code}".upper())
+    return f"DQS_FAILS_{slug.strip('_')}"
 
 
 def _utc_now_iso() -> str:
@@ -164,6 +186,12 @@ class LocalStore:
                     )
         return out
 
+    def append_failed_rows(self, table: str, header: Dict[str, Any],
+                           rows: List[Dict[str, Any]]) -> None:
+        with open(self._path(table.lower()), "a", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps({**header, **row}, default=str) + "\n")
+
 
 class DatabricksStore:
     """Append-only DQS_* tables (``deploy/databricks/02_persistence_tables.sql``).
@@ -175,8 +203,11 @@ class DatabricksStore:
     """
 
     def _qualified(self, kind: str) -> str:
+        return self._qualified_table(_DBX_TABLES[kind])
+
+    def _qualified_table(self, table: str) -> str:
         schema = SETTINGS.dbx_state_schema or SETTINGS.dbx_schema
-        return f"{SETTINGS.dbx_catalog}.{schema}.{_DBX_TABLES[kind]}"
+        return f"{SETTINGS.dbx_catalog}.{schema}.{table}"
 
     def _client(self):
         from src.databricks_client import get_shared_client
@@ -208,6 +239,38 @@ class DatabricksStore:
                 logger.warning("Skipping unparsable %s payload", kind)
         return out
 
+    def append_failed_rows(self, table: str, header: Dict[str, Any],
+                           rows: List[Dict[str, Any]]) -> None:
+        """One INSERT per chunk of rows: the run-level values are bound
+        once and the rows travel as a single JSON-array parameter that
+        the warehouse explodes (``from_json``) - no per-row statement."""
+        cols = _FAILS_HEADER_COLUMNS
+        col_sql = ", ".join(c.upper() for c in cols)
+        placeholders = ", ".join(["%s"] * len(cols))
+        # Table name comes from fails_table_name ([A-Z0-9_] only); every
+        # value is bound server-side.
+        sql = (
+            f"INSERT INTO {self._qualified_table(table)} "  # nosec B608
+            f"({col_sql}, PLANVIEW_ID, ROW_KEY, ROW_SCORE, FAILED_RULES, ROW_DATA) "
+            f"SELECT {placeholders}, r.planview_id, r.row_key, r.row_score, "
+            f"r.failed_rules, r.row_data "
+            f"FROM (SELECT explode(from_json(%s, '{_FAILS_ROW_SCHEMA}')) AS r)"
+        )
+        head = [header.get(c) for c in cols]
+        client = self._client()
+        for start in range(0, len(rows), _FAILS_CHUNK_ROWS):
+            chunk = [
+                {
+                    "planview_id": r.get("planview_id"),
+                    "row_key": r.get("row_key"),
+                    "row_score": r.get("row_score"),
+                    "failed_rules": json.dumps(r.get("failed_rules"), default=str),
+                    "row_data": json.dumps(r.get("row_data"), default=str),
+                }
+                for r in rows[start:start + _FAILS_CHUNK_ROWS]
+            ]
+            client.execute(sql, head + [json.dumps(chunk, default=str)])
+
 
 class NullStore:
     """``DQS_PERSISTENCE=off``: persist nothing, read nothing."""
@@ -217,6 +280,10 @@ class NullStore:
 
     def load(self, kind: str) -> List[Dict[str, Any]]:
         return []
+
+    def append_failed_rows(self, table: str, header: Dict[str, Any],
+                           rows: List[Dict[str, Any]]) -> None:
+        pass
 
 
 _STORE: Optional[object] = None
@@ -290,6 +357,34 @@ def save_run(dp_code: str, domain_code: str, payload: Dict[str, Any],
         "domain_code": domain_code, "dp_code": dp_code,
         "config_hash": config_hash, "payload": payload,
     })
+
+
+def save_failed_rows(domain_code: str, dp_code: str, run_id: str,
+                     rows: List[Dict[str, Any]], total_failed_rows: int,
+                     config_hash: str = "") -> bool:
+    """Persist the failed rows of run ``run_id`` in the (domain, DP)'s
+    ``DQS_FAILS_*`` table.
+
+    Each row is ``{planview_id, row_key, row_score, failed_rules, row_data}``
+    (see :func:`src.failed_rows.collect_failed_rows`). ``total_failed_rows``
+    is the run's full failing-row count, stored on every row so readers can
+    tell when ``rows`` was capped. ``run_id`` is the DQS_RUNS payload id.
+    """
+    if not rows:
+        return True
+    try:
+        header = _stamp({
+            "run_id": run_id, "domain_code": domain_code, "dp_code": dp_code,
+            "config_hash": config_hash,
+            "total_failed_rows": int(total_failed_rows),
+        })
+        get_store().append_failed_rows(
+            fails_table_name(domain_code, dp_code), header, rows)
+        return True
+    except Exception:
+        logger.warning("Failed-rows write failed (%s/%s)", domain_code, dp_code,
+                       exc_info=True)
+        return False
 
 
 def list_runs(dp_code: Optional[str] = None,

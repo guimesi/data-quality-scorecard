@@ -65,6 +65,11 @@ class Settings:
     # ("checked on day X, still stable"). 0 disables re-recording entirely
     # (identical runs are never re-recorded, the pre-window behaviour).
     reverify_hours: float = float(os.getenv("DQS_REVERIFY_HOURS", "24"))
+    # Failed rows (src/failed_rows.py): every recorded run also stores the
+    # rows failing at least one rule, in one DQS_FAILS_<DOMAIN>_<DP> table
+    # per (domain, data product). At most this many rows per run are kept,
+    # lowest row score first; 0 (the default) disables the feature.
+    fails_max_rows: int = int(os.getenv("DQS_FAILS_MAX_ROWS", "0"))
 
     # Report store (Step 6 Data Quality Report). Every run's artefacts
     # (interactive HTML, PDF, print-ready HTML, metadata) are kept so the

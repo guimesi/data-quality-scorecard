@@ -42,6 +42,12 @@ env:
   # record is this many hours old, so History shows verification cadence.
   - name: DQS_REVERIFY_HOURS
     value: "24"
+  # Failed rows per recorded run go to DQS_FAILS_<DOMAIN>_<DP> (create the
+  # tables once with deploy/databricks/04_failed_rows_tables.sql). Max rows
+  # kept per run, lowest row score first (e.g. "10000"); "0" = feature off.
+  # Keep it off until the tables exist.
+  - name: DQS_FAILS_MAX_ROWS
+    value: "0"
   # Report store: every run's Data Quality Report (interactive HTML, PDF,
   # print-ready HTML, metadata) is written to a folder of workspace files
   # and served by the app at /reports/<run_id> and at the fixed link
