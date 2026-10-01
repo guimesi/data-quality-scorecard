@@ -15,7 +15,9 @@ with **no Streamlit** involved:
    (the same workspace folder the app serves at ``/reports/<run_id>``
    and ``/reports/latest/<DOMAIN>``);
 5. push the scores to Airtable when ``AIRTABLE_*`` is configured -
-   :func:`src.airtable_push.push_results`.
+   :func:`src.airtable_push.push_results` (one summary row per system)
+   and :func:`src.airtable_results.push_latest_runs` (the recorded runs'
+   detailed results).
 
 Configuration is the same environment the app uses (``DATA_SOURCE``,
 ``DATABRICKS_*``, ``DQS_PERSISTENCE``, ``DQS_REPORT_STORE`` /
@@ -62,6 +64,10 @@ class JobOutcome:
     latest_path: str = ""
     airtable_record_ids: Optional[List[str]] = None
     airtable_error: Optional[str] = None
+    # Detailed results table (src/airtable_results.py)
+    airtable_results_count: Optional[int] = None
+    airtable_results_unresolved: Dict[str, List[str]] = field(default_factory=dict)
+    airtable_results_error: Optional[str] = None
     error: Optional[str] = None
 
     @property
@@ -116,7 +122,7 @@ def run_scheduled_report(
     the scores to Airtable (``push_airtable=None`` = when configured).
     """
     from config.domains import get_domain
-    from src import airtable_push, report_store
+    from src import airtable_push, airtable_results, report_store
     from src.one_click import OneClickError, run_one_click
     from src.persistence import log_event
     from src.run_history import record_run_if_new
@@ -203,6 +209,15 @@ def run_scheduled_report(
         except airtable_push.AirtablePushError as exc:
             outcome.airtable_error = str(exc)
             logger.warning("[scheduled report] Airtable push failed: %s", exc)
+        if record_history and airtable_results.is_configured():
+            try:
+                summary = airtable_results.push_latest_runs(result.scored_systems)
+                outcome.airtable_results_count = len(summary.record_ids)
+                outcome.airtable_results_unresolved = summary.unresolved
+            except airtable_push.AirtablePushError as exc:
+                outcome.airtable_results_error = str(exc)
+                logger.warning(
+                    "[scheduled report] Airtable detailed results failed: %s", exc)
 
     try:
         log_event("scheduled_run", {

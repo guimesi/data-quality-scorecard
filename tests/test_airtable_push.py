@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import src.airtable_push as ap
+import src.airtable_results as ar
 
 # ==================================================================== fakes
 
@@ -159,6 +160,7 @@ def test_button_push_success_logs_event(monkeypatch):
     import ui.step_06._exec_report as er
 
     monkeypatch.setattr(ap, "SETTINGS", _settings())
+    monkeypatch.setattr(ar, "is_configured", lambda: False)
     monkeypatch.setattr(ap, "push_results",
                         lambda *a, **k: ["recEPT", "recADR"])
     events = []
@@ -183,6 +185,7 @@ def test_button_push_failure_shows_error(monkeypatch):
         raise ap.AirtablePushError("Airtable returned 401")
 
     monkeypatch.setattr(ap, "push_results", boom)
+    monkeypatch.setattr(ar, "is_configured", lambda: False)
     fake_st = MagicMock()
     fake_st.button.return_value = True
     monkeypatch.setattr(er, "st", fake_st)

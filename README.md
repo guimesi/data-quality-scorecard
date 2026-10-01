@@ -298,6 +298,10 @@ what the publishers consume:
   newest report.
 - **Send to Airtable** pushes scores only (one record per Data Product:
   score, status, timestamp, user) - no report file travels to Airtable.
+  It also upserts the latest persisted run's detailed results (one record
+  per overall / rule / CDE / dimension score, keyed by `Result ID`) into
+  `AIRTABLE_RESULTS_TABLE` - see `src/airtable_results.py`;
+  `python scripts/push_runs_to_airtable.py --all` backfills older runs.
 
 `python scripts/build_sample_report.py` generates both editions from
 mock data (`output/dq_report/`).

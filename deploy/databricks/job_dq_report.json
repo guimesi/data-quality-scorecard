@@ -51,7 +51,10 @@
           "want_pdf": "true",
           "airtable_base_id": "",
           "airtable_secret_scope": "dq-scorecard",
-          "airtable_secret_key": "airtable-token"
+          "airtable_secret_key": "airtable-token",
+          "airtable_dp_table": "",
+          "airtable_dqr_table": "",
+          "airtable_cde_table": ""
         }
       }
     }

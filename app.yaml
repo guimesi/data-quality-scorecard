@@ -68,6 +68,19 @@ env:
     valueFrom: "airtable-token"
   - name: AIRTABLE_BASE_ID
     value: "appgjMHJvvPRfGaM2"
+  # Detailed results table (one record per overall / rule / CDE / dimension
+  # result of each run, upserted on "Result ID") and the tables its link
+  # columns point at. Fill in the three *_TABLE names (and the match fields
+  # if they differ from the defaults, see .env.example); a link whose table
+  # is empty is left blank.
+  - name: AIRTABLE_RESULTS_TABLE
+    value: "DQ Results Integration Proposal"
+  - name: AIRTABLE_DP_TABLE
+    value: ""
+  - name: AIRTABLE_DQR_TABLE
+    value: ""
+  - name: AIRTABLE_CDE_TABLE
+    value: ""
   # SharePoint publishing (Step 6 "Publish to SharePoint"): Entra ID app
   # registration with Sites.Selected on the target site. The client secret
   # comes from the app secret resource with key "sharepoint-client-secret";

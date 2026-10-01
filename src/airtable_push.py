@@ -24,7 +24,7 @@ transport failures still surface here as :class:`AirtablePushError`.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import requests
@@ -52,7 +52,7 @@ def _headers() -> Dict[str, str]:
     }
 
 
-def _request(method: str, url: str, payload: dict, step: str) -> dict:
+def _request(method: str, url: str, payload: Optional[dict], step: str) -> dict:
     """``step`` names the call in errors - essential to tell an Airtable
     rejection from a corporate proxy blocking the host."""
     try:

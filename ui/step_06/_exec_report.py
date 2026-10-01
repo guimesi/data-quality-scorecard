@@ -328,8 +328,9 @@ def _render_airtable_push(domain_code: str,
         key="btn_airtable_push",
         width="stretch",
         help="Upserts one record per Data Product in the Airtable results "
-             "table (overall score, status, run timestamp, run by). No "
-             "report file is sent.",
+             "table (overall score, status, run timestamp, run by), plus "
+             "the latest run's detailed results (overall / rule / CDE / "
+             "dimension scores). No report file is sent.",
     ):
         try:
             record_ids = push_results(domain_code, scorecards)
@@ -342,3 +343,30 @@ def _render_airtable_push(domain_code: str,
                 f"Results sent to Airtable - {len(record_ids)} Data Product "
                 "record(s) updated."
             )
+        _push_airtable_results(domain_code, list(scorecards))
+
+
+def _push_airtable_results(domain_code: str, dp_codes: list) -> None:
+    """Detailed results (one record per overall / rule / CDE / dimension
+    score) from each DP's latest persisted run - see src.airtable_results."""
+    from src import airtable_results
+    from src.airtable_push import AirtablePushError
+
+    if not airtable_results.is_configured():
+        return
+    try:
+        summary = airtable_results.push_latest_runs(dp_codes)
+    except AirtablePushError as exc:
+        st.error(f"Airtable detailed results failed: {exc}")
+        return
+    log_event("export", {"format": "airtable_results",
+                         "run_ids": summary.run_ids,
+                         "records": len(summary.record_ids)}, domain_code)
+    st.success(
+        f"Detailed results sent to Airtable - {len(summary.record_ids)} "
+        f"record(s) in `{SETTINGS.airtable_results_table}`."
+    )
+    if summary.unresolved:
+        missing = "; ".join(f"{column}: {', '.join(values)}"
+                            for column, values in summary.unresolved.items())
+        st.warning(f"Links left blank (no single match in Airtable) - {missing}")

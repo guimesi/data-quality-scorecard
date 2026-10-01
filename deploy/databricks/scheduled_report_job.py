@@ -27,6 +27,7 @@
 # MAGIC | `want_pdf` | `true` | render the PDF (needs Chromium, see `init_chromium.sh`) |
 # MAGIC | `airtable_base_id` | `appXXXX` | Airtable base; empty = no push |
 # MAGIC | `airtable_secret_scope` / `airtable_secret_key` | `dq-scorecard` / `airtable-token` | where the Airtable token lives |
+# MAGIC | `airtable_dp_table` / `airtable_dqr_table` / `airtable_cde_table` | `Datasets` / `DQRs` / `CDEs` | Airtable tables the detailed results link to; empty = link left blank |
 
 # COMMAND ----------
 
@@ -58,6 +59,9 @@ dbutils.widgets.dropdown("want_pdf", "true", ["true", "false"])  # noqa: F821
 dbutils.widgets.text("airtable_base_id", "")  # noqa: F821
 dbutils.widgets.text("airtable_secret_scope", "dq-scorecard")  # noqa: F821
 dbutils.widgets.text("airtable_secret_key", "airtable-token")  # noqa: F821
+dbutils.widgets.text("airtable_dp_table", "")  # noqa: F821
+dbutils.widgets.text("airtable_dqr_table", "")  # noqa: F821
+dbutils.widgets.text("airtable_cde_table", "")  # noqa: F821
 
 
 def _w(name: str) -> str:
@@ -76,6 +80,9 @@ else:
     os.environ["DQS_REPORT_STORE"] = "off"
 if _w("airtable_base_id"):
     os.environ["AIRTABLE_BASE_ID"] = _w("airtable_base_id")
+    for _link in ("dp", "dqr", "cde"):
+        if _w(f"airtable_{_link}_table"):
+            os.environ[f"AIRTABLE_{_link.upper()}_TABLE"] = _w(f"airtable_{_link}_table")
     try:
         os.environ["AIRTABLE_TOKEN"] = dbutils.secrets.get(  # noqa: F821
             _w("airtable_secret_scope"), _w("airtable_secret_key"))

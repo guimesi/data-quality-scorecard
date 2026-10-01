@@ -103,6 +103,29 @@ class Settings:
     # each other. Only scores travel to Airtable - no report attachment.
     airtable_key_field: str = os.getenv("AIRTABLE_KEY_FIELD", "Name")
     airtable_system_field: str = os.getenv("AIRTABLE_SYSTEM_FIELD", "System")
+    # Detailed results (src/airtable_results.py): every persisted run
+    # (DQS_RUNS payload) is exploded into one record per OVERALL / DQR /
+    # CDE / DIMENSION result in this table, upserted on "Result ID".
+    airtable_results_table: str = os.getenv(
+        "AIRTABLE_RESULTS_TABLE", "DQ Results Integration Proposal")
+    # The "Data Product" / "DQR" / "CDE" columns are links to other tables.
+    # Each link is resolved by reading the linked table and matching the
+    # app's value (DP code, rule id, CDE column) against ``*_MATCH_FIELD``
+    # (case / punctuation insensitive). Empty table = that link is left
+    # blank; an unmatched value is also left blank (never auto-created).
+    airtable_dp_table: str = os.getenv("AIRTABLE_DP_TABLE", "")
+    airtable_dp_match_field: str = os.getenv("AIRTABLE_DP_MATCH_FIELD", "Name")
+    airtable_dqr_table: str = os.getenv("AIRTABLE_DQR_TABLE", "")
+    airtable_dqr_match_field: str = os.getenv("AIRTABLE_DQR_MATCH_FIELD", "Name")
+    airtable_cde_table: str = os.getenv("AIRTABLE_CDE_TABLE", "")
+    airtable_cde_match_field: str = os.getenv(
+        "AIRTABLE_CDE_MATCH_FIELD", "Field Name")
+    # App DP code -> Data Product name in Airtable when they differ
+    # ("CODE=Name" pairs, comma-separated).
+    airtable_dp_aliases: str = os.getenv("AIRTABLE_DP_ALIASES", "SQS=Inspection")
+    # JSON object renaming (or dropping, with "") result columns, e.g.
+    # {"Green Rows": "Green rows", "Username": ""}. Values may be field ids.
+    airtable_results_field_map: str = os.getenv("AIRTABLE_RESULTS_FIELD_MAP", "")
 
     # SharePoint publishing (Step 6 "Publish to SharePoint"): Microsoft
     # Graph with an Entra ID app registration (client credentials,

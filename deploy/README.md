@@ -46,7 +46,10 @@ resource mapping).
    on the app page).
 5. **(Optional) Airtable write-back**: add `AIRTABLE_TOKEN` (as an app
    secret) and `AIRTABLE_BASE_ID` to the app's environment. Leave unset
-   to hide the feature.
+   to hide the feature. The detailed results table
+   (`AIRTABLE_RESULTS_TABLE`) links to the Data Product / DQR / CDE
+   tables: set `AIRTABLE_DP_TABLE`, `AIRTABLE_DQR_TABLE`,
+   `AIRTABLE_CDE_TABLE` (and the `*_MATCH_FIELD`s, see `.env.example`).
 5b. **Report store (hosted Data Quality Reports)** - no admin needed:
    1. In the workspace browser create a folder, e.g.
       `Workspace → Users → <you> → dq_reports`.
