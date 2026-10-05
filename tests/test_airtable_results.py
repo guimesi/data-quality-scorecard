@@ -265,6 +265,24 @@ def test_match_field_decides_and_other_fields_are_only_a_fallback(airtable, monk
     assert summary.unresolved == {"CDE": ["COST_BASE_MATERIAL_COST"]}
 
 
+def test_match_field_may_list_several_column_names(airtable, monkeypatch):
+    settings = _settings(airtable_cde_match_field="Column Name")
+    monkeypatch.setattr(ar, "SETTINGS", settings)
+    monkeypatch.setitem(_TABLES, "CDEs", [
+        {"id": "recDesign", "fields": {
+            "Name": "CDE-ADR-Design Parameter",
+            "Column Name": "DESIGN_PARAMETER_VALUE, DESIGN_KEY_PARAMETER_NAMES"}},
+        {"id": "recMfc", "fields": {"Name": "CDE-ADR-Material Factor Code",
+                                    "Column Name": "code\nCOST_BASE_MATERIAL_MFC"}},
+    ])
+    summary = ar.push_runs([_adr_run(DESIGN_KEY_PARAMETER_NAMES=1.0,
+                                     COST_BASE_MATERIAL_MFC=2.0)], dry_run=True)
+    rows = {r["Result ID"].split("|", 1)[1]: r for r in summary.rows}
+    assert rows["CDE|DESIGN_KEY_PARAMETER_NAMES"]["CDE"] == ["recDesign"]
+    assert rows["CDE|COST_BASE_MATERIAL_MFC"]["CDE"] == ["recMfc"]
+    assert summary.unresolved == {}
+
+
 def test_single_match_is_enough_when_the_table_has_no_data_product_info(
         airtable, monkeypatch):
     monkeypatch.setitem(_TABLES, "CDEs", [

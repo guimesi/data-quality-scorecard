@@ -255,9 +255,11 @@ def _read_link_table(table: str, match_field: str) -> List[tuple]:
     fallback keys)``.
 
     Without ``match_field`` the match keys are the normalized values of
-    every text field. With it they are that field's values only, and a
-    record leaving the field empty gets its other text fields as *fallback
-    keys* (tried only when no record matches on the field itself).
+    every text field. With it they are that field's values only - several
+    may be listed in one cell, separated by commas, semicolons, "|" or
+    line breaks - and a record leaving the field empty gets its other text
+    fields as *fallback keys* (tried only when no record matches on the
+    field itself).
     ``blob`` is all the record's text normalized, used to scope matches
     to a Data Product."""
     index: List[tuple] = []
@@ -277,7 +279,9 @@ def _read_link_table(table: str, match_field: str) -> List[tuple]:
                 continue
             keys, fallback = every, frozenset()
             if match_field:
-                keys = frozenset(_norm(t) for t in _texts(fields.get(match_field)))
+                keys = frozenset(
+                    _norm(part) for t in _texts(fields.get(match_field))
+                    for part in re.split(r"[,;|\n]", t) if part.strip())
                 fallback = frozenset() if keys else every
             blob = _norm(" ".join(
                 t for cell in fields.values() for t in _texts(cell)))
