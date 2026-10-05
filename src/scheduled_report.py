@@ -7,7 +7,9 @@ with **no Streamlit** involved:
    by default) - :func:`src.one_click.run_one_click`;
 2. record each scored system in the run history (deduplicated) -
    :func:`src.run_history.record_run_if_new`, so History / drift keep
-   working for the dashboard and for the next report;
+   working for the dashboard and for the next report - and save each
+   system's failed rows (:func:`src.failed_rows.save_failed_rows_for_run`,
+   replacing the previous run's);
 3. build both report editions - :func:`ui.step_06.report.build_report`
    (the PDF needs a headless Chromium on the machine; without one the
    print-ready HTML is still produced and stored);
@@ -55,6 +57,8 @@ class JobOutcome:
     overall_scores: Dict[str, float] = field(default_factory=dict)
     statuses: Dict[str, str] = field(default_factory=dict)
     history_recorded: Dict[str, bool] = field(default_factory=dict)
+    # system -> rows written to its DQS_FAILS table (failures -> warnings)
+    failed_rows_saved: Dict[str, int] = field(default_factory=dict)
     has_pdf: bool = False
     pdf_error: Optional[str] = None
     stored: bool = False
@@ -116,16 +120,21 @@ def run_scheduled_report(
     push_airtable: Optional[bool] = None,
     generated_by: Optional[str] = None,
     record_history: bool = True,
+    save_failed_rows: Optional[bool] = None,
 ) -> JobOutcome:
     """Score ``systems`` of ``domain_code`` (every system of the domain
-    when ``None``), record history, build + store the report and push
-    the scores to Airtable (``push_airtable=None`` = when configured).
+    when ``None``), record history, save the failed rows
+    (``save_failed_rows=None`` = when persistence is on), build + store
+    the report and push the scores to Airtable (``push_airtable=None`` =
+    when configured).
     """
     from config.domains import get_domain
+    from config.settings import SETTINGS
     from src import airtable_push, airtable_results, report_store
+    from src.failed_rows import save_failed_rows_for_run
     from src.one_click import OneClickError, run_one_click
     from src.persistence import log_event
-    from src.run_history import record_run_if_new
+    from src.run_history import config_fingerprint, record_run_if_new
     from ui.step_06.report import ReportContext, build_report
 
     domain = get_domain(domain_code)
@@ -164,6 +173,19 @@ def run_scheduled_report(
                 outcome.history_recorded[code] = False
                 outcome.warnings.append(f"history not recorded for {code}: {exc}")
                 logger.warning("[scheduled report] history failed for %s",
+                               code, exc_info=True)
+    if save_failed_rows is None:
+        save_failed_rows = SETTINGS.persistence_backend != "off"
+    if save_failed_rows:
+        for code, product in result.products.items():
+            try:
+                written, _ = save_failed_rows_for_run(
+                    domain_code, code, product.data_product, product.scorecard,
+                    product.config, config_hash=config_fingerprint(product.config))
+                outcome.failed_rows_saved[code] = written
+            except Exception as exc:  # the report must still be produced
+                outcome.warnings.append(f"failed rows not saved for {code}: {exc}")
+                logger.warning("[scheduled report] failed rows failed for %s",
                                code, exc_info=True)
 
     # 3) report -------------------------------------------------------------

@@ -42,10 +42,11 @@ env:
   # record is this many hours old, so History shows verification cadence.
   - name: DQS_REVERIFY_HOURS
     value: "24"
-  # Failed rows per recorded run go to DQS_FAILS_<DOMAIN>_<DP> (create the
-  # tables once with deploy/databricks/04_failed_rows_tables.sql). Max rows
-  # kept per run, lowest row score first (e.g. "10000"); "0" = feature off.
-  # Keep it off until the tables exist.
+  # Failed rows: the Step 6 "Save failed rows" button (and the scheduled
+  # job) replace DQS_FAILS_<DOMAIN>_<DP> with the failing rows of the run
+  # (create the tables once with deploy/databricks/04_failed_rows_tables.sql;
+  # 05_rule_scores_table.sql holds the per-rule score history). Max rows
+  # kept, lowest row score first; "0" = every failing row.
   - name: DQS_FAILS_MAX_ROWS
     value: "0"
   # Report store: every run's Data Quality Report (interactive HTML, PDF,

@@ -65,11 +65,15 @@ class Settings:
     # ("checked on day X, still stable"). 0 disables re-recording entirely
     # (identical runs are never re-recorded, the pre-window behaviour).
     reverify_hours: float = float(os.getenv("DQS_REVERIFY_HOURS", "24"))
-    # Failed rows (src/failed_rows.py): every recorded run also stores the
-    # rows failing at least one rule, in one DQS_FAILS_<DOMAIN>_<DP> table
-    # per (domain, data product). At most this many rows per run are kept,
-    # lowest row score first; 0 (the default) disables the feature.
+    # Failed rows (src/failed_rows.py): the rows failing at least one rule,
+    # saved on demand (Step 6 button) or by the scheduled job into one
+    # DQS_FAILS_<DOMAIN>_<DP> table per (domain, data product), replacing
+    # the previous run. At most this many rows are kept, lowest row score
+    # first; 0 (the default) keeps every failing row. The CSV download in
+    # Step 6 honours the same cap.
     fails_max_rows: int = int(os.getenv("DQS_FAILS_MAX_ROWS", "0"))
+    # Rows per INSERT statement when writing row tables to Databricks.
+    fails_chunk_rows: int = int(os.getenv("DQS_FAILS_CHUNK_ROWS", "5000"))
 
     # Report store (Step 6 Data Quality Report). Every run's artefacts
     # (interactive HTML, PDF, print-ready HTML, metadata) are kept so the

@@ -18,10 +18,15 @@ One interface, three interchangeable backends selected by
   :meth:`src.databricks_client.DatabricksClient.execute`.
 - ``off`` - a no-op store: nothing is persisted, reads return empty.
 
-Besides the three record kinds, each recorded run's *failed rows* go to
-one ``DQS_FAILS_<DOMAIN>_<DP>`` table per (domain, data product) - see
-:func:`save_failed_rows` and ``deploy/databricks/04_failed_rows_tables.sql``
-(locally: one ``dqs_fails_<domain>_<dp>.jsonl`` file each).
+Besides the three record kinds there are two *row tables*, written as a
+batch of rows under a shared run header (locally: one ``<table>.jsonl``
+file each):
+
+- ``DQS_RULE_SCORES`` - one row per recorded run and rule, the per-rule
+  score history (:func:`save_rule_scores`, appended);
+- ``DQS_FAILS_<DOMAIN>_<DP>`` - the failed rows of the *latest* saved run
+  of each (domain, data product) (:func:`save_failed_rows`, replaced on
+  every save) - DDL in ``deploy/databricks/04_failed_rows_tables.sql``.
 
 The backend is deliberately decoupled from ``DATA_SOURCE``: a local run
 can read real Databricks data while still persisting app state to local
@@ -64,13 +69,20 @@ _DBX_COLUMNS = {
     "projects": ["ts", "username", "project_name", "version", "change_summary"],
 }
 
-# Failed-row tables: run-level columns (bound once per INSERT) + the
-# row-level struct that travels as one JSON array per chunk.
-_FAILS_HEADER_COLUMNS = ["run_id", "ts", "username", "domain_code", "dp_code",
-                         "config_hash", "total_failed_rows"]
-_FAILS_ROW_SCHEMA = ("array<struct<planview_id:string,row_key:string,"
-                     "row_score:double,failed_rules:string,row_data:string>>")
-_FAILS_CHUNK_ROWS = 2000
+# Row tables: run-level header columns (bound once per INSERT) + the
+# row-level struct that travels as one JSON array per chunk, exploded by
+# the warehouse. Values of the struct's STRING columns that are not plain
+# strings (lists, dicts) are JSON-encoded on the way in.
+_RUN_HEADER_COLUMNS = ["run_id", "ts", "username", "domain_code", "dp_code",
+                       "config_hash"]
+_FAILS_HEADER_COLUMNS = _RUN_HEADER_COLUMNS + ["total_failed_rows"]
+_FAILS_ROW_STRUCT = {"planview_id": "string", "row_key": "string",
+                     "row_score": "double", "failed_rules": "string",
+                     "row_data": "string"}
+_RULE_SCORES_TABLE = "DQS_RULE_SCORES"
+_RULE_SCORES_ROW_STRUCT = {"rule_id": "string", "rule_type": "string",
+                           "rule_name": "string", "cde": "string",
+                           "dimension": "string", "score": "double"}
 
 
 def fails_table_name(domain_code: str, dp_code: str) -> str:
@@ -186,9 +198,11 @@ class LocalStore:
                     )
         return out
 
-    def append_failed_rows(self, table: str, header: Dict[str, Any],
-                           rows: List[Dict[str, Any]]) -> None:
-        with open(self._path(table.lower()), "a", encoding="utf-8") as f:
+    def write_rows(self, table: str, header: Dict[str, Any],
+                   rows: List[Dict[str, Any]], struct: Dict[str, str],
+                   replace: bool = False) -> None:
+        mode = "w" if replace else "a"
+        with open(self._path(table.lower()), mode, encoding="utf-8") as f:
             for row in rows:
                 f.write(json.dumps({**header, **row}, default=str) + "\n")
 
@@ -239,35 +253,39 @@ class DatabricksStore:
                 logger.warning("Skipping unparsable %s payload", kind)
         return out
 
-    def append_failed_rows(self, table: str, header: Dict[str, Any],
-                           rows: List[Dict[str, Any]]) -> None:
-        """One INSERT per chunk of rows: the run-level values are bound
-        once and the rows travel as a single JSON-array parameter that
-        the warehouse explodes (``from_json``) - no per-row statement."""
-        cols = _FAILS_HEADER_COLUMNS
+    def write_rows(self, table: str, header: Dict[str, Any],
+                   rows: List[Dict[str, Any]], struct: Dict[str, str],
+                   replace: bool = False) -> None:
+        """Write ``rows`` under ``header`` - one INSERT per chunk: the
+        run-level values are bound once and the chunk travels as a single
+        JSON-array parameter the warehouse explodes (``from_json``), so a
+        batch never costs one statement per row. ``replace`` empties the
+        table first (the failed-rows tables hold one run only)."""
+        cols = list(header)
         col_sql = ", ".join(c.upper() for c in cols)
         placeholders = ", ".join(["%s"] * len(cols))
-        # Table name comes from fails_table_name ([A-Z0-9_] only); every
-        # value is bound server-side.
+        struct_sql = ",".join(f"{k}:{v}" for k, v in struct.items())
+        row_sql = ", ".join(f"r.{k}" for k in struct)
+        # Table names come from fails_table_name / module constants
+        # ([A-Z0-9_] only); every value is bound server-side.
+        qualified = self._qualified_table(table)
         sql = (
-            f"INSERT INTO {self._qualified_table(table)} "  # nosec B608
-            f"({col_sql}, PLANVIEW_ID, ROW_KEY, ROW_SCORE, FAILED_RULES, ROW_DATA) "
-            f"SELECT {placeholders}, r.planview_id, r.row_key, r.row_score, "
-            f"r.failed_rules, r.row_data "
-            f"FROM (SELECT explode(from_json(%s, '{_FAILS_ROW_SCHEMA}')) AS r)"
+            f"INSERT INTO {qualified} "  # nosec B608
+            f"({col_sql}, {', '.join(k.upper() for k in struct)}) "
+            f"SELECT {placeholders}, {row_sql} "
+            f"FROM (SELECT explode(from_json(%s, 'array<struct<{struct_sql}>>')) AS r)"
         )
-        head = [header.get(c) for c in cols]
+        head = [header[c] for c in cols]
         client = self._client()
-        for start in range(0, len(rows), _FAILS_CHUNK_ROWS):
+        if replace:
+            client.execute(f"DELETE FROM {qualified}")  # nosec B608
+        chunk_rows = max(int(SETTINGS.fails_chunk_rows), 1)
+        for start in range(0, len(rows), chunk_rows):
             chunk = [
-                {
-                    "planview_id": r.get("planview_id"),
-                    "row_key": r.get("row_key"),
-                    "row_score": r.get("row_score"),
-                    "failed_rules": json.dumps(r.get("failed_rules"), default=str),
-                    "row_data": json.dumps(r.get("row_data"), default=str),
-                }
-                for r in rows[start:start + _FAILS_CHUNK_ROWS]
+                {k: (v if v is None or isinstance(v, (str, int, float))
+                     else json.dumps(v, default=str))
+                 for k, v in ((k, r.get(k)) for k in struct)}
+                for r in rows[start:start + chunk_rows]
             ]
             client.execute(sql, head + [json.dumps(chunk, default=str)])
 
@@ -281,8 +299,9 @@ class NullStore:
     def load(self, kind: str) -> List[Dict[str, Any]]:
         return []
 
-    def append_failed_rows(self, table: str, header: Dict[str, Any],
-                           rows: List[Dict[str, Any]]) -> None:
+    def write_rows(self, table: str, header: Dict[str, Any],
+                   rows: List[Dict[str, Any]], struct: Dict[str, str],
+                   replace: bool = False) -> None:
         pass
 
 
@@ -362,27 +381,48 @@ def save_run(dp_code: str, domain_code: str, payload: Dict[str, Any],
 def save_failed_rows(domain_code: str, dp_code: str, run_id: str,
                      rows: List[Dict[str, Any]], total_failed_rows: int,
                      config_hash: str = "") -> bool:
-    """Persist the failed rows of run ``run_id`` in the (domain, DP)'s
-    ``DQS_FAILS_*`` table.
+    """Store the failed rows of run ``run_id`` as *the* content of the
+    (domain, DP)'s ``DQS_FAILS_*`` table - whatever was there (an older
+    run) is replaced.
 
     Each row is ``{planview_id, row_key, row_score, failed_rules, row_data}``
-    (see :func:`src.failed_rows.collect_failed_rows`). ``total_failed_rows``
+    (see :func:`src.failed_rows.failed_rows_frame`). ``total_failed_rows``
     is the run's full failing-row count, stored on every row so readers can
     tell when ``rows`` was capped. ``run_id`` is the DQS_RUNS payload id.
     """
-    if not rows:
-        return True
     try:
         header = _stamp({
             "run_id": run_id, "domain_code": domain_code, "dp_code": dp_code,
             "config_hash": config_hash,
             "total_failed_rows": int(total_failed_rows),
         })
-        get_store().append_failed_rows(
-            fails_table_name(domain_code, dp_code), header, rows)
+        get_store().write_rows(
+            fails_table_name(domain_code, dp_code), header, rows,
+            _FAILS_ROW_STRUCT, replace=True)
         return True
     except Exception:
         logger.warning("Failed-rows write failed (%s/%s)", domain_code, dp_code,
+                       exc_info=True)
+        return False
+
+
+def save_rule_scores(domain_code: str, dp_code: str, run_id: str,
+                     rows: List[Dict[str, Any]], config_hash: str = "") -> bool:
+    """Append one row per rule of run ``run_id`` to ``DQS_RULE_SCORES`` -
+    the per-rule score history. Each row is ``{rule_id, rule_type,
+    rule_name, cde, dimension, score}`` (see :mod:`src.rule_scores`)."""
+    if not rows:
+        return True
+    try:
+        header = _stamp({
+            "run_id": run_id, "domain_code": domain_code, "dp_code": dp_code,
+            "config_hash": config_hash,
+        })
+        get_store().write_rows(_RULE_SCORES_TABLE, header, rows,
+                               _RULE_SCORES_ROW_STRUCT)
+        return True
+    except Exception:
+        logger.warning("Rule-scores write failed (%s/%s)", domain_code, dp_code,
                        exc_info=True)
         return False
 

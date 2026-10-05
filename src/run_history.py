@@ -130,8 +130,9 @@ def record_run_if_new(dp_code: str, dp, result, config,
     record with an unparsable ``ts`` counts as *recent* - flooding the
     store is worse than missing one cadence point.
 
-    A recorded run also stores its failed rows (see
-    :mod:`src.failed_rows`), keyed by the snapshot ``id``.
+    A recorded run also appends its per-rule scores to the
+    ``DQS_RULE_SCORES`` history (see :mod:`src.rule_scores`), keyed by the
+    snapshot ``id``.
 
     Storage failures degrade to False (persistence is fire-and-forget).
     """
@@ -164,12 +165,11 @@ def record_run_if_new(dp_code: str, dp, result, config,
     if not save_run(dp_code, domain_code, snapshot, config_hash=cfg_hash):
         return False
     try:
-        # Imported lazily: failed_rows pulls the rule engines.
-        from src.failed_rows import record_failed_rows
-        record_failed_rows(snapshot["id"], dp_code, domain_code, dp, result,
-                           config, config_hash=cfg_hash)
-    except Exception:  # the run is recorded; its failed rows are best effort
-        logger.warning("Failed rows not recorded for %s", dp_code, exc_info=True)
+        from src.rule_scores import record_rule_scores
+        record_rule_scores(snapshot["id"], dp_code, domain_code, result,
+                           config_hash=cfg_hash)
+    except Exception:  # the run is recorded; its rule history is best effort
+        logger.warning("Rule scores not recorded for %s", dp_code, exc_info=True)
     return True
 
 

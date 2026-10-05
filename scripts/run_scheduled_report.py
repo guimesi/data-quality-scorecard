@@ -57,6 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
                           help="never push to Airtable")
     parser.add_argument("--no-history", action="store_true",
                         help="do not record the run in the run history")
+    parser.add_argument("--no-failed-rows", action="store_true",
+                        help="do not write the failed rows to the "
+                             "DQS_FAILS tables")
     parser.add_argument("--generated-by", default=None,
                         help="identity written on the report (default: the "
                              "Databricks user / OS login)")
@@ -88,6 +91,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         push_airtable=args.airtable,
         generated_by=args.generated_by,
         record_history=not args.no_history,
+        save_failed_rows=False if args.no_failed_rows else None,
     )
     print(outcome.to_json())
     return 0 if outcome.ok else 1

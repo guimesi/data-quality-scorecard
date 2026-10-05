@@ -303,11 +303,16 @@ what the publishers consume:
   `AIRTABLE_RESULTS_TABLE` - see `src/airtable_results.py`;
   `python scripts/push_runs_to_airtable.py --send --all` backfills older
   runs (without `--send` it only checks and prints).
-- **Failed rows**: every recorded run also stores the rows failing at
-  least one rule in `DQS_FAILS_<DOMAIN>_<DP>` (one table per domain / data
-  product, `deploy/databricks/04_failed_rows_tables.sql`) when
-  `DQS_FAILS_MAX_ROWS` > 0 (rows kept per run; off by default) - see
-  `src/failed_rows.py`.
+- **Failed rows**: "CSV (failed rows)" downloads the rows failing at
+  least one rule (worst first, with the failed rule ids, the CDE columns
+  and the reference columns the rules used); "Save failed rows" replaces
+  the Data Product's `DQS_FAILS_<DOMAIN>_<DP>` table with them (one table
+  per domain / data product, `deploy/databricks/04_failed_rows_tables.sql`;
+  the scheduled job does the same automatically). `DQS_FAILS_MAX_ROWS`
+  caps both (0 = all) - see `src/failed_rows.py`.
+- **Rule score history**: every recorded run appends one row per rule to
+  `DQS_RULE_SCORES` (`deploy/databricks/05_rule_scores_table.sql`) - see
+  `src/rule_scores.py`.
 
 `python scripts/build_sample_report.py` generates both editions from
 mock data (`output/dq_report/`).

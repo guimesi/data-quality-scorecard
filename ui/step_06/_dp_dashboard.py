@@ -27,6 +27,7 @@ from ui.step_06._export import (
     _per_rule_score_columns,
     _reference_columns_for_export,
 )
+from ui.step_06._failed_rows import _render_failed_rows_actions
 from ui.step_06._history import _render_drop_alert, _render_history_tab
 from ui.step_06._rule_rows import standard_rule_rows
 from ui.step_06._shared import (
@@ -77,6 +78,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                 ):
                     log_event("export", {"format": "json", "dp": code},
                               domain_code)
+            _render_failed_rows_actions(code, dp, result, cfg)
 
         _render_drop_alert(code)
 

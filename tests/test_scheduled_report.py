@@ -44,6 +44,10 @@ def test_end_to_end_mock_run_scores_stores_and_records_history(stores):
     assert all(0 <= s <= 100 for s in outcome.overall_scores.values())
     assert set(outcome.statuses.values()) <= {"green", "yellow", "red"}
     assert outcome.history_recorded == {"ACCE": True, "ADR": True}
+    # Failed rows replace each system's DQS_FAILS table (local: one file).
+    assert set(outcome.failed_rows_saved) == {"ACCE", "ADR"}
+    assert all(n >= 0 for n in outcome.failed_rows_saved.values())
+    assert (stores / "dqs_fails_cost_estimate_adr.jsonl").exists()
     assert outcome.has_pdf is False and "not requested" in outcome.pdf_error
     assert outcome.stored is True and outcome.store_error is None
     assert outcome.store_target.startswith("local folder")
@@ -183,6 +187,13 @@ def test_cli_prints_summary_and_exit_code(stores, capsys):
     assert summary["scored_systems"] == ["ACCE"]
     assert summary["generated_by"] == "cli"
     assert summary["latest_path"] == "/reports/latest/COST_ESTIMATE"
+    assert "ACCE" in summary["failed_rows_saved"]
+
+    code = main(["--domain", "cost_estimate", "--systems", "ACCE", "--no-pdf",
+                 "--no-airtable", "--no-failed-rows", "--quiet"])
+    out = capsys.readouterr().out
+    summary = json.loads(out[out.index("{"):])
+    assert code == 0 and summary["failed_rows_saved"] == {}
 
     code = main(["--domain", "cost_estimate", "--systems", "NOPE", "--no-pdf",
                  "--quiet", "--generated-by", "cli"])
