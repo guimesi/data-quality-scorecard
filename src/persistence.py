@@ -48,7 +48,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from config.settings import SETTINGS
 
@@ -200,7 +200,8 @@ class LocalStore:
 
     def write_rows(self, table: str, header: Dict[str, Any],
                    rows: List[Dict[str, Any]], struct: Dict[str, str],
-                   replace: bool = False) -> None:
+                   replace: bool = False,
+                   progress: Optional[Callable[[int, int], None]] = None) -> None:
         mode = "w" if replace else "a"
         with open(self._path(table.lower()), mode, encoding="utf-8") as f:
             for row in rows:
@@ -255,12 +256,16 @@ class DatabricksStore:
 
     def write_rows(self, table: str, header: Dict[str, Any],
                    rows: List[Dict[str, Any]], struct: Dict[str, str],
-                   replace: bool = False) -> None:
+                   replace: bool = False,
+                   progress: Optional[Callable[[int, int], None]] = None) -> None:
         """Write ``rows`` under ``header`` - one INSERT per chunk: the
         run-level values are bound once and the chunk travels as a single
         JSON-array parameter the warehouse explodes (``from_json``), so a
-        batch never costs one statement per row. ``replace`` empties the
-        table first (the failed-rows tables hold one run only)."""
+        batch never costs one statement per row. Databricks caps the
+        parameters of one statement at 1 MiB, so chunks are cut by size
+        (``SETTINGS.fails_chunk_chars``), not by row count. ``replace``
+        empties the table first (the failed-rows tables hold one run
+        only); ``progress(done, total)`` is called after every chunk."""
         cols = list(header)
         col_sql = ", ".join(c.upper() for c in cols)
         placeholders = ", ".join(["%s"] * len(cols))
@@ -279,15 +284,27 @@ class DatabricksStore:
         client = self._client()
         if replace:
             client.execute(f"DELETE FROM {qualified}")  # nosec B608
-        chunk_rows = max(int(SETTINGS.fails_chunk_rows), 1)
-        for start in range(0, len(rows), chunk_rows):
-            chunk = [
+        limit = max(int(SETTINGS.fails_chunk_chars), 1)
+        chunk: List[str] = []
+        size = done = 0
+        for r in rows:
+            encoded = json.dumps(
                 {k: (v if v is None or isinstance(v, (str, int, float))
                      else json.dumps(v, default=str))
-                 for k, v in ((k, r.get(k)) for k in struct)}
-                for r in rows[start:start + chunk_rows]
-            ]
-            client.execute(sql, head + [json.dumps(chunk, default=str)])
+                 for k, v in ((k, r.get(k)) for k in struct)},
+                separators=(",", ":"), default=str)
+            if chunk and size + len(encoded) + 1 > limit:
+                client.execute(sql, head + ["[" + ",".join(chunk) + "]"])
+                done += len(chunk)
+                if progress:
+                    progress(done, len(rows))
+                chunk, size = [], 0
+            chunk.append(encoded)
+            size += len(encoded) + 1
+        if chunk:
+            client.execute(sql, head + ["[" + ",".join(chunk) + "]"])
+            if progress:
+                progress(len(rows), len(rows))
 
 
 class NullStore:
@@ -301,7 +318,8 @@ class NullStore:
 
     def write_rows(self, table: str, header: Dict[str, Any],
                    rows: List[Dict[str, Any]], struct: Dict[str, str],
-                   replace: bool = False) -> None:
+                   replace: bool = False,
+                   progress: Optional[Callable[[int, int], None]] = None) -> None:
         pass
 
 
@@ -380,7 +398,8 @@ def save_run(dp_code: str, domain_code: str, payload: Dict[str, Any],
 
 def save_failed_rows(domain_code: str, dp_code: str, run_id: str,
                      rows: List[Dict[str, Any]], total_failed_rows: int,
-                     config_hash: str = "") -> bool:
+                     config_hash: str = "",
+                     progress: Optional[Callable[[int, int], None]] = None) -> bool:
     """Store the failed rows of run ``run_id`` as *the* content of the
     (domain, DP)'s ``DQS_FAILS_*`` table - whatever was there (an older
     run) is replaced.
@@ -398,7 +417,7 @@ def save_failed_rows(domain_code: str, dp_code: str, run_id: str,
         })
         get_store().write_rows(
             fails_table_name(domain_code, dp_code), header, rows,
-            _FAILS_ROW_STRUCT, replace=True)
+            _FAILS_ROW_STRUCT, replace=True, progress=progress)
         return True
     except Exception:
         logger.warning("Failed-rows write failed (%s/%s)", domain_code, dp_code,

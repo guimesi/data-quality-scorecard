@@ -178,11 +178,11 @@ def test_table_name_is_per_domain_and_data_product():
 
 # =============================================================== databricks
 
-def _dbx_store(monkeypatch, chunk_rows=5000):
+def _dbx_store(monkeypatch, chunk_chars=900000):
     monkeypatch.setattr(pers, "SETTINGS", Settings(
         data_source="databricks", persistence_backend="databricks",
         dbx_catalog="APPCAT", dbx_schema="APPSCHEMA", dbx_state_schema="",
-        fails_chunk_rows=chunk_rows,
+        fails_chunk_chars=chunk_chars,
     ))
     client = MagicMock()
     store = pers.DatabricksStore()
@@ -191,18 +191,31 @@ def _dbx_store(monkeypatch, chunk_rows=5000):
 
 
 def test_databricks_replace_empties_the_table_then_inserts_in_chunks(monkeypatch):
-    store, client = _dbx_store(monkeypatch, chunk_rows=2)
+    """Chunks are cut by parameter size (Databricks caps one statement's
+    parameters at 1 MiB): with a limit that fits two rows, three rows take
+    two INSERTs, and the caller is told the progress after each."""
+    store, client = _dbx_store(monkeypatch)
     header = {"run_id": "snap_1", "ts": "t", "username": "u",
               "domain_code": "quality", "dp_code": "SQS", "config_hash": "h",
               "total_failed_rows": 3}
     rows = [{"planview_id": "PV", "row_key": str(i), "row_score": 50.0,
              "failed_rules": ["R1"], "row_data": {"A": i}} for i in range(3)]
+    one_row = len(json.dumps(rows[0], separators=(",", ":"))) + 40
+    monkeypatch.setattr(pers, "SETTINGS", Settings(
+        data_source="databricks", persistence_backend="databricks",
+        dbx_catalog="APPCAT", dbx_schema="APPSCHEMA",
+        fails_chunk_chars=2 * one_row + 1))
+    progress = []
     store.write_rows("DQS_FAILS_QUALITY_SQS", header, rows,
-                     pers._FAILS_ROW_STRUCT, replace=True)
+                     pers._FAILS_ROW_STRUCT, replace=True,
+                     progress=lambda d, t: progress.append((d, t)))
 
     statements = [c[0] for c in client.execute.call_args_list]
     assert statements[0] == ("DELETE FROM APPCAT.APPSCHEMA.DQS_FAILS_QUALITY_SQS",)
     assert len(statements) == 3                        # delete + 2 chunks
+    assert progress == [(2, 3), (3, 3)]
+    for _, values in statements[1:]:
+        assert len(values[7]) <= 2 * one_row + 1       # never above the limit
     sql, values = statements[1]
     assert "INSERT INTO APPCAT.APPSCHEMA.DQS_FAILS_QUALITY_SQS" in sql
     assert "explode(from_json(%s, 'array<struct<planview_id:string," in sql
@@ -268,11 +281,18 @@ def test_save_button_reports_rows_and_logs(local_store, monkeypatch):
     monkeypatch.setattr(ui_fr, "SETTINGS", pers.SETTINGS)
     monkeypatch.setattr(ui_fr, "log_event", lambda *a, **k: events.append(a))
     ui_fr._render_failed_rows_actions("EPT", dp, result, cfg)
+    # Both buttons "clicked": the CSV is built and offered, the save runs.
     fake_st.success.assert_called_once()
     assert "3 failed row(s) saved" in fake_st.success.call_args[0][0]
-    assert events[0][1]["format"] == "failed_rows_table"
+    assert [e[1]["format"] for e in events] == ["failed_rows_csv",
+                                                 "failed_rows_table"]
     stored = _read(local_store / "dqs_fails_cost_estimate_ept.jsonl")
     assert len(stored) == 3
+    fake_st.download_button.assert_called_once()
+    assert fake_st.download_button.call_args[1]["data"].startswith(
+        b"\xef\xbb\xbfrow_score,failed_rules")
+    # The frame was collected once and shared by the two actions.
+    assert fake_st.spinner.call_count == 1
 
 
 def test_save_button_failure_is_an_inline_error(local_store, monkeypatch):

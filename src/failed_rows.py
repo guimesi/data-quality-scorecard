@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -144,19 +144,27 @@ def current_run_id(dp_code: str, result) -> str:
 
 def save_failed_rows_for_run(domain_code: str, dp_code: str, dp, result, config,
                              config_hash: str = "",
-                             run_id: Optional[str] = None) -> Tuple[int, int]:
+                             run_id: Optional[str] = None,
+                             frame: Optional[Tuple[pd.DataFrame, int]] = None,
+                             progress: Optional[Callable[[int, int], None]] = None,
+                             ) -> Tuple[int, int]:
     """Replace the (domain, DP)'s failed-rows table with this scorecard's
     failing rows. Returns ``(rows written, total failing)``.
 
-    Raises on a storage failure (the callers - a button, the job - report
-    it), unlike the fire-and-forget run history.
+    ``frame`` is an already computed :func:`failed_rows_frame` result (the
+    UI reuses one for the CSV and the save); ``progress(done, total)`` is
+    reported after every chunk written. Raises on a storage failure (the
+    callers - a button, the job - report it), unlike the fire-and-forget
+    run history.
     """
-    frame, total = failed_rows_frame(dp, result, config, SETTINGS.fails_max_rows)
-    rows = frame_to_records(frame)
+    if frame is None:
+        frame = failed_rows_frame(dp, result, config, SETTINGS.fails_max_rows)
+    table, total = frame
+    rows = frame_to_records(table)
     if run_id is None:
         run_id = current_run_id(dp_code, result)
     if not save_failed_rows(domain_code, dp_code, run_id, rows, total,
-                            config_hash=config_hash):
+                            config_hash=config_hash, progress=progress):
         raise RuntimeError(
             f"Could not write the failed rows of {dp_code} - see the app log "
             "(is the DQS_FAILS table created and granted?)")

@@ -72,8 +72,9 @@ class Settings:
     # first; 0 (the default) keeps every failing row. The CSV download in
     # Step 6 honours the same cap.
     fails_max_rows: int = int(os.getenv("DQS_FAILS_MAX_ROWS", "0"))
-    # Rows per INSERT statement when writing row tables to Databricks.
-    fails_chunk_rows: int = int(os.getenv("DQS_FAILS_CHUNK_ROWS", "5000"))
+    # Characters of row JSON per INSERT statement when writing row tables
+    # to Databricks, which caps a statement's parameters at 1 MiB.
+    fails_chunk_chars: int = int(os.getenv("DQS_FAILS_CHUNK_CHARS", "900000"))
 
     # Report store (Step 6 Data Quality Report). Every run's artefacts
     # (interactive HTML, PDF, print-ready HTML, metadata) are kept so the
