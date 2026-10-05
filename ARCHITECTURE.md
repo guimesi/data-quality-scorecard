@@ -90,9 +90,9 @@ src/
                                #   _coerce_threshold, _resolve_planview_segment_map
     _validators.py             # validate_completeness_rule,
                                #   validate_referential_integrity_rule
-    _ept_rules.py              # E1-E7 checks + constants
+    _ept_rules.py              # DQ-EPT-1 … DQ-EPT-7 checks + constants
     _adr_rules.py              # DQ-ADR-1..8 checks + constants
-    _acce_rules.py             # AC1-AC8 checks + constants
+    _acce_rules.py             # DQ-ACCE-1 … DQ-ACCE-8 checks + constants
     _sqs_rules.py              # dq-inspection-* checks + constants (Quality domain)
     _dispatcher.py             # evaluate_custom_rules(df, assignments, dp)
 ui/
@@ -494,11 +494,11 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   `ruff check` + `pytest` is what CI enforces; `pyright` is a local
   IDE aid, not a CI gate.
 
-- **`_resolve_planview_segment_map`** is shared across families (E6,
-  DQ-ADR-7, DQ-ADR-8, AC7, AC8) so it lives in [src/custom_dqr/_shared.py](src/custom_dqr/_shared.py),
+- **`_resolve_planview_segment_map`** is shared across families (DQ-EPT-6,
+  DQ-ADR-7, DQ-ADR-8, DQ-ACCE-7, DQ-ACCE-8) so it lives in [src/custom_dqr/_shared.py](src/custom_dqr/_shared.py),
   not in the EPT module where it was originally defined.
 
-- **ACCE -> ADR dependency**: AC1 and AC8 reuse `_a1_value_valid`,
+- **ACCE -> ADR dependency**: DQ-ACCE-1 and DQ-ACCE-8 reuse `_a1_value_valid`,
   `_resolve_coa_master_lookups`, and `_A8_UOM_ALIASES` from
   [src/custom_dqr/_adr_rules.py](src/custom_dqr/_adr_rules.py). Don't
   remove these from ADR even if DQ-ADR-1/DQ-ADR-8 stop using them.
@@ -562,7 +562,7 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   needs none). The result: every system table and reference dataset is
   byte-identical on each call regardless of call order. Without it the same
   input returned different data per call and scores drifted run-to-run (and a
-  cold-cache reference reload changed E2/E7/segmented-rule results). The
+  cold-cache reference reload changed DQ-EPT-2/DQ-EPT-7/segmented-rule results). The
   import-time constants (`_ITEM_ROW_IDS`, `_ITEM_DESIGN_ID`, `_ITEM_UOM`,
   `_UOM_BY_ROW_ID`, `_PLANVIEW_ID_POOL`) are drawn once at import (fixed order)
   and are intentionally NOT reseeded - they're the shared keys system tables

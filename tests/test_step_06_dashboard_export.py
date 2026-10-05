@@ -71,16 +71,16 @@ def test_per_rule_score_columns_includes_custom_with_rule_name_and_weight():
         system_code="EPT",
         cdes=["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=33.3)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=33.3)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     cols = _per_rule_score_columns(dp, cfg)
     assert len(cols.columns) == 1
     header = cols.columns[0]
-    assert header.startswith("CUSTOM · E1 · ")
+    assert header.startswith("CUSTOM · DQ-EPT-1 · ")
     assert "w=33.3%" in header
-    # Row 1 has null COR → fails E1; the other three pass.
+    # Row 1 has null COR → fails DQ-EPT-1; the other three pass.
     assert cols[header].tolist() == [100, 0, 100, 100]
 
 
@@ -91,7 +91,7 @@ def test_per_rule_score_columns_combines_standard_and_custom():
         system_code="EPT",
         cdes=["PLANVIEW_ID", "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=50)],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=50)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=50)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 50.0, "custom": 50.0},
     )
@@ -114,7 +114,7 @@ def test_per_rule_score_columns_omits_not_evaluated_custom_rule(monkeypatch):
         system_code="EPT",
         cdes=["PLANVIEW_ID"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E7", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-7", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
@@ -129,7 +129,7 @@ def test_build_rowscores_csv_has_row_score_status_and_rule_columns():
         system_code="EPT",
         cdes=["PLANVIEW_ID", "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=100)],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 60.0, "custom": 40.0},
     )
@@ -147,7 +147,7 @@ def test_build_rowscores_csv_has_row_score_status_and_rule_columns():
 
 
 def test_reference_columns_for_export_joins_planview_reference():
-    """E2/E7 reference VWS_GP_STANDARD_SHARE on PLANVIEW_ID → PROJECT_ID.
+    """DQ-EPT-2/DQ-EPT-7 reference VWS_GP_STANDARD_SHARE on PLANVIEW_ID → PROJECT_ID.
     The helper left-joins it onto the data product and suffixes every
     reference column with the origin dataset name."""
     df = pd.DataFrame({"PLANVIEW_ID": ["PV-00001", "PV-00002", "PV-99999"]})
@@ -157,8 +157,8 @@ def test_reference_columns_for_export_joins_planview_reference():
         cdes=["PLANVIEW_ID"],
         assignments=[],
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E2", weight=50),
-            CustomDQRAssignment(rule_id="E7", weight=50),
+            CustomDQRAssignment(rule_id="DQ-EPT-2", weight=50),
+            CustomDQRAssignment(rule_id="DQ-EPT-7", weight=50),
         ],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
@@ -168,7 +168,7 @@ def test_reference_columns_for_export_joins_planview_reference():
     assert list(cols.index) == list(df.index)
     assert cols.shape[1] > 0
     assert all(c.endswith(" [VWS_GP_STANDARD_SHARE]") for c in cols.columns)
-    # The shared dataset (E2 + E7 both reference it) is joined exactly once.
+    # The shared dataset (DQ-EPT-2 + DQ-EPT-7 both reference it) is joined exactly once.
     project_cols = [c for c in cols.columns if c.startswith("PROJECT_ID ")]
     assert len(project_cols) == 1
     # Known mock keys resolve; an unmatched key leaves the row null.
@@ -206,7 +206,7 @@ def test_reference_columns_skipped_when_dataset_unavailable(monkeypatch):
         system_code="EPT",
         cdes=["PLANVIEW_ID"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E7", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-7", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
@@ -227,7 +227,7 @@ def test_build_rowscores_csv_includes_reference_columns():
         system_code="EPT",
         cdes=["PLANVIEW_ID", "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E2", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-2", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )

@@ -1,7 +1,7 @@
 """
 Reference data registry for referential-integrity DQR rules.
 
-Custom rules (e.g. EPT E7) need to look up a *master* / reference dataset
+Custom rules (e.g. EPT DQ-EPT-7) need to look up a *master* / reference dataset
 to validate that a foreign key resolves. This module is the single point of
 truth for those lookups so individual rule check functions stay decoupled
 from where the data lives (mock generator vs. Databricks).
@@ -69,10 +69,10 @@ def _load_vws_gp_standard_share() -> Optional[pd.DataFrame]:
     """Resolve the ``VWS_GP_STANDARD_SHARE`` reference dataset for the active
     data source.
 
-    Databricks mode projects ``PROJECT_ID`` (used by E7 for referential
-    integrity), ``COUNTRY`` (used by E2 to validate project location
+    Databricks mode projects ``PROJECT_ID`` (used by DQ-EPT-7 for referential
+    integrity), ``COUNTRY`` (used by DQ-EPT-2 to validate project location
     after the EPT → Planview join), ``E05_DEPARTMENT`` (brownfield /
-    greenfield classification consumed by E6's segmented-IQR mode) and
+    greenfield classification consumed by DQ-EPT-6's segmented-IQR mode) and
     ``BUSINESS`` (business-line classification, same consumer), and uses
     ``DISTINCT`` to keep the result small. The query goes through
     ``DatabricksClient.fetch_query`` (rows → pandas).

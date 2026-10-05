@@ -1,7 +1,7 @@
 # pyright: reportArgumentType=false, reportOperatorIssue=false
 # pyright: reportCallIssue=false, reportReturnType=false
 # pyright: reportAttributeAccessIssue=false
-"""ACCE custom DQR rule checks (AC1-AC8).
+"""ACCE custom DQR rule checks (DQ-ACCE-1 … DQ-ACCE-8).
 
 The ACCE family mirrors ADR's structure (same families, different source
 columns and reference datasets) so most rules share the same group-verdict
@@ -22,24 +22,24 @@ import pandas as pd
 
 
 class ACCEAC3Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ACCE AC3 (mirrors EPT E3)."""
+    """Step 4.2 -> assignment.params shape for ACCE DQ-ACCE-3 (mirrors EPT DQ-EPT-3)."""
     threshold_percentile: float       # ACCE_AC3_THRESHOLD_PARAM
     detect_uniform_mapping: bool      # ACCE_AC3_DETECT_UNIFORM_MAPPING_PARAM
 
 
 class ACCEAC7Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ACCE AC7."""
+    """Step 4.2 -> assignment.params shape for ACCE DQ-ACCE-7."""
     threshold_iqr_multiplier: float   # ACCE_AC7_THRESHOLD_PARAM
     segment_by_project_type: bool     # ACCE_AC7_SEGMENT_BY_PROJECT_TYPE_PARAM
 
 
 class ACCEAC8Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ACCE AC8."""
+    """Step 4.2 -> assignment.params shape for ACCE DQ-ACCE-8."""
     threshold_iqr_multiplier: float   # ACCE_AC8_THRESHOLD_PARAM
     segment_by_project_type: bool     # ACCE_AC8_SEGMENT_BY_PROJECT_TYPE_PARAM
 
 
-# ACCE rules reuse ADR primitives: AC1 mirrors DQ-ADR-1's value-validation and
+# ACCE rules reuse ADR primitives: DQ-ACCE-1 mirrors DQ-ADR-1's value-validation and
 # COA-master lookup.
 from src.custom_dqr._adr_rules import (
     _a1_value_valid,
@@ -81,7 +81,7 @@ ACCE_AC2_REFERENCE = {
     "lookup_column": "COUNTRY",          # populated value to check post-join
 }
 
-# AC2 Validity: JOB_NO is ACCE's estimate-job/period proxy, a fiscal
+# DQ-ACCE-2 Validity: JOB_NO is ACCE's estimate-job/period proxy, a fiscal
 # quarter-year token optionally suffixed with a revision marker. Live
 # values: "2Q23 RP1", "2Q24", "2Q25", "4Q23". The check is *structural*,
 # not an enum, so new quarters/years pass automatically and the column can
@@ -92,7 +92,7 @@ ACCE_AC2_REFERENCE = {
 ACCE_AC2_JOB_NO_PATTERN = r"[1-4]Q\d{2}(\s.*)?"
 
 
-# AC3: Statistical COA-to-ISO mapping ratio (ACCE).
+# DQ-ACCE-3: Statistical COA-to-ISO mapping ratio (ACCE).
 #
 # Mapping-quality statistical rule with row-level verdict. Mirrors ADR
 # DQ-ADR-3 against the ACCE schema:
@@ -111,14 +111,14 @@ ACCE_AC2_JOB_NO_PATTERN = r"[1-4]Q\d{2}(\s.*)?"
 #     ``ACCE_ESTIMATECOSTRESULTS``) for construction hours and
 #     ``COST_TOTAL_COST`` for total cost. ADR uses
 #     ``COST_TOTAL_HOURS`` + ``COST_TOTAL_COST``.
-#   - The project-scope toggle present on DQ-ADR-3 is *not* exposed by AC3
-#     per the rule spec - AC3 only ships the percentile threshold and
+#   - The project-scope toggle present on DQ-ADR-3 is *not* exposed by DQ-ACCE-3
+#     per the rule spec - DQ-ACCE-3 only ships the percentile threshold and
 #     the uniform-detection toggle.
-#   - Uniform detection on AC3 is gated by a *portfolio-wide
+#   - Uniform detection on DQ-ACCE-3 is gated by a *portfolio-wide
 #     proportion*: when ≥ ACCE_AC3_UNIFORM_THRESHOLD (default 80%) of
 #     eligible mappings have ratio == 1, every material 1:1 bucket
 #     fails. DQ-ADR-3 flags every material 1:1 bucket unconditionally when
-#     its toggle is on, which is a stricter signal. AC3's relaxed
+#     its toggle is on, which is a stricter signal. DQ-ACCE-3's relaxed
 #     version reflects that ACCE COA codes are inherently coarser, so
 #     a small handful of legitimate 1:1 mappings is not by itself a
 #     mapping-discipline issue.
@@ -150,7 +150,7 @@ ACCE_AC3_MATERIALITY_USD = 100_000.0
 # small to call any mapping an outlier.
 ACCE_AC3_MIN_MAPPING_POPULATION = 10
 
-# Percentile-threshold customization - mirror of E3 / DQ-ADR-3 selectbox.
+# Percentile-threshold customization - mirror of DQ-EPT-3 / DQ-ADR-3 selectbox.
 # check_acce_ac3 reads ``params[ACCE_AC3_THRESHOLD_PARAM]`` and falls
 # back to ``ACCE_AC3_PERCENTILE`` (P90) when the param is absent.
 ACCE_AC3_THRESHOLD_PARAM = "threshold_percentile"
@@ -162,7 +162,7 @@ ACCE_AC3_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
 )
 
 # Uniform 1:1 mapping detection. Unlike DQ-ADR-3 (which flags every material
-# 1:1 bucket when its toggle is on), AC3's uniform check is gated by a
+# 1:1 bucket when its toggle is on), DQ-ACCE-3's uniform check is gated by a
 # portfolio-wide proportion: when ≥ ACCE_AC3_UNIFORM_THRESHOLD of
 # eligible mappings have ratio == 1, every material 1:1 bucket fails.
 # The wider gate reflects that ACCE COA codes are inherently coarser,
@@ -171,7 +171,7 @@ ACCE_AC3_DETECT_UNIFORM_MAPPING_PARAM = "detect_uniform_mapping"
 ACCE_AC3_UNIFORM_THRESHOLD = 0.80
 
 
-# AC4: Core quantities populated & non-negative project totals (ACCE).
+# DQ-ACCE-4: Core quantities populated & non-negative project totals (ACCE).
 #
 # Project-level Completeness + Validity rule with row-level verdict. For
 # each ``PLANVIEW_ID`` the rule checks that (a) every core quantity type
@@ -385,7 +385,7 @@ _AC4_CATEGORY_SPECS: Tuple[Tuple[str, object, frozenset], ...] = (
 )
 
 
-# AC5: Design details present when quantity exists (ACCE).
+# DQ-ACCE-5: Design details present when quantity exists (ACCE).
 #
 # Row-level Consistency rule: a row fails only when a positive
 # quantity exists *and* the item carries no usable design parameter.
@@ -411,7 +411,7 @@ ACCE_AC5_REQUIRED_COLUMNS = {
 }
 
 
-# AC6: Construction hours present when quantity exists (ACCE).
+# DQ-ACCE-6: Construction hours present when quantity exists (ACCE).
 #
 # One-directional Consistency rule: a row fails only when a positive
 # quantity exists AND the construction-hours aggregate is not strictly
@@ -425,7 +425,7 @@ ACCE_AC5_REQUIRED_COLUMNS = {
 #     ``ACCE_ESTIMATECOSTRESULTS``, SUM-aggregated per ``ROW_ID`` and
 #     prefixed ``COST_`` by the builder) is strictly greater than zero.
 #     ACCE does **not** segregate Design-Build hours into a separate
-#     column, so AC6 consults only ``COST_MH``.
+#     column, so DQ-ACCE-6 consults only ``COST_MH``.
 ACCE_AC6_REQUIRED_COLUMNS = {
     "Key Quantity": "QTY_KEY_QTY",
     "Other Quantity": "QTY_OTHER_QTY",
@@ -433,7 +433,7 @@ ACCE_AC6_REQUIRED_COLUMNS = {
 }
 
 
-# AC7: Within-discipline quantity / hour ratio outlier (ACCE).
+# DQ-ACCE-7: Within-discipline quantity / hour ratio outlier (ACCE).
 #
 # Per-row statistical rule. Eligible rows compute
 # ``HOURS_PER_QUANTITY = COST_MH / QTY_QUANTITY``; the population is
@@ -442,7 +442,7 @@ ACCE_AC6_REQUIRED_COLUMNS = {
 #
 #   - The segment key is the *raw* ``UPPER(TRIM(DESCRIPTION))`` value
 #     (the estimate-line label) paired with the effective UOM - not a
-#     category mapping (unlike AC8) and no longer ``ACCT``.
+#     category mapping (unlike DQ-ACCE-8) and no longer ``ACCT``.
 #   - ``QTY_QUANTITY`` is ``COALESCE(KEY_QTY, 0) + COALESCE(OTHER_QTY,
 #     0)`` from the split slots; a row is eligible when ``KEY_QTY > 0``
 #     OR ``OTHER_QTY > 0``.
@@ -475,7 +475,7 @@ ACCE_AC7_MIN_POPULATION = 10
 # IQR-multiplier customization - selectbox on the rule card. The
 # check reads ``params[ACCE_AC7_THRESHOLD_PARAM]`` and falls back to
 # :data:`ACCE_AC7_MILD_IQR_MULTIPLIER` (1.5×) when the param is
-# absent. Choices mirror DQ-ADR-7 / DQ-ADR-8 / E6 so the selectbox semantics stay
+# absent. Choices mirror DQ-ADR-7 / DQ-ADR-8 / DQ-EPT-6 so the selectbox semantics stay
 # in lockstep across systems.
 ACCE_AC7_THRESHOLD_PARAM = "threshold_iqr_multiplier"
 ACCE_AC7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
@@ -484,7 +484,7 @@ ACCE_AC7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "3.0×IQR (extreme)"),
 )
 
-# Project-type segmentation toggle for AC7, mirrors the toggle DQ-ADR-7
+# Project-type segmentation toggle for DQ-ACCE-7, mirrors the toggle DQ-ADR-7
 # exposes against the ADR data product. When on, the per-segment IQR
 # baseline used to flag outliers is partitioned by the composite
 # ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
@@ -499,7 +499,7 @@ ACCE_AC7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
 # Rows whose segment cannot be resolved (missing PLANVIEW_ID, unmatched
 # PROJECT_ID, null/blank E05_DEPARTMENT / BUSINESS) are
 # NOT_APPLICABLE → PASS so the toggle never double-penalises the
-# referential-integrity gap AC1 / AC2 already cover.
+# referential-integrity gap DQ-ACCE-1 / DQ-ACCE-2 already cover.
 ACCE_AC7_SEGMENT_BY_PROJECT_TYPE_PARAM = "segment_by_project_type"
 ACCE_AC7_SEGMENT_REFERENCE = {
     "reference_dataset": "VWS_GP_STANDARD_SHARE",
@@ -517,7 +517,7 @@ ACCE_AC7_SEGMENT_REQUIRED_COLUMNS = {
 }
 
 
-# AC8: Cross-discipline quantity ratios (ACCE).
+# DQ-ACCE-8: Cross-discipline quantity ratios (ACCE).
 #
 # Project-level statistical rule with row-level verdict. Eligible
 # positive-quantity rows are classified into six discipline categories
@@ -532,7 +532,7 @@ ACCE_AC7_SEGMENT_REQUIRED_COLUMNS = {
 #
 #   - Project key is ``COMPONENT_SOURCE`` (ACCE's project-scope column).
 #   - Classifier keys off ``DESCRIPTION`` (the same per-discipline
-#     value lists AC4 uses) plus a per-category UOM gate read from the
+#     value lists DQ-ACCE-4 uses) plus a per-category UOM gate read from the
 #     split ``KEY_UNITS`` / ``OTHER_UNITS`` slots - replacing the
 #     former ``ACCT`` + ``QTY_UOM`` classifier.
 #   - Per-row quantity is ``COALESCE(KEY_QTY, 0) + COALESCE(OTHER_QTY,
@@ -560,7 +560,7 @@ ACCE_AC8_MIN_POPULATION = 10
 # IQR-multiplier customization - selectbox on the rule card. The
 # check reads ``params[ACCE_AC8_THRESHOLD_PARAM]`` and falls back to
 # :data:`ACCE_AC8_MILD_IQR_MULTIPLIER` (1.5×) when the param is
-# absent. Choices in lockstep with DQ-ADR-7 / DQ-ADR-8 / E6 / AC7.
+# absent. Choices in lockstep with DQ-ADR-7 / DQ-ADR-8 / DQ-EPT-6 / DQ-ACCE-7.
 ACCE_AC8_THRESHOLD_PARAM = "threshold_iqr_multiplier"
 ACCE_AC8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (1.5, "1.5×IQR (mild) - recommended"),
@@ -568,7 +568,7 @@ ACCE_AC8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "3.0×IQR (extreme)"),
 )
 
-# Project-type segmentation toggle for AC8, mirrors the toggle DQ-ADR-8
+# Project-type segmentation toggle for DQ-ACCE-8, mirrors the toggle DQ-ADR-8
 # exposes against the ADR data product. When on, the cross-discipline
 # ratio population (one ratio value per ``COMPONENT_SOURCE``) is
 # partitioned by the composite ``(E05_DEPARTMENT, BUSINESS)`` tuple
@@ -580,7 +580,7 @@ ACCE_AC8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
 # applies. Off by default. Projects whose segment cannot be resolved
 # (no associated PLANVIEW_ID, unmatched PROJECT_ID, null/blank
 # E05_DEPARTMENT / BUSINESS) are NOT_APPLICABLE → PASS so the toggle
-# never double-penalises the referential-integrity gap AC1 / AC2
+# never double-penalises the referential-integrity gap DQ-ACCE-1 / DQ-ACCE-2
 # already cover.
 ACCE_AC8_SEGMENT_BY_PROJECT_TYPE_PARAM = "segment_by_project_type"
 ACCE_AC8_SEGMENT_REFERENCE = {
@@ -593,22 +593,22 @@ ACCE_AC8_SEGMENT_REQUIRED_COLUMNS = {
     "Project Key": "PLANVIEW_ID",
 }
 
-# AC8-specific UOM sets, compared against ``UPPER(TRIM(units))``
+# DQ-ACCE-8-specific UOM sets, compared against ``UPPER(TRIM(units))``
 # directly (no alias normalization, matching the SQL's
-# ``KEY_UNITS IN (...) OR OTHER_UNITS IN (...)`` comparison). AC8's
-# volume set admits the bare ``YD`` spelling where AC4's admits ``YDS``;
-# length / weight / count carry the same spellings as AC4's but are kept
-# as their own sets so a future AC4 edit cannot silently move AC8.
+# ``KEY_UNITS IN (...) OR OTHER_UNITS IN (...)`` comparison). DQ-ACCE-8's
+# volume set admits the bare ``YD`` spelling where DQ-ACCE-4's admits ``YDS``;
+# length / weight / count carry the same spellings as DQ-ACCE-4's but are kept
+# as their own sets so a future DQ-ACCE-4 edit cannot silently move DQ-ACCE-8.
 _AC8_LENGTH_UOMS = frozenset({"FEET", "FT", "M", "METERS", "LF"})
 _AC8_VOLUME_UOMS = frozenset({"CY", "M3", "YD3", "YD", "M³"})
 _AC8_WEIGHT_UOMS = frozenset({"TONS", "TONNE", "TON", "T"})
 _AC8_COUNT_UOMS = frozenset({"EACH", "EA", "ITEM", "ITEMS", "ITEM(S)"})
 
-# AC8 equipment DESCRIPTION allow-list. Identical to AC4's equipment
-# list except the AC8 SQL spec spells the turbo-expander compressor
-# ``TURBO-EXPAND, COMPRESSOR`` (comma) where AC4 uses a period, so the
-# list is spelled out here rather than reusing AC4's. The other five
-# discipline lists are byte-identical to AC4's and are reused directly
+# DQ-ACCE-8 equipment DESCRIPTION allow-list. Identical to DQ-ACCE-4's equipment
+# list except the DQ-ACCE-8 SQL spec spells the turbo-expander compressor
+# ``TURBO-EXPAND, COMPRESSOR`` (comma) where DQ-ACCE-4 uses a period, so the
+# list is spelled out here rather than reusing DQ-ACCE-4's. The other five
+# discipline lists are byte-identical to DQ-ACCE-4's and are reused directly
 # in ``_AC8_CATEGORY_SPECS`` below.
 _AC8_EQUIPMENT_DESCRIPTIONS = frozenset({
     "CENTRIFUGAL PUMPS",
@@ -678,9 +678,9 @@ _AC8_EQUIPMENT_DESCRIPTIONS = frozenset({
 
 # ACCE discipline classifier. Each tuple pairs a category with its
 # DESCRIPTION allow-list and its eligible UOM set. The piping / concrete
-# / steel / cable / instrument lists are the same taxonomy AC4 keys off
+# / steel / cable / instrument lists are the same taxonomy DQ-ACCE-4 keys off
 # (both rules compare ``UPPER(TRIM(DESCRIPTION))``), so they are reused;
-# equipment uses AC8's own comma-variant list.
+# equipment uses DQ-ACCE-8's own comma-variant list.
 _AC8_CATEGORY_SPECS: Tuple[Tuple[str, frozenset, frozenset], ...] = (
     ("STEEL_WEIGHT",      _AC4_STEEL_DESCRIPTIONS,      _AC8_WEIGHT_UOMS),
     ("CONCRETE_VOLUME",   _AC4_CONCRETE_DESCRIPTIONS,   _AC8_VOLUME_UOMS),
@@ -702,7 +702,7 @@ _AC8_RATIOS: Dict[str, Tuple[str, str]] = {
 
 
 def check_acce_ac1(df: pd.DataFrame) -> pd.Series:
-    """AC1: ISO Code of Account Present (COR + SAB) for ACCE.
+    """DQ-ACCE-1: ISO Code of Account Present (COR + SAB) for ACCE.
 
     Mirrors :func:`check_adr_a1` against the ACCE schema. Each ACCE
     estimate item row carries the Code of Account directly in the
@@ -740,7 +740,7 @@ def check_acce_ac1(df: pd.DataFrame) -> pd.Series:
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ACCE AC1: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"ACCE DQ-ACCE-1: '{ref_name}' reference dataset is unavailable{detail}; "
             "ISO_COR / SAB linkage cannot be validated."
         )
 
@@ -772,7 +772,7 @@ def check_acce_ac1(df: pd.DataFrame) -> pd.Series:
 
 
 def check_acce_ac2(df: pd.DataFrame) -> pd.Series:
-    """AC2: Location + Estimate Date Present & Valid (ACCE).
+    """DQ-ACCE-2: Location + Estimate Date Present & Valid (ACCE).
 
     Mirrors :func:`check_adr_a2` against the ACCE data product. Row
     passes when *all* hold:
@@ -808,7 +808,7 @@ def check_acce_ac2(df: pd.DataFrame) -> pd.Series:
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ACCE AC2: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"ACCE DQ-ACCE-2: '{ref_name}' reference dataset is unavailable{detail}; "
             "COUNTRY linkage cannot be validated."
         )
 
@@ -847,7 +847,7 @@ def check_acce_ac2(df: pd.DataFrame) -> pd.Series:
 def check_acce_ac3(
     df: pd.DataFrame, params: ACCEAC3Params | None = None
 ) -> pd.Series:
-    """AC3: Statistical COA-to-ISO mapping ratio (ACCE).
+    """DQ-ACCE-3: Statistical COA-to-ISO mapping ratio (ACCE).
 
     Mapping-quality statistical rule with row-level verdict. Mirrors
     :func:`check_adr_a3` against the ACCE schema, with two notable
@@ -861,14 +861,14 @@ def check_acce_ac3(
        proportion: when ≥ :data:`ACCE_AC3_UNIFORM_THRESHOLD` (default
        80 %) of eligible mappings have ratio == 1, every material 1:1
        bucket fails. DQ-ADR-3 flags every material 1:1 bucket unconditionally
-       when its toggle is on, which is a stricter signal. AC3's wider
+       when its toggle is on, which is a stricter signal. DQ-ACCE-3's wider
        gate reflects that ACCE COA codes are inherently coarser.
 
     Row passes when its ``(ISO_COR, SAB)`` bucket is not flagged. Every
     NOT_APPLICABLE row also passes:
 
-    - ``COA`` missing or unmapped - AC1's territory.
-    - Resolved ``ISO_COR`` / ``SAB`` invalid - AC1's territory.
+    - ``COA`` missing or unmapped - DQ-ACCE-1's territory.
+    - Resolved ``ISO_COR`` / ``SAB`` invalid - DQ-ACCE-1's territory.
     - Eligible-mapping population below
       :data:`ACCE_AC3_MIN_MAPPING_POPULATION` - too few buckets to
       derive a P90.
@@ -907,7 +907,7 @@ def check_acce_ac3(
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"ACCE AC3: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"ACCE DQ-ACCE-3: '{ref_name}' reference dataset is unavailable{detail}; "
             "ISO_COR / SAB cannot be resolved."
         )
 
@@ -924,7 +924,7 @@ def check_acce_ac3(
     coa_filled = _is_filled(coa)
     # ACCE source data carries 4-character COA codes that roll up to a
     # 3-character ``ICARUS_COA`` group in the master. Use the first
-    # three characters as the lookup key (same as AC1) but keep the
+    # three characters as the lookup key (same as DQ-ACCE-1) but keep the
     # full COA value for the per-bucket ``COUNT(DISTINCT COA)`` -
     # otherwise multiple distinct 4-char COAs sharing a 3-char prefix
     # would collapse to a single key and the aggregation metric would
@@ -1025,7 +1025,7 @@ def _ac4_qty_positive(value: object) -> bool:
 
 
 def _classify_ac4_scope_acce(description: object) -> set:
-    """Return the set of AC4 core quantity types implied by an item's
+    """Return the set of DQ-ACCE-4 core quantity types implied by an item's
     ``DESCRIPTION`` *alone*, i.e. before looking at units or quantity.
     Used to compute the project-level ``EXPECTS_*`` flags. Matching is
     case-insensitive against the per-type ``DESCRIPTION`` allow-lists
@@ -1050,7 +1050,7 @@ def _classify_ac4_quantity_acce(
     key_qty: object,
     other_qty: object,
 ) -> object:
-    """Classify a single denormalized qty row into one of AC4's seven
+    """Classify a single denormalized qty row into one of DQ-ACCE-4's seven
     core quantity types, or ``None`` when it does not *populate* any
     type. A row populates a type when its ``DESCRIPTION`` is in the
     type's allow-list (MODULE: ``MODULE`` / ``MODULAR`` substring), at
@@ -1073,7 +1073,7 @@ def _classify_ac4_quantity_acce(
 
 
 def check_acce_ac4(df: pd.DataFrame) -> pd.Series:
-    """AC4: Core quantities populated & non-negative project totals (ACCE).
+    """DQ-ACCE-4: Core quantities populated & non-negative project totals (ACCE).
 
     Project-level Completeness + Validity rule with row-level verdict.
     For each ``PLANVIEW_ID`` the rule:
@@ -1167,7 +1167,7 @@ def check_acce_ac4(df: pd.DataFrame) -> pd.Series:
 
 
 def check_acce_ac5(df: pd.DataFrame) -> pd.Series:
-    """AC5: Design details present when quantity exists (ACCE).
+    """DQ-ACCE-5: Design details present when quantity exists (ACCE).
 
     Row-level Consistency rule. For each estimate item (one row per
     ``ROW_ID`` in the denormalized data product) the rule derives
@@ -1221,7 +1221,7 @@ def check_acce_ac5(df: pd.DataFrame) -> pd.Series:
 
 
 def check_acce_ac6(df: pd.DataFrame) -> pd.Series:
-    """AC6: Construction hours present when quantity exists (ACCE).
+    """DQ-ACCE-6: Construction hours present when quantity exists (ACCE).
 
     Row-level Consistency rule. For each estimate item the rule checks
     two derived flags:
@@ -1272,7 +1272,7 @@ def check_acce_ac6(df: pd.DataFrame) -> pd.Series:
 def check_acce_ac7(
     df: pd.DataFrame, params: ACCEAC7Params | None = None
 ) -> pd.Series:
-    """AC7: Within-discipline quantity / hour ratio outlier (ACCE).
+    """DQ-ACCE-7: Within-discipline quantity / hour ratio outlier (ACCE).
 
     Per-row Statistical Outlier rule. Eligible rows
     (``KEY_QTY > 0`` OR ``OTHER_QTY > 0``; AND ``COST_MH > 0``; AND a
@@ -1294,7 +1294,7 @@ def check_acce_ac7(
     above the mild upper bound. Every other case is treated as PASS:
 
     - Ratio cannot be calculated (no positive quantity, or hours
-      missing / zero / negative) - AC6 already covers the
+      missing / zero / negative) - DQ-ACCE-6 already covers the
       missing-hours case for positive quantities.
     - ``DESCRIPTION`` or the effective UOM is null/blank, no segment
       to compare against.
@@ -1322,7 +1322,7 @@ def check_acce_ac7(
     :data:`ACCE_AC7_MIN_POPULATION` remain NOT_APPLICABLE → PASS.
     Rows whose segment cannot be resolved (missing PLANVIEW_ID,
     unmatched PROJECT_ID, or null/blank ``E05_DEPARTMENT`` /
-    ``BUSINESS``) are also NOT_APPLICABLE → PASS - AC1 / AC2 already
+    ``BUSINESS``) are also NOT_APPLICABLE → PASS - DQ-ACCE-1 / DQ-ACCE-2 already
     cover the referential gap. Raises
     :class:`CustomRuleNotEvaluated` when the toggle is on and the
     reference dataset is unavailable.
@@ -1391,7 +1391,7 @@ def check_acce_ac7(
         # become NOT_APPLICABLE → PASS, mirrors DQ-ADR-7's segmented
         # convention.
         segment_lookup = _resolve_planview_segment_map(
-            ACCE_AC7_SEGMENT_REFERENCE, "ACCE AC7"
+            ACCE_AC7_SEGMENT_REFERENCE, "ACCE DQ-ACCE-7"
         )
         dept_lookup = {k: v[0] for k, v in segment_lookup.items()}
         business_lookup = {k: v[1] for k, v in segment_lookup.items()}
@@ -1456,7 +1456,7 @@ def _classify_ac8_category_acce(
     description: object, key_units: object, other_units: object
 ) -> object:
     """Classify a single (``DESCRIPTION``, ``KEY_UNITS``, ``OTHER_UNITS``)
-    row into one of AC8's six discipline categories, or ``None`` when the
+    row into one of DQ-ACCE-8's six discipline categories, or ``None`` when the
     row is not eligible for any ratio.
 
     A row classifies when its ``DESCRIPTION`` is in a category's
@@ -1480,7 +1480,7 @@ def _classify_ac8_category_acce(
 def check_acce_ac8(
     df: pd.DataFrame, params: ACCEAC8Params | None = None
 ) -> pd.Series:
-    """AC8: Cross-discipline quantity ratios (ACCE).
+    """DQ-ACCE-8: Cross-discipline quantity ratios (ACCE).
 
     Project-level Statistical Outlier rule with row-level verdict.
     For each ``COMPONENT_SOURCE`` the rule classifies eligible
@@ -1531,7 +1531,7 @@ def check_acce_ac8(
     PASS. Projects whose segment cannot be resolved (no associated
     PLANVIEW_ID, unmatched PROJECT_ID, or null/blank
     ``E05_DEPARTMENT`` / ``BUSINESS``) are also NOT_APPLICABLE → PASS
-    - AC1 / AC2 already cover those gaps. Raises
+    - DQ-ACCE-1 / DQ-ACCE-2 already cover those gaps. Raises
     :class:`CustomRuleNotEvaluated` when the toggle is on and the
     reference dataset is unavailable.
 
@@ -1622,13 +1622,13 @@ def check_acce_ac8(
     proj_segment: Dict[str, Tuple[str, str]] = {}
     if segmented:
         segment_lookup = _resolve_planview_segment_map(
-            ACCE_AC8_SEGMENT_REFERENCE, "ACCE AC8"
+            ACCE_AC8_SEGMENT_REFERENCE, "ACCE DQ-ACCE-8"
         )
         # Pick the first non-blank PLANVIEW_ID per COMPONENT_SOURCE. A
         # project should normally have a single PLANVIEW_ID across all
         # its rows, but if there are stragglers we still take the first
-        # populated value - AC1 / AC2 already cover the missing-PLANVIEW
-        # completeness gap, so AC8 only needs *some* anchor to resolve
+        # populated value - DQ-ACCE-1 / DQ-ACCE-2 already cover the missing-PLANVIEW
+        # completeness gap, so DQ-ACCE-8 only needs *some* anchor to resolve
         # the archetype.
         pv_series = df["PLANVIEW_ID"]
         pv_filled = _is_filled(pv_series)

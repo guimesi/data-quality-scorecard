@@ -55,16 +55,16 @@ def test_adr_dim_estimateitemrecord_has_expected_key_columns():
 def test_acce_estimateitemrecord_has_expected_key_columns():
     df = mock_data.fetch_mock_table("ACCE_ESTIMATEITEMRECORD")
     # ACCE's primary table carries COA (the Code of Account), not
-    # COMPLETE_WBC; the AC4/AC7/AC8 discipline classifier keys off
+    # COMPLETE_WBC; the DQ-ACCE-4/DQ-ACCE-7/DQ-ACCE-8 discipline classifier keys off
     # DESCRIPTION (the former ACCT account-code classifier was retired);
-    # JOB_NO is AC2's estimate-job/period proxy.
+    # JOB_NO is DQ-ACCE-2's estimate-job/period proxy.
     for col in ("PLANVIEW_ID", "ROW_ID", "COA", "DESCRIPTION", "JOB_NO"):
         assert col in df.columns, col
 
 
 def test_ept_onshore_cetdata_has_expected_key_columns():
     df = mock_data.fetch_mock_table("ONSHORE_CETDATA")
-    # EPT primary table - drives every E1-E7 custom rule.
+    # EPT primary table - drives every DQ-EPT-1 … DQ-EPT-7 custom rule.
     for col in ("PLANVIEW_ID", "WBC_LEVEL_1", "WBC_LEVEL_5",
                 "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN",
                 "TOTAL_HOURS", "TOTAL_COST_USD"):
@@ -141,18 +141,18 @@ def test_quality_sqs_inspection_status_has_null_blank_and_offlist_values():
 # ---------------------------------------------------------------------------
 
 def test_acce_coa_master_has_iso_lookup_columns():
-    """DQ-ADR-1 / AC1 join on (ICARUS_COA → ISO_COR, SAB); both must be present."""
+    """DQ-ADR-1 / DQ-ACCE-1 join on (ICARUS_COA → ISO_COR, SAB); both must be present."""
     df = mock_data._mock_acce_coa_master()
     for col in ("ICARUS_COA", "ISO_COR", "SAB"):
         assert col in df.columns, col
     assert not df.empty
-    # The mock intentionally repeats some ICARUS_COA codes so the DQ-ADR-1/AC1
+    # The mock intentionally repeats some ICARUS_COA codes so the DQ-ADR-1/DQ-ACCE-1
     # validator gets to exercise its "multiple ISO mappings per COA"
     # branch; the joiner handles duplicates downstream.
 
 
 def test_vws_gp_standard_share_has_project_lookup_columns():
-    """E7 joins PLANVIEW_ID → PROJECT_ID; E2 reads COUNTRY; E6 / DQ-ADR-7 segment
+    """DQ-EPT-7 joins PLANVIEW_ID → PROJECT_ID; DQ-EPT-2 reads COUNTRY; DQ-EPT-6 / DQ-ADR-7 segment
     by E05_DEPARTMENT + BUSINESS."""
     df = mock_data._mock_vws_gp_standard_share()
     for col in ("PROJECT_ID", "COUNTRY", "E05_DEPARTMENT", "BUSINESS"):
@@ -175,7 +175,7 @@ def test_adr_primary_contains_some_null_planview_ids():
 
 
 def test_ept_primary_has_at_least_one_planview_id_set():
-    """E7 needs at least one row that *does* resolve so the rule produces
+    """DQ-EPT-7 needs at least one row that *does* resolve so the rule produces
     a non-trivial pass-rate distribution."""
     df = mock_data.fetch_mock_table("ONSHORE_CETDATA")
     assert df["PLANVIEW_ID"].notna().any()

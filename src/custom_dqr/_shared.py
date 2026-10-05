@@ -86,7 +86,7 @@ def _resolve_planview_segment_map(
     reference_config: SegmentReferenceConfig, rule_label: str
 ) -> Dict[str, Tuple[str, str]]:
     """Build the ``PLANVIEW_ID → (E05_DEPARTMENT, BUSINESS)`` lookup used by
-    the project-type segmentation toggle on E6, DQ-ADR-7, DQ-ADR-8, AC7 and AC8. Every
+    the project-type segmentation toggle on DQ-EPT-6, DQ-ADR-7, DQ-ADR-8, DQ-ACCE-7 and DQ-ACCE-8. Every
     one of those rules joins PLANVIEW_ID to the same Planview reference
     table and reads the same segment columns, so the resolution logic is
     shared across families.

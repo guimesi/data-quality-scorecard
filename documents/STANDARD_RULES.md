@@ -85,7 +85,7 @@ values - `"   "` is treated as missing.
 
 - Most universally applicable rule - `suggest_dimensions_for(...)` always
   appends it, so every CDE can carry at least a Completeness check.
-- For Custom DQRs that require multiple columns to be filled (e.g. EPT-E1),
+- For Custom DQRs that require multiple columns to be filled (e.g. DQ-EPT-1),
   the Custom engine reuses the same semantics via
   [`validate_completeness_rule`](../src/custom_dqr/_validators.py) (also
   re-exported from `src.custom_dqr_engine`).
@@ -289,7 +289,7 @@ a numeric CDE.
 is a *literal* whitelist - appropriate when the reference set is small and
 stable (e.g. an enum). For genuine FK lookups against a reference table
 (e.g. `PLANVIEW_ID` ∈ `VWS_GP_STANDARD_SHARE.PROJECT_ID`), use the **Custom**
-Referential Integrity rule (see [CUSTOM_RULES.md → E7](CUSTOM_RULES.md#e7))
+Referential Integrity rule (see [CUSTOM_RULES.md → DQ-EPT-7](CUSTOM_RULES.md#e7))
 which loads the reference table dynamically and raises
 `CustomRuleNotEvaluated` when the dependency is missing.
 

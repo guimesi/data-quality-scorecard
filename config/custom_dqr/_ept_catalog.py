@@ -1,7 +1,7 @@
 """EPT custom rule list.
 
 The EPT rules in :data:`EPT_RULES` are exported as a list of
-:class:`CustomRuleDef` (one per E1..E7 entry). The check callables and
+:class:`CustomRuleDef` (one per DQ-EPT-1..DQ-EPT-7 entry). The check callables and
 constants live in :mod:`src.custom_dqr_engine` and are re-exported there
 from :mod:`src.custom_dqr._ept_rules`.
 """
@@ -46,7 +46,7 @@ from src.custom_dqr_engine import (
 
 EPT_RULES = [
     CustomRuleDef(
-        id="E1",
+        id="DQ-EPT-1",
         name="ISO Code of Account Present (COR + SAB)",
         type="Completeness",
         description=(
@@ -61,7 +61,7 @@ EPT_RULES = [
         check=check_ept_e1,
     ),
     CustomRuleDef(
-        id="E2",
+        id="DQ-EPT-2",
         name="Location + estimate date present",
         type="Completeness",
         description=(
@@ -81,7 +81,7 @@ EPT_RULES = [
         reference=dict(EPT_E2_REFERENCE),
     ),
     CustomRuleDef(
-        id="E3",
+        id="DQ-EPT-3",
         name="Statistical Excessive WBC to ISO Mapping",
         type="Statistical Outlier",
         description=(
@@ -137,7 +137,7 @@ EPT_RULES = [
                     "with naturally fine-grained WBCs is not dragged "
                     "down by peers that aggregate aggressively. "
                     "Requires `PLANVIEW_ID` to be a CDE; rows missing "
-                    "PLANVIEW_ID are treated as PASS (E7 already "
+                    "PLANVIEW_ID are treated as PASS (DQ-EPT-7 already "
                     "covers the missing-project linkage)."
                 ),
                 required_columns_when_enabled=dict(
@@ -148,7 +148,7 @@ EPT_RULES = [
         ],
     ),
     CustomRuleDef(
-        id="E4",
+        id="DQ-EPT-4",
         name="Level 1 cost category populated",
         type="Completeness",
         description=(
@@ -163,7 +163,7 @@ EPT_RULES = [
         check=check_ept_e4,
     ),
     CustomRuleDef(
-        id="E5",
+        id="DQ-EPT-5",
         name="FEED / Engineering hours estimate present when cost exists",
         type="Consistency",
         description=(
@@ -185,7 +185,7 @@ EPT_RULES = [
         check=check_ept_e5,
     ),
     CustomRuleDef(
-        id="E6",
+        id="DQ-EPT-6",
         name="Cost-to-hours ratio outlier check",
         type="Statistical Outlier",
         description=(
@@ -203,7 +203,7 @@ EPT_RULES = [
             "with project_total_hours <= 0, rows lacking PLANVIEW_ID, "
             "and runs with fewer than the minimum number of eligible "
             "projects are NOT_APPLICABLE and pass - completeness rules "
-            "(E5) and project-linkage (E7) cover those gaps separately. "
+            "(DQ-EPT-5) and project-linkage (DQ-EPT-7) cover those gaps separately. "
             "The project-type segmentation toggle on the rule card "
             "recomputes the IQR baseline within each (E05_DEPARTMENT, "
             "BUSINESS) bucket resolved via the Planview reference, so a "
@@ -249,13 +249,13 @@ EPT_RULES = [
                     "Projects whose segment cannot be resolved "
                     "(missing PLANVIEW_ID, unmatched PROJECT_ID, or "
                     "null `E05_DEPARTMENT` / `BUSINESS`) are likewise "
-                    "PASS - E7 / E2 already cover those gaps."
+                    "PASS - DQ-EPT-7 / DQ-EPT-2 already cover those gaps."
                 ),
             ),
         ],
     ),
     CustomRuleDef(
-        id="E7",
+        id="DQ-EPT-7",
         name="Project Key linkage",
         type="Referential Integrity",
         description=(

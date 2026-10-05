@@ -50,7 +50,7 @@ from src.custom_dqr_engine import (
 
 ACCE_RULES = [
     CustomRuleDef(
-        id="AC1",
+        id="DQ-ACCE-1",
         name="ISO Code of Account present (COR + SAB)",
         type="Completeness",
         description=(
@@ -86,7 +86,7 @@ ACCE_RULES = [
         reference=dict(ACCE_AC1_REFERENCE),
     ),
     CustomRuleDef(
-        id="AC2",
+        id="DQ-ACCE-2",
         name="Location + estimate date present & valid",
         type="Completeness & Validity",
         description=(
@@ -120,7 +120,7 @@ ACCE_RULES = [
         reference=dict(ACCE_AC2_REFERENCE),
     ),
     CustomRuleDef(
-        id="AC3",
+        id="DQ-ACCE-3",
         name="Statistical COA-to-ISO mapping ratio",
         type="Statistical Outlier",
         description=(
@@ -151,10 +151,10 @@ ACCE_RULES = [
             "suppress false positives from planning / "
             "structural-only mappings. Rows whose ``COA`` does not "
             "resolve to a valid ``ISO_COR`` / ``SAB`` are PASS - "
-            "AC1 already covers that completeness gap and AC3 "
+            "DQ-ACCE-1 already covers that completeness gap and DQ-ACCE-3 "
             "must not double-penalise. Eligible-mapping "
             f"populations below {ACCE_AC3_MIN_MAPPING_POPULATION} "
-            "are NOT_APPLICABLE and pass. Unlike DQ-ADR-3, AC3 does "
+            "are NOT_APPLICABLE and pass. Unlike DQ-ADR-3, DQ-ACCE-3 does "
             "**not** expose a project-scope toggle - the "
             "percentile baseline is always portfolio-wide. The "
             "rule raises ``CustomRuleNotEvaluated`` when the COA "
@@ -188,7 +188,7 @@ ACCE_RULES = [
                     "rule layers a portfolio-wide uniform-mapping "
                     "detector. Unlike ADR DQ-ADR-3 (which fails every "
                     "material 1:1 bucket the moment its toggle is on), "
-                    "AC3 only trips the uniform branch when the "
+                    "DQ-ACCE-3 only trips the uniform branch when the "
                     "*proportion* of eligible mappings with "
                     "`ratio == 1` reaches "
                     f"{int(ACCE_AC3_UNIFORM_THRESHOLD * 100)}% - i.e. "
@@ -208,7 +208,7 @@ ACCE_RULES = [
         ],
     ),
     CustomRuleDef(
-        id="AC4",
+        id="DQ-ACCE-4",
         name="Core quantities populated & non-negative project totals",
         type="Completeness & Validity",
         description=(
@@ -255,7 +255,7 @@ ACCE_RULES = [
         check=check_acce_ac4,
     ),
     CustomRuleDef(
-        id="AC5",
+        id="DQ-ACCE-5",
         name="Design details present when quantity exists",
         type="Consistency",
         description=(
@@ -288,7 +288,7 @@ ACCE_RULES = [
         check=check_acce_ac5,
     ),
     CustomRuleDef(
-        id="AC6",
+        id="DQ-ACCE-6",
         name="Construction hours present when quantity exists",
         type="Consistency",
         description=(
@@ -317,7 +317,7 @@ ACCE_RULES = [
         check=check_acce_ac6,
     ),
     CustomRuleDef(
-        id="AC7",
+        id="DQ-ACCE-7",
         name="Within-discipline quantity / hour ratio outlier",
         type="Statistical Outlier",
         description=(
@@ -348,7 +348,7 @@ ACCE_RULES = [
             "with ``IQR == 0`` are NOT_APPLICABLE and pass; rows "
             "that lack a calculable ratio (no positive qty, or "
             "missing / zero / negative hours) or whose segment key "
-            "is blank are also NOT_APPLICABLE and pass - AC6 "
+            "is blank are also NOT_APPLICABLE and pass - DQ-ACCE-6 "
             "covers the missing-hours-with-quantity gap. The "
             "segment key starts at ``(DESCRIPTION, QTY_UOM)`` "
             "and is optionally extended with the project-type "
@@ -388,7 +388,7 @@ ACCE_RULES = [
                     "`(E05_DEPARTMENT, BUSINESS)` looked up from the "
                     "`VWS_GP_STANDARD_SHARE` reference via "
                     "`PLANVIEW_ID → PROJECT_ID` - the same lookup "
-                    "E6 / DQ-ADR-7 / DQ-ADR-8 use. The segment key becomes "
+                    "DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8 use. The segment key becomes "
                     "`(DESCRIPTION, QTY_UOM, E05_DEPARTMENT, "
                     "BUSINESS)` and "
                     "the IQR is recomputed within each bucket, so a "
@@ -401,7 +401,7 @@ ACCE_RULES = [
                     "whose project-type cannot be resolved (missing "
                     "PLANVIEW_ID, unmatched PROJECT_ID, or null "
                     "`E05_DEPARTMENT` / `BUSINESS`) are PASS - "
-                    "AC1 / AC2 already cover those gaps."
+                    "DQ-ACCE-1 / DQ-ACCE-2 already cover those gaps."
                 ),
                 required_columns_when_enabled=dict(
                     ACCE_AC7_SEGMENT_REQUIRED_COLUMNS
@@ -410,7 +410,7 @@ ACCE_RULES = [
         ],
     ),
     CustomRuleDef(
-        id="AC8",
+        id="DQ-ACCE-8",
         name="Cross-discipline quantity ratios",
         type="Statistical Outlier",
         description=(
@@ -420,7 +420,7 @@ ACCE_RULES = [
             "the peer-project population. The project key is "
             "``COMPONENT_SOURCE`` and the classifier keys off "
             "``DESCRIPTION`` (per-discipline value lists, the same "
-            "taxonomy AC4 uses) plus a per-category unit gate read "
+            "taxonomy DQ-ACCE-4 uses) plus a per-category unit gate read "
             "from the split ``KEY_UNITS`` / ``OTHER_UNITS`` slots."
         ),
         notes=(
@@ -482,7 +482,7 @@ ACCE_RULES = [
                     "`(E05_DEPARTMENT, BUSINESS)` looked up from the "
                     "`VWS_GP_STANDARD_SHARE` reference via "
                     "`PLANVIEW_ID → PROJECT_ID` - the same lookup "
-                    "E6 / DQ-ADR-7 / DQ-ADR-8 / AC7 use. For each ratio the IQR "
+                    "DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8 / DQ-ACCE-7 use. For each ratio the IQR "
                     "is recomputed **within each segment**, so a "
                     "deepwater FPSO and an onshore refinery are no "
                     "longer pooled into the same baseline. Segments "
@@ -493,7 +493,7 @@ ACCE_RULES = [
                     "project-type cannot be resolved (no associated "
                     "PLANVIEW_ID, unmatched PROJECT_ID, or null "
                     "`E05_DEPARTMENT` / `BUSINESS`) are PASS - "
-                    "AC1 / AC2 already cover those gaps."
+                    "DQ-ACCE-1 / DQ-ACCE-2 already cover those gaps."
                 ),
                 required_columns_when_enabled=dict(
                     ACCE_AC8_SEGMENT_REQUIRED_COLUMNS

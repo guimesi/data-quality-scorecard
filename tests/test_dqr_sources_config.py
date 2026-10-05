@@ -1,6 +1,6 @@
 """Tests for the DQR source constants and the custom-rule catalog wiring.
 
-Covers user-spec scenarios 6 (EPT → E1), 7 (ADR → DQ-ADR-2), 8 (ACCE → empty).
+Covers user-spec scenarios 6 (EPT → DQ-EPT-1), 7 (ADR → DQ-ADR-2), 8 (ACCE → empty).
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def test_source_labels_cover_all_sources():
 
 def test_ept_catalog_includes_e1_e2_e3_e4_e5_e6_e7():
     rules = get_available_custom_dqr_rules("EPT")
-    assert [r.id for r in rules] == ["E1", "E2", "E3", "E4", "E5", "E6", "E7"]
+    assert [r.id for r in rules] == ["DQ-EPT-1", "DQ-EPT-2", "DQ-EPT-3", "DQ-EPT-4", "DQ-EPT-5", "DQ-EPT-6", "DQ-EPT-7"]
 
 
 def test_adr_catalog_active_and_inactive_rules():
@@ -133,13 +133,13 @@ def test_adr_retired_rules_keep_their_definitions_outside_the_catalog():
 
 
 def test_acce_exposes_ac1():
-    """ACCE exposes AC1 - blocking Completeness rule that joins
+    """ACCE exposes DQ-ACCE-1 - blocking Completeness rule that joins
     ``COA`` directly to ``ACCE_COA_MASTER.ICARUS_COA`` (no WBC split,
     unlike ADR DQ-ADR-1)."""
     rules = get_available_custom_dqr_rules("ACCE")
     by_id = {r.id: r for r in rules}
-    assert "AC1" in by_id
-    ac1 = by_id["AC1"]
+    assert "DQ-ACCE-1" in by_id
+    ac1 = by_id["DQ-ACCE-1"]
     assert ac1.type == "Completeness"
     assert ac1.required_columns == {
         "Project Key": "PLANVIEW_ID",
@@ -184,11 +184,11 @@ def test_catalog_keys_are_known_data_products():
 
 
 def test_ept_e4_blocking_flag_is_false():
-    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E4")
+    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-4")
 
 
 def test_ept_e7_reference_metadata_is_complete():
-    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E7")
+    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-7")
     assert rule.reference == {
         "reference_dataset": "VWS_GP_STANDARD_SHARE",
         "source_column": "PLANVIEW_ID",
@@ -199,16 +199,16 @@ def test_ept_e7_reference_metadata_is_complete():
 def test_custom_rule_def_reference_defaults_to_none():
     """Rules that don't declare a reference dataset (e.g. completeness rules)
     leave the ``reference`` field at None so the UI can skip the section."""
-    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
+    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
     assert rule.reference is None
-    rule_e4 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E4")
+    rule_e4 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-4")
     assert rule_e4.reference is None
 
 
 def test_ept_e3_catalog_metadata():
-    """E3 is a statistical-outlier rule; required columns cover
+    """DQ-EPT-3 is a statistical-outlier rule; required columns cover
     the WBC/ISO key and the materiality drivers (hours + cost)."""
-    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E3")
+    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-3")
     assert rule.type == "Statistical Outlier"
     assert rule.reference is None
     assert rule.required_columns == {
@@ -221,13 +221,13 @@ def test_ept_e3_catalog_metadata():
 
 
 def test_ept_e3_exposes_project_scope_option():
-    """E3's option block is what Step 4.2 renders as the project-scope
+    """DQ-EPT-3's option block is what Step 4.2 renders as the project-scope
     toggle, and what feeds CustomDQRAssignment.params at runtime."""
     from src.custom_dqr_engine import (
         EPT_E3_DETECT_UNIFORM_MAPPING_PARAM,
         EPT_E3_PROJECT_SCOPED_PARAM,
     )
-    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E3")
+    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-3")
     by_key = {opt.key: opt for opt in rule.options}
     assert set(by_key) == {
         EPT_E3_PROJECT_SCOPED_PARAM,
@@ -255,7 +255,7 @@ def test_effective_required_columns_adds_planview_when_e3_project_scoped():
     from config.custom_dqr_catalog import effective_required_columns
     from src.custom_dqr_engine import EPT_E3_PROJECT_SCOPED_PARAM
 
-    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E3")
+    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-3")
     base = effective_required_columns(rule, params={})
     assert "PLANVIEW_ID" not in base.values()
 
@@ -272,7 +272,7 @@ def test_effective_required_columns_for_rule_without_options_is_identity():
     """Rules that don't declare options get their static required_columns
     back unchanged regardless of params content."""
     from config.custom_dqr_catalog import effective_required_columns
-    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
+    rule = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
     assert effective_required_columns(rule, params={"any": True}) == rule.required_columns
 
 

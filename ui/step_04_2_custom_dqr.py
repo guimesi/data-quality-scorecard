@@ -76,7 +76,7 @@ def _missing_required_cdes(
     The catalog stores ``required_columns`` as a mapping ``alias → physical
     column``; we validate against the physical column name because that is
     what Step 3 records in ``cfg.cdes``. ``params`` lets us pull in any
-    extra columns contributed by enabled options (e.g. E3's
+    extra columns contributed by enabled options (e.g. DQ-EPT-3's
     project-scoped toggle adds ``PLANVIEW_ID``). Order is preserved (dict
     iteration in Python 3.7+) so the warning message reads in the same
     order as the rule definition."""

@@ -335,7 +335,7 @@ def test_load_vws_gp_standard_share_in_databricks_mode_uses_distinct_project_id(
     """``_load_vws_gp_standard_share`` must:
     - Skip the mock branch when DATA_SOURCE=databricks.
     - Project PROJECT_ID + COUNTRY + E05_DEPARTMENT + BUSINESS (the columns
-      E7, E2, and E6's project-type segmentation need) with DISTINCT.
+      DQ-EPT-7, DQ-EPT-2, and DQ-EPT-6's project-type segmentation need) with DISTINCT.
     - Read from the configured Unity Catalog namespace.
     - Use the SHARED client (so it reuses the connection opened by
       data_product_builder).

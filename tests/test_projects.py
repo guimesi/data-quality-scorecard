@@ -33,7 +33,7 @@ def _cfg(weight: float = 60.0, cdes=None,
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 50.0, "custom": 50.0},
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=custom_weight,
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=custom_weight,
                                 params={"scoped": True}),
         ],
     )
@@ -396,13 +396,13 @@ def test_deserialize_config_maps_legacy_adr_rule_ids():
             {"rule_id": "A1", "weight": 40.0},
             {"rule_id": " A9 ", "weight": 20.0, "params": {"tolerance_pct": 0.25}},
             {"rule_id": "DQ-ADR-5", "weight": 20.0},
-            {"rule_id": "AC1", "weight": 20.0},
+            {"rule_id": "DQ-ACCE-1", "weight": 20.0},
         ]
     }
     cfg = proj.deserialize_config(data)
     assert [a.rule_id for a in cfg.custom_assignments] == [
-        "DQ-ADR-1", "DQ-ADR-9", "DQ-ADR-5", "AC1",
+        "DQ-ADR-1", "DQ-ADR-9", "DQ-ADR-5", "DQ-ACCE-1",
     ]
     assert cfg.custom_assignments[1].params == {"tolerance_pct": 0.25}
     assert canonical_custom_rule_id(None) == ""
-    assert canonical_custom_rule_id("E3") == "E3"
+    assert canonical_custom_rule_id("DQ-EPT-3") == "DQ-EPT-3"

@@ -143,7 +143,7 @@ def _acce_qty_derive(df: "pd.DataFrame") -> "pd.DataFrame":
     and UOM with ``COALESCE(KEY_*, OTHER_*)`` *before* summing across
     rows for the same ``ROW_ID``. Without this hook the builder would
     sum ``KEY_QTY`` and ``OTHER_QTY`` independently and the consumer
-    (AC4 / AC5 / AC7 / AC8) would have no single ``QTY_QUANTITY`` to
+    (DQ-ACCE-4 / DQ-ACCE-5 / DQ-ACCE-7 / DQ-ACCE-8) would have no single ``QTY_QUANTITY`` to
     read.
 
     Columns produced (after the builder's ``QTY_`` prefix):

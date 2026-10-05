@@ -142,8 +142,8 @@ def _dp(df: pd.DataFrame, code: str = "EPT",
     )
 
 
-# The fixture is DQRs only: E1 (reads CODE_OF_RESOURCE + STANDARD_ACTIVITY_
-# BREAKDOWN, blocking) and E4 (reads WBC_LEVEL_1). PLANVIEW_ID is a CDE no
+# The fixture is DQRs only: DQ-EPT-1 (reads CODE_OF_RESOURCE + STANDARD_ACTIVITY_
+# BREAKDOWN, blocking) and DQ-EPT-4 (reads WBC_LEVEL_1). PLANVIEW_ID is a CDE no
 # DQR reads, so it lands in the "CDEs with no DQR" intro line.
 _CDES = ["PLANVIEW_ID", "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN",
          "WBC_LEVEL_1"]
@@ -157,9 +157,9 @@ def _cfg(code: str = "EPT", cdes=None, params=None,
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=weights[0],
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=weights[0],
                                 params=dict(params or {})),
-            CustomDQRAssignment(rule_id="E4", weight=weights[1]),
+            CustomDQRAssignment(rule_id="DQ-EPT-4", weight=weights[1]),
         ],
     )
 
@@ -248,7 +248,7 @@ def test_report_carries_every_dashboard_view():
     assert doc.count("details", cls="gl-row") >= 3   # CDEs + DQRs + dims
     assert "CODE_OF_RESOURCE" in doc.full_text
     assert "Completeness" in doc.full_text
-    assert "E1" in doc.full_text and "E4" in doc.full_text
+    assert "DQ-EPT-1" in doc.full_text and "DQ-EPT-4" in doc.full_text
     assert "DQRs tied to this CDE" in doc.html
     assert "DQRs tied to this dimension" in doc.html
 
@@ -290,10 +290,10 @@ def test_report_covers_dqrs_only():
 
     headers = [d["title"] for d in doc.attrs_of("span", cls="tv")
                if d.get("title", "").startswith("DQR · ")]
-    assert "DQR · E1 · ISO Code of Account Present (COR + SAB) (w=60.0%)" in headers
-    assert "DQR · E4 · Level 1 cost category populated (w=40.0%)" in headers
+    assert "DQR · DQ-EPT-1 · ISO Code of Account Present (COR + SAB) (w=60.0%)" in headers
+    assert "DQR · DQ-EPT-4 · Level 1 cost category populated (w=40.0%)" in headers
     data = report_data(html)
-    assert [c["id"] for c in data["dps"]["EPT"]["ruleColumns"]] == ["E1", "E4"]
+    assert [c["id"] for c in data["dps"]["EPT"]["ruleColumns"]] == ["DQ-EPT-1", "DQ-EPT-4"]
     assert all(c["header"].startswith("DQR · ")
                for c in data["dps"]["EPT"]["ruleColumns"])
 
@@ -332,20 +332,20 @@ def test_cdes_without_dqr_listed_in_intro_not_scored():
     assert "planview_id" not in names
     assert "code_of_resource" in names and "wbc_level_1" in names
     assert "Rule IDs" in cdes
-    assert '<span class="c-src muted">E1</span>' in cdes
+    assert '<span class="c-src muted">DQ-EPT-1</span>' in cdes
     assert '<span class="c-rules num">1/1</span>' in cdes
 
 
 def test_report_scores_match_engine_values():
     dp, cfg, result = _fixture()
     html = _build(dp, cfg, result)
-    for rid in ("E1", "E4"):
+    for rid in ("DQ-EPT-1", "DQ-EPT-4"):
         assert f"{result.custom_rule_pass_rates[rid]:.1f}%" in html
     data = report_data(html)
     assert data["green"] == 90.0 and data["yellow"] == 70.0
     dp_data = data["dps"]["EPT"]
     assert dp_data["columns"] == list(dp.df.columns)
-    assert dp_data["rules"]["E1"] == {
+    assert dp_data["rules"]["DQ-EPT-1"] == {
         "cdes": ["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         "dim": "Completeness",
     }
@@ -422,7 +422,7 @@ def test_unset_metadata_renders_dashes_never_invented():
 
 def test_not_evaluated_dqr_reason_everywhere():
     dp, cfg, result = _fixture()
-    result.not_evaluated_custom_rules["E4"] = "reference dataset unavailable"
+    result.not_evaluated_custom_rules["DQ-EPT-4"] = "reference dataset unavailable"
     art = _artifacts(dp, cfg, result)
     html = art.html.decode("utf-8")
     doc = Doc(html)
@@ -440,7 +440,7 @@ def test_not_evaluated_dqr_reason_everywhere():
                if d.get("data-status") == "not-evaluated"]
     assert len(skipped) == 1
     assert skipped[0]["data-score"] == "-1"
-    assert skipped[0]["data-name"] == "e4"
+    assert skipped[0]["data-name"] == "dq-ept-4"
     assert "n/a" in text
     assert "redistributed across the DQRs that evaluated" in text
     cdes = section_of(html, "EPT-cdes")
@@ -460,12 +460,12 @@ def test_not_evaluated_dqr_reason_everywhere():
 
 def test_summary_flags_skipped_dqrs_and_non_green():
     dp, cfg, result = _fixture()
-    result.not_evaluated_custom_rules["E1"] = "boom-reason"
+    result.not_evaluated_custom_rules["DQ-EPT-1"] = "boom-reason"
     html = _build(dp, cfg, result)
     summary = html.split('id="summary"')[1].split("</section>")[0]
     assert "boom-reason" in summary
     assert 'href="#EPT-dqrs"' in summary
-    assert "E4 · Level 1 cost category populated" in summary
+    assert "DQ-EPT-4 · Level 1 cost category populated" in summary
     if result.overall_score < 90:
         assert "are Red." in summary
 
@@ -492,11 +492,11 @@ def test_interactivity_hooks_present():
     for d in drills:
         assert "data-drill" in d and "data-total" in d and "data-label" in d
         assert int(d["data-total"]) >= 0
-    assert any(d["data-label"].startswith("DQR E1 (") for d in drills)
+    assert any(d["data-label"].startswith("DQR DQ-EPT-1 (") for d in drills)
     for d in doc.attrs_of("details", cls="gl-row"):
         assert d.get("data-search", "") == d.get("data-search", "").lower()
     e1 = next(d for d in doc.attrs_of("details", cls="gl-row")
-              if d.get("data-name") == "e1")
+              if d.get("data-name") == "dq-ept-1")
     assert "code_of_resource" in e1["data-search"]
     assert "completeness" in e1["data-search"]
 
@@ -839,7 +839,7 @@ def test_pdf_cover_and_summary_numbers():
     assert '<span class="k">Score drops ≥ 5 pp</span><span class="v">0</span>' in summary
     assert "<b>EPT Cost Data</b>" in summary
     assert f'<td class="num big">{result.overall_score:.1f}</td>' in summary
-    for rid in ("E1", "E4"):
+    for rid in ("DQ-EPT-1", "DQ-EPT-4"):
         assert f"{result.custom_rule_pass_rates[rid]:.1f}%" in summary
 
 
@@ -850,7 +850,7 @@ def test_pdf_dp_pages_carry_heatmap_tables_and_config():
 
     overview = pages["EPT · EPT Cost Data · Overview"]
     assert '<table class="heat">' in overview
-    assert overview.count('<th class="hm-h">') == 3    # E1, E4, CDE score
+    assert overview.count('<th class="hm-h">') == 3    # DQ-EPT-1, DQ-EPT-4, CDE score
     assert overview.count('<th class="hm-r">') == 3 + 2  # 3 CDEs + blank + foot
     assert 'class="hm off"' in overview               # CDE not read by a DQR
     assert "DQR pass rate" in overview
@@ -887,7 +887,7 @@ def test_pdf_detail_cards_show_config_and_sample_rows():
     cards = re.findall(r'<div class="card[^"]*">(.*?)</div>\s*(?=<div class="card|<div class="pf")',
                        pdf, re.S)
     assert len(cards) == 2
-    e1 = next(c for c in cards if '<span class="mono rid">E1</span>' in c)
+    e1 = next(c for c in cards if '<span class="mono rid">DQ-EPT-1</span>' in c)
     assert "<h4>Options</h4>" in e1 and "<h4>Source columns</h4>" in e1
     assert "<h4>Reference dataset</h4>" in e1 and "<h4>Pass / fail</h4>" in e1
     assert "CODE_<wbr>OF_<wbr>RESOURCE" in e1
@@ -912,7 +912,7 @@ def test_pdf_flags_sheet_uses_identifier_column():
     assert flags.count('<th class="th-rule">') == 2
     assert 'class="num flag ff">0</td>' in flags
     assert 'class="num flag fp">100</td>' in flags
-    assert "<b>E1</b> ISO Code of Account Present (COR + SAB)" in flags
+    assert "<b>DQ-EPT-1</b> ISO Code of Account Present (COR + SAB)" in flags
     assert "The 25 lowest-scoring rows of 30" in flags
 
 
@@ -1219,7 +1219,7 @@ def test_wrapper_builds_once_per_run_and_rebuilds_on_change(monkeypatch,
     assert fake.session_state["_dq_report_cache"]["artifacts"] is first
 
     # A different result (new run) rebuilds with a new run id.
-    result.custom_rule_pass_rates["E4"] = 12.3
+    result.custom_rule_pass_rates["DQ-EPT-4"] = 12.3
     er._render_executive_report_download({"EPT": result})
     assert len(calls) == 2
     second = fake.session_state["_dq_report_cache"]["artifacts"]

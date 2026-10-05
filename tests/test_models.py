@@ -83,14 +83,14 @@ def test_dqr_assignment_params_default_is_empty_dict_per_instance():
 # ---------------------------------------------------------------------------
 
 def test_custom_dqr_assignment_defaults():
-    c = CustomDQRAssignment(rule_id="E1")
+    c = CustomDQRAssignment(rule_id="DQ-EPT-1")
     assert c.weight == 0.0
     assert c.params == {}
 
 
 def test_custom_dqr_assignment_params_not_shared_between_instances():
-    a = CustomDQRAssignment(rule_id="E1")
-    b = CustomDQRAssignment(rule_id="E2")
+    a = CustomDQRAssignment(rule_id="DQ-EPT-1")
+    b = CustomDQRAssignment(rule_id="DQ-EPT-2")
     a.params["threshold"] = 0.9
     assert b.params == {}
 
@@ -207,9 +207,9 @@ def test_scorecard_result_default_optional_fields():
         rows_green=0, rows_yellow=1, rows_red=0,
         threshold_green=80.0, threshold_yellow=60.0,
     )
-    s1.not_evaluated_custom_rules["E7"] = "missing reference"
+    s1.not_evaluated_custom_rules["DQ-EPT-7"] = "missing reference"
     s1.not_computed_standard_rules["AMOUNT::Validity"] = "dtype mismatch"
-    s1.custom_rule_pass_rates["E1"] = 0.5
+    s1.custom_rule_pass_rates["DQ-EPT-1"] = 0.5
     s1.source_weights["standard"] = 100.0
 
     assert s2.not_evaluated_custom_rules == {}

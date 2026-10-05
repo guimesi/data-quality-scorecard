@@ -26,7 +26,7 @@ def sample_df() -> pd.DataFrame:
 def _force_mock_data_source(monkeypatch, tmp_path):
     """Pin SETTINGS.data_source to "mock" for every test, regardless of the
     developer's .env / shell DATA_SOURCE value. Without this, runs with
-    ``DATA_SOURCE=databricks`` exported re-route loaders (e.g. the E7
+    ``DATA_SOURCE=databricks`` exported re-route loaders (e.g. the DQ-EPT-7
     reference dataset, ``_default_fetcher``) through the real Databricks
     client and cause spurious failures. Tests that need to exercise the
     databricks branch override SETTINGS on the specific module under test,

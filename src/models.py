@@ -61,7 +61,7 @@ class CustomDQRAssignment:
     Descriptive metadata (name, description, required columns, ...) lives in
     ``config.custom_dqr_catalog``; this object only carries the user's
     selection (rule_id), weight inside the Custom source, and any per-rule
-    runtime options (``params``) flipped in Step 4.2 - for example E3's
+    runtime options (``params``) flipped in Step 4.2 - for example DQ-EPT-3's
     ``project_scoped`` toggle that switches the percentile from a global
     baseline to a per-PLANVIEW_ID one.
     """

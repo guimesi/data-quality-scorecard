@@ -1,10 +1,10 @@
 # pyright: reportArgumentType=false, reportOperatorIssue=false
 # pyright: reportCallIssue=false, reportReturnType=false
 # pyright: reportAttributeAccessIssue=false
-"""EPT custom DQR rule checks (E1-E7).
+"""EPT custom DQR rule checks (DQ-EPT-1 … DQ-EPT-7).
 
 Each ``check_ept_e<N>`` is a callable ``(df) -> pd.Series[bool]`` where True
-means the row passes. Statistical rules (E3, E6) accept an optional
+means the row passes. Statistical rules (DQ-EPT-3, DQ-EPT-6) accept an optional
 ``params`` dict to override their default thresholds via the Step 4.2 UI.
 
 See the pragma rationale in ``src/custom_dqr/_adr_rules.py``: the
@@ -32,7 +32,7 @@ from src.custom_dqr._validators import (
 
 
 class EPTE3Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for EPT E3.
+    """Step 4.2 -> assignment.params shape for EPT DQ-EPT-3.
 
     All keys are optional; missing entries fall back to the module-level
     defaults (``EPT_E3_PERCENTILE`` and ``False`` for the toggles).
@@ -45,7 +45,7 @@ class EPTE3Params(TypedDict, total=False):
 
 
 class EPTE6Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for EPT E6."""
+    """Step 4.2 -> assignment.params shape for EPT DQ-EPT-6."""
     threshold_iqr_multiplier: float   # EPT_E6_THRESHOLD_PARAM
     segment_by_project_type: bool     # EPT_E6_SEGMENT_BY_PROJECT_TYPE_PARAM
 
@@ -93,7 +93,7 @@ EPT_E3_PROJECT_SCOPED_REQUIRED_COLUMNS = {
     "Project Key": "PLANVIEW_ID",
 }
 
-# Percentile-threshold customization for E3. The Step 4.2 UI exposes the
+# Percentile-threshold customization for DQ-EPT-3. The Step 4.2 UI exposes the
 # choices below as a selectbox; check_ept_e3 reads
 # ``params[EPT_E3_THRESHOLD_PARAM]`` and falls back to ``EPT_E3_PERCENTILE``
 # (P90) when the param is absent. Choices are documented in the catalog
@@ -156,7 +156,7 @@ EPT_E6_EXTREME_IQR_MULTIPLIER = 3.0
 # inside it as an outlier of itself.
 EPT_E6_MIN_POPULATION = 5
 
-# IQR-multiplier threshold customization for E6. Step 4.2 UI exposes the
+# IQR-multiplier threshold customization for DQ-EPT-6. Step 4.2 UI exposes the
 # choices below as a selectbox; check_ept_e6 reads
 # ``params[EPT_E6_THRESHOLD_PARAM]`` and falls back to
 # ``EPT_E6_MILD_IQR_MULTIPLIER`` (1.5×) when the param is absent. A larger
@@ -178,7 +178,7 @@ EPT_E6_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
 # opts in. Projects whose segment lookup is unresolved (missing PLANVIEW_ID,
 # unmatched PROJECT_ID, or null/blank E05_DEPARTMENT / BUSINESS) are
 # NOT_APPLICABLE → PASS so the segment toggle never double-penalises the
-# referential-integrity gap E7 already covers.
+# referential-integrity gap DQ-EPT-7 already covers.
 EPT_E6_SEGMENT_BY_PROJECT_TYPE_PARAM = "segment_by_project_type"
 EPT_E6_SEGMENT_REFERENCE = {
     "reference_dataset": "VWS_GP_STANDARD_SHARE",
@@ -202,13 +202,13 @@ EPT_E7_REFERENCE = {
 
 
 def check_ept_e1(df: pd.DataFrame) -> pd.Series:
-    """E1: ISO Code of Account Present. Row passes when *both*
+    """DQ-EPT-1: ISO Code of Account Present. Row passes when *both*
     CODE_OF_RESOURCE and STANDARD_ACTIVITY_BREAKDOWN are populated."""
     return validate_completeness_rule(df, EPT_E1_REQUIRED_COLUMNS.values())
 
 
 def check_ept_e2(df: pd.DataFrame) -> pd.Series:
-    """E2: Location + Estimate Date Present.
+    """DQ-EPT-2: Location + Estimate Date Present.
 
     Row passes when *both* hold:
     - ``CENTROID_DATE`` (estimate basis date, in EPT) is non-null/non-blank.
@@ -234,7 +234,7 @@ def check_ept_e2(df: pd.DataFrame) -> pd.Series:
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"EPT E2: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"EPT DQ-EPT-2: '{ref_name}' reference dataset is unavailable{detail}; "
             "COUNTRY linkage cannot be validated."
         )
 
@@ -262,7 +262,7 @@ def check_ept_e2(df: pd.DataFrame) -> pd.Series:
 def check_ept_e3(
     df: pd.DataFrame, params: EPTE3Params | None = None
 ) -> pd.Series:
-    """E3: Statistical Excessive WBC-to-ISO Mapping.
+    """DQ-EPT-3: Statistical Excessive WBC-to-ISO Mapping.
 
     Row-level evaluation backed by group-level statistics: an ISO mapping
     (``CODE_OF_RESOURCE`` + ``STANDARD_ACTIVITY_BREAKDOWN``) FAILS when it
@@ -296,10 +296,10 @@ def check_ept_e3(
     structure is being copied 1:1 into the ISO bucket rather than
     aggregated). Off by default so existing scorecards stay stable.
 
-    Rows whose ISO key is missing are treated as PASS so E3 does not
-    double-penalize E1 (which already flags missing COR/SAB). When project
+    Rows whose ISO key is missing are treated as PASS so DQ-EPT-3 does not
+    double-penalize DQ-EPT-1 (which already flags missing COR/SAB). When project
     scope is on, rows lacking ``PLANVIEW_ID`` are likewise treated as PASS
-    (E7 already covers the missing-project linkage).
+    (DQ-EPT-7 already covers the missing-project linkage).
     """
     p = params or {}
     project_scoped = p.get(EPT_E3_PROJECT_SCOPED_PARAM, False)
@@ -411,13 +411,13 @@ def check_ept_e3(
 
 
 def check_ept_e4(df: pd.DataFrame) -> pd.Series:
-    """E4: Level 1 cost category populated. Row passes when ``WBC_LEVEL_1``
+    """DQ-EPT-4: Level 1 cost category populated. Row passes when ``WBC_LEVEL_1``
     is non-null and non-blank."""
     return validate_completeness_rule(df, EPT_E4_REQUIRED_COLUMNS.values())
 
 
 def check_ept_e5(df: pd.DataFrame) -> pd.Series:
-    """E5: FEED / Engineering hours estimate present when cost exists.
+    """DQ-EPT-5: FEED / Engineering hours estimate present when cost exists.
 
     A row is in scope when ``WBC_LEVEL_1`` matches
     :data:`EPT_E5_FEED_ENGINEERING_PATTERN` (case-insensitive). For in-scope
@@ -460,7 +460,7 @@ def check_ept_e5(df: pd.DataFrame) -> pd.Series:
 def check_ept_e6(
     df: pd.DataFrame, params: EPTE6Params | None = None
 ) -> pd.Series:
-    """E6: Cost-to-hours ratio outlier check.
+    """DQ-EPT-6: Cost-to-hours ratio outlier check.
 
     Aggregates per ``PLANVIEW_ID``:
 
@@ -473,7 +473,7 @@ def check_ept_e6(
     population (``Q1 - k*IQR`` … ``Q3 + k*IQR``, where ``k`` defaults to
     :data:`EPT_E6_MILD_IQR_MULTIPLIER` = 1.5 and is customizable via
     ``params[EPT_E6_THRESHOLD_PARAM]``). Every row in a flagged project
-    inherits the FAIL, same row-level / group-verdict pattern as E3.
+    inherits the FAIL, same row-level / group-verdict pattern as DQ-EPT-3.
 
     ``params[EPT_E6_SEGMENT_BY_PROJECT_TYPE_PARAM]`` (bool, default False)
     switches the IQR baseline to a per-segment one. The segment key is the
@@ -486,7 +486,7 @@ def check_ept_e6(
     populated bucket does not turn every project inside it into an outlier
     of itself. Projects whose segment is unresolved (missing PLANVIEW_ID,
     unmatched PROJECT_ID, null/blank ``E05_DEPARTMENT`` / ``BUSINESS``)
-    are likewise NOT_APPLICABLE → PASS - E7 / E2 already cover the
+    are likewise NOT_APPLICABLE → PASS - DQ-EPT-7 / DQ-EPT-2 already cover the
     referential-integrity / completeness gap. Raises
     :class:`CustomRuleNotEvaluated` when the toggle is on and the
     reference dataset is unavailable.
@@ -495,8 +495,8 @@ def check_ept_e6(
     other rules):
 
     - Project where ``project_total_hours <= 0``, the ratio cannot be
-      calculated; completeness / consistency rules (e.g. E5) cover this.
-    - Rows lacking ``PLANVIEW_ID`` - cannot be assigned to a project; E7
+      calculated; completeness / consistency rules (e.g. DQ-EPT-5) cover this.
+    - Rows lacking ``PLANVIEW_ID`` - cannot be assigned to a project; DQ-EPT-7
       already covers the missing-project linkage.
     - Population (eligible-project count) below
       :data:`EPT_E6_MIN_POPULATION` - too small to derive thresholds.
@@ -554,12 +554,12 @@ def check_ept_e6(
         # Resolve PLANVIEW_ID → segment via the Planview reference; project
         # whose segment cannot be resolved or has any null component is
         # treated as NOT_APPLICABLE → PASS (mirrors the unmatched-key
-        # convention used by E2). The lookup is pre-cleaned by
+        # convention used by DQ-EPT-2). The lookup is pre-cleaned by
         # ``_resolve_planview_segment_map`` (null/blank dept/business
         # already dropped, every value stripped), so resolution collapses
         # to a single dict-get per project.
         segment_lookup = _resolve_planview_segment_map(
-            EPT_E6_SEGMENT_REFERENCE, "EPT E6"
+            EPT_E6_SEGMENT_REFERENCE, "EPT DQ-EPT-6"
         )
         segments = pd.Series(
             [segment_lookup.get(k) for k in project_metrics.index],
@@ -619,7 +619,7 @@ def check_ept_e6(
 
 
 def check_ept_e7(df: pd.DataFrame) -> pd.Series:
-    """E7: Project Key linkage. Row passes when ``PLANVIEW_ID`` is filled
+    """DQ-EPT-7: Project Key linkage. Row passes when ``PLANVIEW_ID`` is filled
     *and* resolves against the ``VWS_GP_STANDARD_SHARE.PROJECT_ID``
     reference column.
 
@@ -643,7 +643,7 @@ def check_ept_e7(df: pd.DataFrame) -> pd.Series:
         cached_error = get_reference_dataset_error(ref_name)
         detail = f": {cached_error}" if cached_error else ""
         raise CustomRuleNotEvaluated(
-            f"EPT E7: '{ref_name}' reference dataset is unavailable{detail}; "
+            f"EPT DQ-EPT-7: '{ref_name}' reference dataset is unavailable{detail}; "
             "PLANVIEW_ID linkage cannot be validated."
         )
     return validate_referential_integrity_rule(

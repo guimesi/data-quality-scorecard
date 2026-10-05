@@ -314,8 +314,8 @@ def test_step5_render_custom_weights_distribute_equally_button_clicked():
     cfg = DataProductConfig(
         system_code="EPT",
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=0),
-            CustomDQRAssignment(rule_id="E2", weight=0),
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=0),
+            CustomDQRAssignment(rule_id="DQ-EPT-2", weight=0),
         ],
     )
     fake_st = _make_fake_st(
@@ -353,7 +353,7 @@ def test_step5_only_e4_selected_starts_blank():
 
     cfg = DataProductConfig(
         system_code="EPT",
-        custom_assignments=[CustomDQRAssignment(rule_id="E4", weight=0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-4", weight=0)],
     )
     fake_st = _make_fake_st()
     with patch.object(s5, "st", fake_st):
@@ -363,13 +363,13 @@ def test_step5_only_e4_selected_starts_blank():
 
 
 def test_step5_only_e7_selected_starts_blank():
-    """Symmetric to E4 - single Custom rule no longer auto-pins to 100%."""
+    """Symmetric to DQ-EPT-4 - single Custom rule no longer auto-pins to 100%."""
     import ui.step_05_weight_assignment as s5
     from src.models import CustomDQRAssignment, DataProductConfig
 
     cfg = DataProductConfig(
         system_code="EPT",
-        custom_assignments=[CustomDQRAssignment(rule_id="E7", weight=0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-7", weight=0)],
     )
     fake_st = _make_fake_st()
     with patch.object(s5, "st", fake_st):
@@ -387,9 +387,9 @@ def test_step5_multiple_custom_rules_start_blank():
     cfg = DataProductConfig(
         system_code="EPT",
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=0),
-            CustomDQRAssignment(rule_id="E4", weight=0),
-            CustomDQRAssignment(rule_id="E7", weight=0),
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=0),
+            CustomDQRAssignment(rule_id="DQ-EPT-4", weight=0),
+            CustomDQRAssignment(rule_id="DQ-EPT-7", weight=0),
         ],
     )
     fake_st = _make_fake_st()
@@ -408,8 +408,8 @@ def test_step5_custom_distribute_equally_button_after_blank_initial_render():
     cfg = DataProductConfig(
         system_code="EPT",
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=0),
-            CustomDQRAssignment(rule_id="E7", weight=0),
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=0),
+            CustomDQRAssignment(rule_id="DQ-EPT-7", weight=0),
         ],
     )
     fake_st = _make_fake_st(button_returns={"equal_cus_EPT": True})
@@ -429,8 +429,8 @@ def test_step5_render_custom_weights_clamps_overflow_to_max_allowed():
     cfg = DataProductConfig(
         system_code="EPT",
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=80),
-            CustomDQRAssignment(rule_id="E2", weight=80),
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=80),
+            CustomDQRAssignment(rule_id="DQ-EPT-2", weight=80),
         ],
     )
     fake_st = _make_fake_st()
@@ -447,7 +447,7 @@ def test_step5_render_dp_block_warns_when_custom_under_100():
 
     cfg = DataProductConfig(
         system_code="EPT",
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=10)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=10)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
@@ -1405,7 +1405,7 @@ def test_step3_select_all_required_button_unions_picks_in_source_order():
 
     # OTHER (manual pick) is preserved; each EPT-Custom-DQR-required column
     # present in ``dp.df`` is added. CODE_OF_RESOURCE and
-    # STANDARD_ACTIVITY_BREAKDOWN power E1/E3; WBC_LEVEL_1 powers E4/E5.
+    # STANDARD_ACTIVITY_BREAKDOWN power DQ-EPT-1/DQ-EPT-3; WBC_LEVEL_1 powers DQ-EPT-4/DQ-EPT-5.
     # Order matches dp.df.columns so downstream displays stay deterministic.
     assert cfg.cdes == [
         "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN",

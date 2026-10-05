@@ -504,7 +504,7 @@ def test_compute_standard_row_scores_empty_assignments_returns_zero_series():
         system_code="X",
         cdes=[],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 50.0, "custom": 50.0},
     )

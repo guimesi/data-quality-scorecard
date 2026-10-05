@@ -773,15 +773,15 @@ def test_build_rule_flag_matrix_includes_custom_assignments():
         system_code="EPT",
         cdes=["PLANVIEW_ID"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     flags, meta = ml_lab.build_rule_flag_matrix(dp, cfg)
-    # E1 must appear with source=Custom and the metadata pulled from the catalog.
-    assert "E1" in flags.columns
-    assert meta["E1"]["source"] == "Custom"
-    assert meta["E1"]["weight"] == 100.0
+    # DQ-EPT-1 must appear with source=Custom and the metadata pulled from the catalog.
+    assert "DQ-EPT-1" in flags.columns
+    assert meta["DQ-EPT-1"]["source"] == "Custom"
+    assert meta["DQ-EPT-1"]["weight"] == 100.0
 
 
 def test_step_02_filter_banner_and_empty_callout_in_render(monkeypatch):
@@ -904,13 +904,13 @@ def test_load_snapshot_from_csv_extracts_std_and_custom_rule_ids():
 
     csv = (
         "_row_score,_status,STD · A · Completeness (w=30%),"
-        "CUSTOM · E1 · Some Rule (w=70%)\n"
+        "CUSTOM · DQ-EPT-1 · Some Rule (w=70%)\n"
         "90,GREEN,100,100\n"
         "40,RED,0,0\n"
     ).encode("utf-8")
     snap = load_snapshot_from_csv(csv, dp_code="EPT")
     assert "A::Completeness" in snap["rule_pass_rates"]
-    assert "E1" in snap["custom_rule_pass_rates"]
+    assert "DQ-EPT-1" in snap["custom_rule_pass_rates"]
     assert snap["dp_code"] == "EPT"
 
 
@@ -938,19 +938,19 @@ def test_explain_row_score_with_custom_assignments_and_known_rule():
         system_code="EPT",
         cdes=["PLANVIEW_ID", "WBC_LEVEL_1"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
     # Pick a row that exists; explain it. The function exercises the custom-
-    # assignments cde mapping branch, since E1 declares required columns in
+    # assignments cde mapping branch, since DQ-EPT-1 declares required columns in
     # the catalog.
     expl = explain_row_score(dp, cfg, result, row_index=dp.df.index[0])
     assert "row_score" in expl
     assert "per_rule" in expl
     # The per-rule frame includes the Custom row.
-    assert "E1" in list(expl["per_rule"]["rule_id"])
+    assert "DQ-EPT-1" in list(expl["per_rule"]["rule_id"])
 
 
 def test_explain_row_score_with_unattributed_custom_rule():

@@ -80,7 +80,7 @@ def test_config_fingerprint_changes_on_weight_param_and_custom_changes():
     assert rh.config_fingerprint(with_params) != base
 
     with_custom = _cfg()
-    with_custom.custom_assignments = [CustomDQRAssignment(rule_id="E1", weight=100.0)]
+    with_custom.custom_assignments = [CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)]
     assert rh.config_fingerprint(with_custom) != base
 
 

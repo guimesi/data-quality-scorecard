@@ -36,7 +36,7 @@ from src.custom_dqr._shared import (
 
 
 class ADRA3Params(TypedDict, total=False):
-    """Step 4.2 -> assignment.params shape for ADR DQ-ADR-3 (mirrors EPT E3)."""
+    """Step 4.2 -> assignment.params shape for ADR DQ-ADR-3 (mirrors EPT DQ-EPT-3)."""
     threshold_percentile: float       # ADR_A3_THRESHOLD_PARAM
     project_scoped: bool              # ADR_A3_PROJECT_SCOPED_PARAM
     detect_uniform_mapping: bool      # ADR_A3_DETECT_UNIFORM_MAPPING_PARAM
@@ -104,7 +104,7 @@ ADR_A2_DATE_PATTERN = r"[1-4]Q\d{4}"
 # global ``P90`` and meets the materiality bar
 # (``SUM(TOTAL_HOURS) > 0`` OR ``SUM(TOTAL_COST) >= materiality``).
 # Every row of a flagged mapping inherits the FAIL, same row-level /
-# group-verdict pattern as E3 / E6 / DQ-ADR-8.
+# group-verdict pattern as DQ-EPT-3 / DQ-EPT-6 / DQ-ADR-8.
 #
 # Source columns after prefixing on the denormalized data product:
 #   - ``COMPLETE_WBC``       - pass-through from the primary item table.
@@ -125,7 +125,7 @@ ADR_A3_REFERENCE = {
     "lookup_column": "ISO_COR / SAB",    # mappings derived from the join
 }
 
-# Statistical-threshold parameters. Mirrors EPT E3's framing: the ratio
+# Statistical-threshold parameters. Mirrors EPT DQ-EPT-3's framing: the ratio
 # is judged against the dataset-wide ``P90`` of WBC-to-ISO ratios; the
 # materiality filter suppresses false positives from planning /
 # structural-only mappings.
@@ -136,7 +136,7 @@ ADR_A3_MATERIALITY_USD = 100_000.0
 # small to call any mapping an outlier.
 ADR_A3_MIN_MAPPING_POPULATION = 10
 
-# Percentile-threshold customization for DQ-ADR-3, mirrors EPT E3's selectbox.
+# Percentile-threshold customization for DQ-ADR-3, mirrors EPT DQ-EPT-3's selectbox.
 # check_adr_a3 reads ``params[ADR_A3_THRESHOLD_PARAM]`` and falls back to
 # ``ADR_A3_PERCENTILE`` (P90) when the param is absent.
 ADR_A3_THRESHOLD_PARAM = "threshold_percentile"
@@ -178,7 +178,7 @@ ADR_A3_DETECT_UNIFORM_MAPPING_PARAM = "detect_uniform_mapping"
 #   4. fails the project iff its total ``QTY_QUANTITY`` is negative
 #      (row-level negatives are allowed; only the project sum is checked).
 # Every row of a failing project inherits the FAIL, same row-level /
-# group-verdict pattern as E6 / DQ-ADR-8.
+# group-verdict pattern as DQ-EPT-6 / DQ-ADR-8.
 #
 # Source columns after prefixing on the denormalized data product:
 #   - ``PLANVIEW_ID``       - pass-through, the project key.
@@ -398,7 +398,7 @@ ADR_A7_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "Extreme (3.0×IQR) - lenient"),
 )
 
-# Project-type segmentation toggle for DQ-ADR-7, mirrors the E6 toggle. When on,
+# Project-type segmentation toggle for DQ-ADR-7, mirrors the DQ-EPT-6 toggle. When on,
 # the (ITEM_TYPE, QTY_UOM) segment key is extended with a composite
 # ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from the Planview reference
 # (``VWS_GP_STANDARD_SHARE``) via ``PLANVIEW_ID → PROJECT_ID``. The IQR is
@@ -432,7 +432,7 @@ ADR_A7_SEGMENT_REQUIRED_COLUMNS = {
 # category, computes cross-discipline ratios, and is judged against the
 # population of the same ratio across all projects. Every row of a
 # project that fails any of its applicable ratios inherits the FAIL -
-# same row-level / group-verdict pattern as E6.
+# same row-level / group-verdict pattern as DQ-EPT-6.
 #
 # Source columns after prefixing on the denormalized data product:
 #   - ``ITEM_TYPE``      - pass-through from the primary item table.
@@ -452,7 +452,7 @@ ADR_A8_EXTREME_IQR_MULTIPLIER = 3.0
 # Minimum number of projects with a calculable ratio required before
 # IQR thresholds are derived for that ratio. Below this the ratio is
 # NOT_APPLICABLE for every project - too small a population to define
-# an outlier reliably (mirrors DQ-ADR-7 / E6 conventions).
+# an outlier reliably (mirrors DQ-ADR-7 / DQ-EPT-6 conventions).
 ADR_A8_MIN_POPULATION = 10
 
 # IQR-multiplier threshold customization for DQ-ADR-8. Step 4.2 UI exposes the
@@ -466,7 +466,7 @@ ADR_A8_THRESHOLD_CHOICES: Tuple[Tuple[float, str], ...] = (
     (3.0, "Extreme (3.0×IQR) - lenient"),
 )
 
-# Project-type segmentation toggle for DQ-ADR-8, mirrors the E6 / DQ-ADR-7 toggle.
+# Project-type segmentation toggle for DQ-ADR-8, mirrors the DQ-EPT-6 / DQ-ADR-7 toggle.
 # When on, the cross-discipline ratio population (one ratio value per
 # ``ROOT_ITEM_NAME``) is partitioned by the composite
 # ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
@@ -880,7 +880,7 @@ def check_adr_a1(df: pd.DataFrame) -> pd.Series:
 def check_adr_a2(df: pd.DataFrame) -> pd.Series:
     """DQ-ADR-2: Location + Estimate Date Present & Valid (ADR).
 
-    Mirrors EPT E2 against the ADR data product. Row passes when *all* hold:
+    Mirrors EPT DQ-EPT-2 against the ADR data product. Row passes when *all* hold:
     - ``COST_UPDATE`` (estimate basis date, in ADR) is non-null/non-blank
       (**Completeness**).
     - ``COST_UPDATE`` matches the fiscal quarter-year shape ``[1-4]Q\\d{4}``
@@ -1058,7 +1058,7 @@ def check_adr_a3(
     if project_scoped:
         # In project scope, rows lacking PLANVIEW_ID can't be assigned to a
         # project; they pass DQ-ADR-3 (DQ-ADR-2 already covers the missing-project gap)
-        # mirroring E3's project-scope handling.
+        # mirroring DQ-EPT-3's project-scope handling.
         has_valid_mapping &= _is_filled(df["PLANVIEW_ID"])
     if not has_valid_mapping.any():
         return pd.Series(True, index=df.index)
@@ -1108,7 +1108,7 @@ def check_adr_a3(
     if project_scoped:
         # Recompute P90 within each PLANVIEW_ID partition so projects with
         # genuinely fine-grained WBC discipline aren't dragged down by
-        # peers that aggregate aggressively, same construction as E3.
+        # peers that aggregate aggressively, same construction as DQ-EPT-3.
         planview_keys = pd.Index(
             [gid[0] for gid in metrics.index], name="planview"
         )
@@ -1521,7 +1521,7 @@ def check_adr_a7(
     ``params[ADR_A7_SEGMENT_BY_PROJECT_TYPE_PARAM]`` (bool, default False)
     extends the segment key with a composite ``(E05_DEPARTMENT, BUSINESS)``
     tuple looked up from ``VWS_GP_STANDARD_SHARE`` via
-    ``PLANVIEW_ID → PROJECT_ID`` (mirrors the E6 toggle). With it on the
+    ``PLANVIEW_ID → PROJECT_ID`` (mirrors the DQ-EPT-6 toggle). With it on the
     IQR is recomputed within each
     ``(ITEM_TYPE, QTY_UOM, E05_DEPARTMENT, BUSINESS)`` bucket so a
     deepwater FPSO is not pooled with an onshore refinery when judging
@@ -1534,7 +1534,7 @@ def check_adr_a7(
     reference dataset is unavailable.
 
     Schema-level missing columns make every row fail, mirroring the
-    convention used by E1 / E3 / E6 / DQ-ADR-5 / DQ-ADR-6.
+    convention used by DQ-EPT-1 / DQ-EPT-3 / DQ-EPT-6 / DQ-ADR-5 / DQ-ADR-6.
     """
     p = params or {}
     iqr_multiplier = _coerce_threshold(
@@ -1587,7 +1587,7 @@ def check_adr_a7(
         # Extend the segment key with the project-type tuple resolved via
         # PLANVIEW_ID. Rows whose project-type cannot be resolved (missing
         # PLANVIEW_ID, unmatched PROJECT_ID, or null/blank segment columns)
-        # become NOT_APPLICABLE → PASS, mirrors E6's unmatched-key
+        # become NOT_APPLICABLE → PASS, mirrors DQ-EPT-6's unmatched-key
         # convention.
         #
         # The lookup is pre-cleaned by ``_resolve_planview_segment_map``
@@ -1686,7 +1686,7 @@ def check_adr_a8(
     ``Q3 + 1.5*IQR``) are derived from that population, and a project
     is flagged for that ratio when its ratio falls outside the bounds.
 
-    Row-level verdict (interpretation #1, mirrors E6): a row **fails**
+    Row-level verdict (interpretation #1, mirrors DQ-EPT-6): a row **fails**
     iff its ``ROOT_ITEM_NAME`` is flagged on at least one ratio. Rows
     whose project is unknown (null/blank ``ROOT_ITEM_NAME``) pass, they cannot be assigned to a project group.
 
@@ -1708,7 +1708,7 @@ def check_adr_a8(
     False) partitions the per-ratio IQR baseline by the composite
     ``(E05_DEPARTMENT, BUSINESS)`` tuple looked up from
     ``VWS_GP_STANDARD_SHARE`` via ``PLANVIEW_ID → PROJECT_ID``, mirrors
-    the E6 / DQ-ADR-7 toggle. With it on, each project is tagged with its
+    the DQ-EPT-6 / DQ-ADR-7 toggle. With it on, each project is tagged with its
     archetype from the Planview reference and the IQR for each ratio is
     recomputed within each segment, so a deepwater FPSO is not pooled
     with an onshore refinery. Per-segment populations below

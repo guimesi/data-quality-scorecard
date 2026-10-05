@@ -166,13 +166,13 @@ def test_run_one_click_scores_all_cost_estimate_systems():
 def test_run_one_click_ept_score_invariants():
     """Deterministic invariants of a one-click EPT run, stronger than the bare
     0 <= score <= 100 bound: it is custom-only (no standard score), the overall
-    equals the custom score exactly, all seven EPT rules (E1-E7) are evaluated,
+    equals the custom score exactly, all seven EPT rules (DQ-EPT-1 … DQ-EPT-7) are evaluated,
     and the overall sits within the min/max of the per-rule pass rates (it is
     their equal-weight mean).
 
     A hard golden value is intentionally NOT pinned: the mock data builder
     regenerates different EPT values on every call, so the statistical rules
-    (E3/E6) and the overall shift run-to-run - the score is not per-call
+    (DQ-EPT-3/DQ-EPT-6) and the overall shift run-to-run - the score is not per-call
     deterministic despite ARCHITECTURE.md describing the mock data as deterministic
     (flagged separately). That non-determinism is exactly why the sibling test
     asserts only the 0-100 bound."""
@@ -184,7 +184,7 @@ def test_run_one_click_ept_score_invariants():
     assert sc.custom_score is not None
     assert sc.overall_score == sc.custom_score       # custom-only identity (exact)
     rates = sc.custom_rule_pass_rates
-    assert len(rates) == 7                            # E1..E7 all evaluated
+    assert len(rates) == 7                            # DQ-EPT-1..DQ-EPT-7 all evaluated
     # The overall is the equal-weight combination of the rule pass rates, so it
     # must lie within their range regardless of the (varying) data values.
     assert min(rates.values()) <= sc.overall_score <= max(rates.values())

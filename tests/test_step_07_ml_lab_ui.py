@@ -570,7 +570,7 @@ def test_weight_sensitivity_empty_when_no_standard_assignments():
     cfg = DataProductConfig(
         system_code="EPT", cdes=["PLANVIEW_ID"], assignments=[],
         dqr_sources=["custom"], source_weights={"custom": 100.0},
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)],
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
 

@@ -38,16 +38,16 @@ def test_dp_block_preserves_existing_weight_for_selected_rule():
 
     cfg = DataProductConfig(
         system_code="EPT",
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=42.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=42.0)],
     )
     fake_st = _make_fake_st(
-        checkboxes={"custom_EPT_E1_enabled": True},
+        checkboxes={"custom_EPT_DQ-EPT-1_enabled": True},
     )
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("EPT", cfg)
 
     assert len(cfg.custom_assignments) == 1
-    assert cfg.custom_assignments[0].rule_id == "E1"
+    assert cfg.custom_assignments[0].rule_id == "DQ-EPT-1"
     assert cfg.custom_assignments[0].weight == 42.0
 
 
@@ -59,10 +59,10 @@ def test_dp_block_drops_unchecked_rules():
 
     cfg = DataProductConfig(
         system_code="EPT",
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=42.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=42.0)],
     )
     fake_st = _make_fake_st(
-        checkboxes={"custom_EPT_E1_enabled": False},
+        checkboxes={"custom_EPT_DQ-EPT-1_enabled": False},
     )
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("EPT", cfg)
@@ -148,70 +148,70 @@ def test_nav_restart_click_calls_restart_app():
 
 
 # ---------------------------------------------------------------------------
-# Configuration-driven rendering: E4 + E7 selection state and rule_card
+# Configuration-driven rendering: DQ-EPT-4 + DQ-EPT-7 selection state and rule_card
 # ---------------------------------------------------------------------------
 
 def test_dp_block_user_can_select_e4():
-    """Scenario 8: ticking E4 produces a CustomDQRAssignment with rule_id="E4"."""
+    """Scenario 8: ticking DQ-EPT-4 produces a CustomDQRAssignment with rule_id="DQ-EPT-4"."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import DataProductConfig
 
     cfg = DataProductConfig(system_code="EPT", custom_assignments=[])
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E4_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-4_enabled": True})
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("EPT", cfg)
-    assert [a.rule_id for a in cfg.custom_assignments] == ["E4"]
+    assert [a.rule_id for a in cfg.custom_assignments] == ["DQ-EPT-4"]
 
 
 def test_dp_block_user_can_unselect_e4():
-    """Scenario 8: unticking E4 removes it from custom_assignments."""
+    """Scenario 8: unticking DQ-EPT-4 removes it from custom_assignments."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import CustomDQRAssignment, DataProductConfig
 
     cfg = DataProductConfig(
         system_code="EPT",
-        custom_assignments=[CustomDQRAssignment(rule_id="E4", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-4", weight=100)],
     )
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E4_enabled": False})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-4_enabled": False})
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("EPT", cfg)
     assert cfg.custom_assignments == []
 
 
 def test_dp_block_user_can_select_e7():
-    """Scenario 9: ticking E7 produces a CustomDQRAssignment with rule_id="E7"."""
+    """Scenario 9: ticking DQ-EPT-7 produces a CustomDQRAssignment with rule_id="DQ-EPT-7"."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import DataProductConfig
 
     cfg = DataProductConfig(system_code="EPT", custom_assignments=[])
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E7_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-7_enabled": True})
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("EPT", cfg)
-    assert [a.rule_id for a in cfg.custom_assignments] == ["E7"]
+    assert [a.rule_id for a in cfg.custom_assignments] == ["DQ-EPT-7"]
 
 
 def test_dp_block_user_can_unselect_e7():
-    """Scenario 9: unticking E7 removes it from custom_assignments."""
+    """Scenario 9: unticking DQ-EPT-7 removes it from custom_assignments."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import CustomDQRAssignment, DataProductConfig
 
     cfg = DataProductConfig(
         system_code="EPT",
-        custom_assignments=[CustomDQRAssignment(rule_id="E7", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-7", weight=100)],
     )
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E7_enabled": False})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-7_enabled": False})
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("EPT", cfg)
     assert cfg.custom_assignments == []
 
 
 def test_render_rule_card_e7_displays_reference_block():
-    """Scenario 10: E7's rule card markdown includes the reference dataset
+    """Scenario 10: DQ-EPT-7's rule card markdown includes the reference dataset
     metadata (source_column, reference_dataset, reference_column)."""
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e7 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E7")
+    e7 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-7")
     fake_st = _make_fake_st()
     captured_markdown = []
 
@@ -239,7 +239,7 @@ def test_missing_required_cdes_returns_empty_when_all_selected():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
+    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
     missing = s4_2._missing_required_cdes(
         e1, ["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN", "EXTRA_CDE"]
     )
@@ -252,7 +252,7 @@ def test_missing_required_cdes_lists_only_unselected_columns():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
+    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
     missing = s4_2._missing_required_cdes(e1, ["CODE_OF_RESOURCE"])
     assert missing == ["STANDARD_ACTIVITY_BREAKDOWN"]
 
@@ -271,24 +271,24 @@ def test_missing_required_cdes_handles_rule_with_no_required_columns():
 
 
 def test_dp_block_returns_invalid_when_required_cde_missing():
-    """Selecting E1 without any CDEs picked → block flag + gap reported."""
+    """Selecting DQ-EPT-1 without any CDEs picked → block flag + gap reported."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import DataProductConfig
 
     cfg = DataProductConfig(system_code="EPT", cdes=[], custom_assignments=[])
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
     with patch.object(s4_2, "st", fake_st):
         valid, gaps = s4_2._render_dp_block("EPT", cfg)
     assert valid is False
     rule_ids = [g[0] for g in gaps]
-    assert "E1" in rule_ids
-    e1_missing = dict(gaps)["E1"]
+    assert "DQ-EPT-1" in rule_ids
+    e1_missing = dict(gaps)["DQ-EPT-1"]
     assert "CODE_OF_RESOURCE" in e1_missing
     assert "STANDARD_ACTIVITY_BREAKDOWN" in e1_missing
 
 
 def test_dp_block_valid_when_all_required_cdes_present():
-    """Selecting E1 with both required CDEs picked → no gaps, valid."""
+    """Selecting DQ-EPT-1 with both required CDEs picked → no gaps, valid."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import DataProductConfig
 
@@ -297,7 +297,7 @@ def test_dp_block_valid_when_all_required_cdes_present():
         cdes=["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         custom_assignments=[],
     )
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
     with patch.object(s4_2, "st", fake_st):
         valid, gaps = s4_2._render_dp_block("EPT", cfg)
     assert valid is True
@@ -305,7 +305,7 @@ def test_dp_block_valid_when_all_required_cdes_present():
 
 
 def test_dp_block_validates_each_selected_rule_independently():
-    """Multiple rules selected: E1 covered, E4 not → block, only E4 in gaps."""
+    """Multiple rules selected: DQ-EPT-1 covered, DQ-EPT-4 not → block, only DQ-EPT-4 in gaps."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import DataProductConfig
 
@@ -315,15 +315,15 @@ def test_dp_block_validates_each_selected_rule_independently():
         custom_assignments=[],
     )
     fake_st = _make_fake_st(checkboxes={
-        "custom_EPT_E1_enabled": True,
-        "custom_EPT_E4_enabled": True,  # WBC_LEVEL_1 is missing
+        "custom_EPT_DQ-EPT-1_enabled": True,
+        "custom_EPT_DQ-EPT-4_enabled": True,  # WBC_LEVEL_1 is missing
     })
     with patch.object(s4_2, "st", fake_st):
         valid, gaps = s4_2._render_dp_block("EPT", cfg)
     assert valid is False
     rule_ids = [g[0] for g in gaps]
-    assert rule_ids == ["E4"]
-    assert dict(gaps)["E4"] == ["WBC_LEVEL_1"]
+    assert rule_ids == ["DQ-EPT-4"]
+    assert dict(gaps)["DQ-EPT-4"] == ["WBC_LEVEL_1"]
 
 
 def test_dp_block_unselected_rule_does_not_block_even_if_cdes_missing():
@@ -341,19 +341,19 @@ def test_dp_block_unselected_rule_does_not_block_even_if_cdes_missing():
 
 
 def test_dp_block_validation_updates_dynamically_when_cde_added():
-    """Render once with E1 selected and no CDEs (invalid), then a re-render
+    """Render once with DQ-EPT-1 selected and no CDEs (invalid), then a re-render
     after the user adds the required CDEs flips the validation to valid -
     confirming the UI reacts to ``cfg.cdes`` mutations across reruns."""
     import ui.step_04_2_custom_dqr as s4_2
     from src.models import DataProductConfig
 
     cfg = DataProductConfig(system_code="EPT", cdes=[], custom_assignments=[])
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
 
     with patch.object(s4_2, "st", fake_st):
         valid_before, gaps_before = s4_2._render_dp_block("EPT", cfg)
     assert valid_before is False
-    assert gaps_before and gaps_before[0][0] == "E1"
+    assert gaps_before and gaps_before[0][0] == "DQ-EPT-1"
 
     # Simulate the user going back to Step 3 and adding the required CDEs.
     cfg.cdes = ["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"]
@@ -383,8 +383,8 @@ def test_render_rule_card_emits_warning_when_required_cde_missing():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
     fake_st.warning = MagicMock()
     fake_st.success = MagicMock()
     with patch.object(s4_2, "st", fake_st):
@@ -403,8 +403,8 @@ def test_render_rule_card_emits_success_when_all_required_cdes_present():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
     fake_st.warning = MagicMock()
     fake_st.success = MagicMock()
     with patch.object(s4_2, "st", fake_st):
@@ -424,8 +424,8 @@ def test_render_rule_card_no_validation_badge_when_unticked():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": False})
+    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": False})
     fake_st.warning = MagicMock()
     fake_st.success = MagicMock()
     with patch.object(s4_2, "st", fake_st):
@@ -436,17 +436,17 @@ def test_render_rule_card_no_validation_badge_when_unticked():
 
 
 # ---------------------------------------------------------------------------
-# Per-rule options (E3 project-scope toggle)
+# Per-rule options (DQ-EPT-3 project-scope toggle)
 # ---------------------------------------------------------------------------
 
 def test_render_rule_card_returns_default_params_when_no_options_selected():
     """A card for a rule without options returns an empty params dict so
-    legacy assignments (e.g. E1) keep flowing through unchanged."""
+    legacy assignments (e.g. DQ-EPT-1) keep flowing through unchanged."""
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E1")
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    e1 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-1")
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
             "EPT", e1, selected=True,
@@ -457,7 +457,7 @@ def test_render_rule_card_returns_default_params_when_no_options_selected():
 
 
 def test_render_rule_card_e3_renders_project_scope_toggle_off_by_default():
-    """E3 selected with no prior params → the project-scope toggle is
+    """DQ-EPT-3 selected with no prior params → the project-scope toggle is
     rendered with its default (off), and params reflect that plus the
     recommended threshold (P90)."""
     import ui.step_04_2_custom_dqr as s4_2
@@ -468,8 +468,8 @@ def test_render_rule_card_e3_renders_project_scope_toggle_off_by_default():
         EPT_E3_THRESHOLD_PARAM,
     )
 
-    e3 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E3")
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E3_enabled": True})
+    e3 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-3")
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-3_enabled": True})
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
             "EPT", e3, selected=True,
@@ -496,10 +496,10 @@ def test_render_rule_card_e3_persists_project_scope_toggle_on():
         EPT_E3_THRESHOLD_PARAM,
     )
 
-    e3 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E3")
+    e3 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-3")
     fake_st = _make_fake_st(
-        checkboxes={"custom_EPT_E3_enabled": True},
-        toggles={f"custom_EPT_E3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}": True},
+        checkboxes={"custom_EPT_DQ-EPT-3_enabled": True},
+        toggles={f"custom_EPT_DQ-EPT-3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}": True},
     )
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
@@ -522,8 +522,8 @@ def test_render_rule_card_e3_toggle_hidden_when_unticked():
     import ui.step_04_2_custom_dqr as s4_2
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
-    e3 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E3")
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E3_enabled": False})
+    e3 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-3")
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-3_enabled": False})
     fake_st.toggle = MagicMock()
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
@@ -551,8 +551,8 @@ def test_dp_block_persists_e3_project_scope_param_to_assignment():
         custom_assignments=[],
     )
     fake_st = _make_fake_st(
-        checkboxes={"custom_EPT_E3_enabled": True},
-        toggles={f"custom_EPT_E3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}": True},
+        checkboxes={"custom_EPT_DQ-EPT-3_enabled": True},
+        toggles={f"custom_EPT_DQ-EPT-3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}": True},
     )
     with patch.object(s4_2, "st", fake_st):
         valid, gaps = s4_2._render_dp_block("EPT", cfg)
@@ -560,7 +560,7 @@ def test_dp_block_persists_e3_project_scope_param_to_assignment():
     assert valid is True
     assert len(cfg.custom_assignments) == 1
     a = cfg.custom_assignments[0]
-    assert a.rule_id == "E3"
+    assert a.rule_id == "DQ-EPT-3"
     # Threshold defaults to the recommended P90; project scope reflects toggle.
     from src.custom_dqr_engine import (
         EPT_E3_DETECT_UNIFORM_MAPPING_PARAM,
@@ -591,14 +591,14 @@ def test_dp_block_e3_project_scope_flags_planview_id_gap_when_not_a_cde():
         custom_assignments=[],
     )
     fake_st = _make_fake_st(
-        checkboxes={"custom_EPT_E3_enabled": True},
-        toggles={f"custom_EPT_E3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}": True},
+        checkboxes={"custom_EPT_DQ-EPT-3_enabled": True},
+        toggles={f"custom_EPT_DQ-EPT-3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}": True},
     )
     with patch.object(s4_2, "st", fake_st):
         valid, gaps = s4_2._render_dp_block("EPT", cfg)
 
     assert valid is False
-    assert dict(gaps)["E3"] == ["PLANVIEW_ID"]
+    assert dict(gaps)["DQ-EPT-3"] == ["PLANVIEW_ID"]
 
 
 def test_dp_block_e3_global_scope_does_not_require_planview_id_cde():
@@ -616,7 +616,7 @@ def test_dp_block_e3_global_scope_does_not_require_planview_id_cde():
         custom_assignments=[],
     )
     fake_st = _make_fake_st(
-        checkboxes={"custom_EPT_E3_enabled": True},
+        checkboxes={"custom_EPT_DQ-EPT-3_enabled": True},
         # No toggles override → defaults apply (project_scoped=False).
     )
     with patch.object(s4_2, "st", fake_st):
@@ -641,7 +641,7 @@ def test_dp_block_round_trips_existing_e3_params_across_reruns():
         ],
         custom_assignments=[
             CustomDQRAssignment(
-                rule_id="E3",
+                rule_id="DQ-EPT-3",
                 weight=33.0,
                 params={EPT_E3_PROJECT_SCOPED_PARAM: True},
             )
@@ -654,13 +654,13 @@ def test_dp_block_round_trips_existing_e3_params_across_reruns():
         # Echo the supplied default, the user didn't flip it this rerun.
         return value
 
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E3_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-3_enabled": True})
     fake_st.toggle = capture_toggle
 
     with patch.object(s4_2, "st", fake_st):
         s4_2._render_dp_block("EPT", cfg)
 
-    toggle_key = f"custom_EPT_E3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}"
+    toggle_key = f"custom_EPT_DQ-EPT-3_opt_{EPT_E3_PROJECT_SCOPED_PARAM}"
     assert captured[toggle_key] is True
     from src.custom_dqr_engine import (
         EPT_E3_DETECT_UNIFORM_MAPPING_PARAM,
@@ -683,11 +683,11 @@ def test_render_blocks_progression_when_any_dp_invalid():
 
     cfg_ept = DataProductConfig(
         system_code="EPT",
-        cdes=[],  # no CDEs picked → E1 selection will be invalid
+        cdes=[],  # no CDEs picked → DQ-EPT-1 selection will be invalid
         custom_assignments=[],
         dqr_sources=["custom"],
     )
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
     fake_st.session_state["configs"] = {"EPT": cfg_ept}
     fake_st.error = MagicMock()
 
@@ -707,7 +707,7 @@ def test_render_blocks_progression_when_any_dp_invalid():
     fake_st.error.assert_called_once()
     err_msg = fake_st.error.call_args.args[0]
     assert "EPT" in err_msg
-    assert "E1" in err_msg
+    assert "DQ-EPT-1" in err_msg
     assert "CODE_OF_RESOURCE" in err_msg
     # Sanity check the real _nav still exists (no accidental rebind).
     assert s4_2._nav is real_nav or callable(real_nav)
@@ -725,7 +725,7 @@ def test_render_allows_progression_when_all_selections_valid():
         custom_assignments=[],
         dqr_sources=["custom"],
     )
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E1_enabled": True})
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-1_enabled": True})
     fake_st.session_state["configs"] = {"EPT": cfg_ept}
     fake_st.error = MagicMock()
 
@@ -750,7 +750,7 @@ def test_render_allows_progression_when_all_selections_valid():
 
 
 def test_every_statistical_outlier_rule_exposes_threshold_select_option():
-    """Each statistical-outlier rule (E3, E6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8) must expose a
+    """Each statistical-outlier rule (DQ-EPT-3, DQ-EPT-6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8) must expose a
     selectbox threshold option so the user can override the recommended
     default at Step 4.2."""
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
@@ -758,7 +758,7 @@ def test_every_statistical_outlier_rule_exposes_threshold_select_option():
     ept = {r.id: r for r in get_available_custom_dqr_rules("EPT")}
     adr = {r.id: r for r in get_available_custom_dqr_rules("ADR", include_inactive=True)}
     for code, by_id, rule_ids in (
-        ("EPT", ept, ("E3", "E6")),
+        ("EPT", ept, ("DQ-EPT-3", "DQ-EPT-6")),
         ("ADR", adr, ("DQ-ADR-3",)),
     ):
         for rid in rule_ids:
@@ -776,7 +776,7 @@ def test_every_statistical_outlier_rule_exposes_threshold_select_option():
 
 
 def test_render_rule_card_e6_renders_threshold_select_with_default():
-    """E6 selected with no prior params → the IQR-multiplier selectbox is
+    """DQ-EPT-6 selected with no prior params → the IQR-multiplier selectbox is
     rendered, the segment-by-project-type toggle defaults to off, and the
     params dict captures both the recommended threshold (1.5) and the
     segmentation default (False)."""
@@ -788,8 +788,8 @@ def test_render_rule_card_e6_renders_threshold_select_with_default():
         EPT_E6_THRESHOLD_PARAM,
     )
 
-    e6 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E6")
-    fake_st = _make_fake_st(checkboxes={"custom_EPT_E6_enabled": True})
+    e6 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-6")
+    fake_st = _make_fake_st(checkboxes={"custom_EPT_DQ-EPT-6_enabled": True})
     with patch.object(s4_2, "st", fake_st):
         selected, params = s4_2._render_rule_card(
             "EPT", e6, selected=True,
@@ -813,11 +813,11 @@ def test_render_rule_card_e6_persists_segmentation_toggle_on():
         EPT_E6_THRESHOLD_PARAM,
     )
 
-    e6 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "E6")
+    e6 = next(r for r in get_available_custom_dqr_rules("EPT") if r.id == "DQ-EPT-6")
     fake_st = _make_fake_st(
-        checkboxes={"custom_EPT_E6_enabled": True},
+        checkboxes={"custom_EPT_DQ-EPT-6_enabled": True},
         toggles={
-            f"custom_EPT_E6_opt_{EPT_E6_SEGMENT_BY_PROJECT_TYPE_PARAM}": True
+            f"custom_EPT_DQ-EPT-6_opt_{EPT_E6_SEGMENT_BY_PROJECT_TYPE_PARAM}": True
         },
     )
     with patch.object(s4_2, "st", fake_st):

@@ -211,7 +211,7 @@ def _build_profile_grid(
     ``required_by_rule`` (column → list of Custom DQR rule IDs) drives the
     ``Custom DQRs`` column: rows where the source column powers at least
     one rule are flagged with the 🎯 cue followed by the rule IDs (e.g.
-    ``🎯 E1, E3``); other rows leave the cell empty.
+    ``🎯 DQ-EPT-1, DQ-EPT-3``); other rows leave the cell empty.
 
     The ``Sample`` cell shows the first 3 *distinct* non-null values of
     each source column (via :func:`_distinct_sample_for`) instead of the
@@ -467,7 +467,7 @@ def render() -> None:
         "values) is shown inline so you can decide without leaving the grid. "
         f"Columns flagged {_CUSTOM_DQR_FLAG} in the **Custom DQRs** column "
         "are required by one or more Custom DQR rules you can apply in Step "
-        "4.2 - the cell lists the rule IDs (e.g. `E1, E3`) so you know which "
+        "4.2 - the cell lists the rule IDs (e.g. `DQ-EPT-1, DQ-EPT-3`) so you know which "
         "rules each pick will enable. Selected columns appear as badges above "
         "the grid - hover any badge for the column's full profile.",
     )

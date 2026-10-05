@@ -111,8 +111,8 @@ def test_scorecard_duplicate_custom_rule_id_raises_clear_error():
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=50),
-            CustomDQRAssignment(rule_id="E1", weight=50),
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=50),
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=50),
         ],
     )
     with pytest.raises(ValueError, match="Duplicate Custom rule_id"):
@@ -185,16 +185,16 @@ def test_scorecard_custom_only_explicit_source():
         system_code="EPT",
         cdes=["PLANVIEW_ID"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
     assert result.standard_score is None
-    # 3 of 4 rows pass E1 (one row has null COR)
+    # 3 of 4 rows pass DQ-EPT-1 (one row has null COR)
     assert result.custom_score == 75.0
     assert result.overall_score == 75.0
-    assert result.custom_rule_pass_rates["E1"] == 75.0
+    assert result.custom_rule_pass_rates["DQ-EPT-1"] == 75.0
 
 
 def test_scorecard_custom_only_empty_assignments_yields_zero():
@@ -226,7 +226,7 @@ def test_scorecard_combined_70_30_matches_linear_combination():
         system_code="EPT",
         cdes=["PLANVIEW_ID"],
         assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=100)],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 70.0, "custom": 30.0},
     )
@@ -238,7 +238,7 @@ def test_scorecard_combined_70_30_matches_linear_combination():
 
 
 def test_scorecard_includes_e4_when_selected():
-    """Scenario 27 / 29: E4 selected → its pass rate appears in the result
+    """Scenario 27 / 29: DQ-EPT-4 selected → its pass rate appears in the result
     and a failure on WBC_LEVEL_1 lowers the Custom score."""
     from src.models import CustomDQRAssignment
 
@@ -251,18 +251,18 @@ def test_scorecard_includes_e4_when_selected():
         system_code="EPT",
         cdes=[],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E4", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-4", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
-    # 2 of 4 rows pass E4 → 50%
-    assert result.custom_rule_pass_rates["E4"] == 50.0
+    # 2 of 4 rows pass DQ-EPT-4 → 50%
+    assert result.custom_rule_pass_rates["DQ-EPT-4"] == 50.0
     assert result.custom_score == 50.0
 
 
 def test_scorecard_includes_e7_when_selected():
-    """Scenario 28 / 30: E7 selected → its pass rate is reflected and
+    """Scenario 28 / 30: DQ-EPT-7 selected → its pass rate is reflected and
     PLANVIEW_ID linkage failures lower the Custom score."""
     from src.models import CustomDQRAssignment
 
@@ -274,17 +274,17 @@ def test_scorecard_includes_e7_when_selected():
         system_code="EPT",
         cdes=[],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E7", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-7", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
     # Only the first row (PV-00001) passes - null and orphan both fail.
-    assert round(result.custom_rule_pass_rates["E7"], 2) == round(100 / 3, 2)
+    assert round(result.custom_rule_pass_rates["DQ-EPT-7"], 2) == round(100 / 3, 2)
 
 
 def test_scorecard_e7_not_evaluated_when_reference_unavailable(monkeypatch):
-    """Scenario 22: when project_master is unavailable, E7 is recorded as
+    """Scenario 22: when project_master is unavailable, DQ-EPT-7 is recorded as
     not_evaluated and contributes 0 to the score (instead of silently
     passing)."""
     import src.reference_data as ref_mod
@@ -298,19 +298,19 @@ def test_scorecard_e7_not_evaluated_when_reference_unavailable(monkeypatch):
         system_code="EPT",
         cdes=[],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E7", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-7", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
-    assert "E7" in result.not_evaluated_custom_rules
-    assert "E7" not in result.custom_rule_pass_rates
+    assert "DQ-EPT-7" in result.not_evaluated_custom_rules
+    assert "DQ-EPT-7" not in result.custom_rule_pass_rates
     assert result.custom_score == 0.0
 
 
 def test_scorecard_combines_standard_and_custom_with_e4_and_e7():
     """Scenario 31: final combined score correctly applies Standard vs Custom
-    source-level weights when E4 + E7 are both selected."""
+    source-level weights when DQ-EPT-4 + DQ-EPT-7 are both selected."""
     from src.models import CustomDQRAssignment
 
     df = pd.DataFrame({
@@ -323,8 +323,8 @@ def test_scorecard_combines_standard_and_custom_with_e4_and_e7():
         cdes=["PLANVIEW_ID"],
         assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=100)],
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E4", weight=50),
-            CustomDQRAssignment(rule_id="E7", weight=50),
+            CustomDQRAssignment(rule_id="DQ-EPT-4", weight=50),
+            CustomDQRAssignment(rule_id="DQ-EPT-7", weight=50),
         ],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 60.0, "custom": 40.0},
@@ -332,8 +332,8 @@ def test_scorecard_combines_standard_and_custom_with_e4_and_e7():
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
     expected = 0.6 * result.standard_score + 0.4 * result.custom_score
     assert round(result.overall_score, 6) == round(expected, 6)
-    assert "E4" in result.custom_rule_pass_rates
-    assert "E7" in result.custom_rule_pass_rates
+    assert "DQ-EPT-4" in result.custom_rule_pass_rates
+    assert "DQ-EPT-7" in result.custom_rule_pass_rates
 
 
 def test_scorecard_combined_linearity_independent_of_split():
@@ -349,7 +349,7 @@ def test_scorecard_combined_linearity_independent_of_split():
             system_code="EPT",
             cdes=["PLANVIEW_ID"],
             assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=100)],
-            custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+            custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
             dqr_sources=["standard", "custom"],
             source_weights={"standard": float(w_std), "custom": float(w_cus)},
         )
@@ -522,7 +522,7 @@ def test_source_weights_renormalize_when_not_summing_to_100():
     raw 0.3/0.3 weights would give)."""
     df = pd.DataFrame({
         "PLANVIEW_ID": ["P1", "P2"],
-        "CODE_OF_RESOURCE": ["a", None],            # row 2 fails E1
+        "CODE_OF_RESOURCE": ["a", None],            # row 2 fails DQ-EPT-1
         "STANDARD_ACTIVITY_BREAKDOWN": ["x", "y"],
     })
     dp = DataProduct("EPT", "EPT", df, ["T"], profiles=profile_dataframe(df))
@@ -530,7 +530,7 @@ def test_source_weights_renormalize_when_not_summing_to_100():
         system_code="EPT",
         cdes=["PLANVIEW_ID", "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=100)],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 30.0, "custom": 30.0},
     )
@@ -555,7 +555,7 @@ def test_source_weights_zero_total_falls_back_to_zero():
         system_code="EPT",
         cdes=["PLANVIEW_ID", "CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=100)],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 0.0, "custom": 0.0},
     )
@@ -633,8 +633,8 @@ def test_cde_scores_custom_only_populates_required_columns():
     """When only the Custom source is selected, the dashboard's "By CDE"
     tab must surface a meaningful score for every CDE covered by a custom
     rule (instead of zeros). Each required column of the custom rule is
-    treated as a CDE the rule contributes to - E1 reads COR and SAB, so
-    both CDEs should equal E1's pass rate."""
+    treated as a CDE the rule contributes to - DQ-EPT-1 reads COR and SAB, so
+    both CDEs should equal DQ-EPT-1's pass rate."""
     from src.models import CustomDQRAssignment
 
     df = _ept_df_one_e1_failure()
@@ -643,20 +643,20 @@ def test_cde_scores_custom_only_populates_required_columns():
         system_code="EPT",
         cdes=["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
-    # E1 pass rate is 75% (3 of 4 rows fully populated).
-    assert result.custom_rule_pass_rates["E1"] == 75.0
+    # DQ-EPT-1 pass rate is 75% (3 of 4 rows fully populated).
+    assert result.custom_rule_pass_rates["DQ-EPT-1"] == 75.0
     assert result.cde_scores["CODE_OF_RESOURCE"] == 75.0
     assert result.cde_scores["STANDARD_ACTIVITY_BREAKDOWN"] == 75.0
 
 
 def test_dimension_scores_custom_only_uses_rule_type():
     """``dimension_scores`` rolls up Custom rules by their ``rule.type``.
-    E1 is type ``Completeness`` - when only Custom is selected the
+    DQ-EPT-1 is type ``Completeness`` - when only Custom is selected the
     Completeness dimension still lights up on the By-Dimension tab."""
     from src.models import CustomDQRAssignment
 
@@ -666,7 +666,7 @@ def test_dimension_scores_custom_only_uses_rule_type():
         system_code="EPT",
         cdes=["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
@@ -694,14 +694,14 @@ def test_cde_scores_blend_standard_and_custom_on_shared_cde():
         assignments=[
             DQRAssignment("CODE_OF_RESOURCE", "Completeness", weight=100),
         ],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 50.0, "custom": 50.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
-    # COR: Standard rule = 100% (no nulls) + Custom E1 = 75% → mean 87.5
+    # COR: Standard rule = 100% (no nulls) + Custom DQ-EPT-1 = 75% → mean 87.5
     assert round(result.cde_scores["CODE_OF_RESOURCE"], 2) == 87.5
-    # SAB: only Custom E1 contributes → 75
+    # SAB: only Custom DQ-EPT-1 contributes → 75
     assert round(result.cde_scores["STANDARD_ACTIVITY_BREAKDOWN"], 2) == 75.0
 
 
@@ -720,13 +720,13 @@ def test_cde_scores_skip_not_evaluated_custom_rule(monkeypatch):
         system_code="EPT",
         cdes=["PLANVIEW_ID"],
         assignments=[DQRAssignment("PLANVIEW_ID", "Completeness", weight=100)],
-        custom_assignments=[CustomDQRAssignment(rule_id="E7", weight=100)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-7", weight=100)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 50.0, "custom": 50.0},
     )
     result = compute_scorecard(dp, cfg, threshold_green=80, threshold_yellow=60)
-    assert "E7" in result.not_evaluated_custom_rules
-    # Standard Completeness on PLANVIEW_ID = 2/3 ≈ 66.67. E7 (not evaluated)
+    assert "DQ-EPT-7" in result.not_evaluated_custom_rules
+    # Standard Completeness on PLANVIEW_ID = 2/3 ≈ 66.67. DQ-EPT-7 (not evaluated)
     # is excluded from the mean so the per-CDE score equals the Standard
     # rule's pass rate, not a 0-inflated value.
     assert round(result.cde_scores["PLANVIEW_ID"], 2) == round(200 / 3, 2)

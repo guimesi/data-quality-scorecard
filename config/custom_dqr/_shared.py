@@ -6,7 +6,7 @@ Holds:
   the data shapes that describe a rule card.
 - :func:`_percentile_threshold_option` / :func:`_uniform_mapping_option` /
   :func:`_iqr_threshold_option`: builders for the recurring toggles and
-  selectboxes (centralised so E3 / DQ-ADR-3 and E6 / DQ-ADR-7 / DQ-ADR-8 / AC7 / AC8 stay in
+  selectboxes (centralised so DQ-EPT-3 / DQ-ADR-3 and DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8 / DQ-ACCE-7 / DQ-ACCE-8 stay in
   lockstep).
 - :func:`effective_required_columns`: composes a rule's static
   ``required_columns`` with extras contributed by enabled options. Used by
@@ -92,7 +92,7 @@ class CustomRuleDef:
     # the option block for rules that declare at least one entry.
     options: List[CustomRuleOption] = field(default_factory=list)
     # Per-rule single-choice options (``st.selectbox``). Used for the
-    # statistical-outlier threshold pickers (E3 / E6 / DQ-ADR-3 / DQ-ADR-7 / DQ-ADR-8) where
+    # statistical-outlier threshold pickers (DQ-EPT-3 / DQ-EPT-6 / DQ-ADR-3 / DQ-ADR-7 / DQ-ADR-8) where
     # the user picks one value from a small, curated list. Defaults to
     # empty so non-outlier rules don't render a selectbox they don't need.
     select_options: List[CustomRuleSelectOption] = field(default_factory=list)
@@ -124,7 +124,7 @@ _IQR_OPTION_DESCRIPTION = (
 def _percentile_threshold_option(
     param: str, choices: Tuple[Tuple[float, str], ...], default: float
 ) -> CustomRuleSelectOption:
-    """Build the percentile-threshold selectbox shared by E3 and DQ-ADR-3.
+    """Build the percentile-threshold selectbox shared by DQ-EPT-3 and DQ-ADR-3.
 
     Centralised so the two rules stay in lockstep on label / help / default
     semantics - there is one recommendation, surfaced identically wherever
@@ -159,7 +159,7 @@ _UNIFORM_MAPPING_OPTION_DESCRIPTION = (
 
 
 def _uniform_mapping_option(param: str) -> "CustomRuleOption":
-    """Build the uniform-1:1 mapping toggle shared by E3 and DQ-ADR-3.
+    """Build the uniform-1:1 mapping toggle shared by DQ-EPT-3 and DQ-ADR-3.
 
     Centralised so the two rules stay in lockstep on label / help / default
     - there is one recommendation, surfaced identically wherever the
@@ -180,7 +180,7 @@ def _uniform_mapping_option(param: str) -> "CustomRuleOption":
 def _iqr_threshold_option(
     param: str, choices: Tuple[Tuple[float, str], ...], default: float
 ) -> CustomRuleSelectOption:
-    """Build the IQR-multiplier selectbox shared by E6 / DQ-ADR-7 / DQ-ADR-8."""
+    """Build the IQR-multiplier selectbox shared by DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8."""
     return CustomRuleSelectOption(
         key=param,
         label="IQR multiplier",
@@ -200,12 +200,15 @@ def _iqr_threshold_option(
 # them through :func:`canonical_custom_rule_id` before looking the rule
 # up in the catalog.
 LEGACY_CUSTOM_RULE_IDS: Dict[str, str] = {
-    f"A{i}": f"DQ-ADR-{i}" for i in range(1, 10)
+    **{f"A{i}": f"DQ-ADR-{i}" for i in range(1, 10)},
+    **{f"AC{i}": f"DQ-ACCE-{i}" for i in range(1, 9)},
+    **{f"E{i}": f"DQ-EPT-{i}" for i in range(1, 8)},
 }
 
 
 def canonical_custom_rule_id(rule_id: object) -> str:
-    """Map a legacy custom rule id (``A1`` … ``A9``) to its current id;
+    """Map a legacy custom rule id (``A1`` … ``A9``, ``AC1`` … ``AC8``,
+    ``E1`` … ``E7``) to its current id;
     any other value is returned unchanged (as a stripped string)."""
     text = "" if rule_id is None else str(rule_id).strip()
     return LEGACY_CUSTOM_RULE_IDS.get(text, text)
@@ -217,7 +220,7 @@ def effective_required_columns(
     """Compose the rule's static ``required_columns`` with any extras
     contributed by enabled options. The Step 4.2 CDE-coverage check uses
     this to validate against the *active* configuration (so a user that
-    flips on E3's project-scoped toggle is also told to add ``PLANVIEW_ID``
+    flips on DQ-EPT-3's project-scoped toggle is also told to add ``PLANVIEW_ID``
     to the CDEs)."""
     out = dict(rule.required_columns)
     if not rule.options:

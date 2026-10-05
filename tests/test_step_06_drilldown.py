@@ -204,7 +204,7 @@ def test_render_rule_drilldown_not_computed_shows_info(monkeypatch):
 # ------------------------------------------------- custom-only (One-click)
 
 def _custom_only_dp_cfg_result():
-    """EPT scored with only the Custom source (One-click shape): E1 fails
+    """EPT scored with only the Custom source (One-click shape): DQ-EPT-1 fails
     on row 1 (null CODE_OF_RESOURCE); ``cfg.assignments`` is empty."""
     df = pd.DataFrame({
         "PLANVIEW_ID": ["PV-001", "PV-002", "PV-003", "PV-004"],
@@ -216,7 +216,7 @@ def _custom_only_dp_cfg_result():
         system_code="EPT",
         cdes=["CODE_OF_RESOURCE", "STANDARD_ACTIVITY_BREAKDOWN"],
         assignments=[],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
     )
@@ -227,7 +227,7 @@ def _custom_only_dp_cfg_result():
 def test_custom_rule_meta_maps_columns_and_type():
     _, cfg, _ = _custom_only_dp_cfg_result()
     meta = dd._custom_rule_meta(cfg, "EPT")
-    cols, rule_type = meta["E1"]
+    cols, rule_type = meta["DQ-EPT-1"]
     assert "CODE_OF_RESOURCE" in cols
     assert rule_type == "Completeness"
 
@@ -237,7 +237,7 @@ def test_cde_drilldown_works_for_custom_only_config(monkeypatch):
     run, where ``cfg.assignments`` is empty) must drill down to the rows the
     Custom rule fails - not report "No computed rule"."""
     dp, cfg, result = _custom_only_dp_cfg_result()
-    # The bar the user clicks exists on the chart (scored via E1).
+    # The bar the user clicks exists on the chart (scored via DQ-EPT-1).
     assert "CODE_OF_RESOURCE" in result.cde_scores
     fake_st = MagicMock()
     monkeypatch.setattr(dd, "st", fake_st)
@@ -276,7 +276,7 @@ def test_cde_drilldown_combines_standard_and_custom_rules(monkeypatch):
         assignments=[
             DQRAssignment("CODE_OF_RESOURCE", "Completeness", weight=100.0),
         ],
-        custom_assignments=[CustomDQRAssignment(rule_id="E1", weight=100.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)],
         dqr_sources=["standard", "custom"],
         source_weights={"standard": 50.0, "custom": 50.0},
     )
@@ -286,7 +286,7 @@ def test_cde_drilldown_combines_standard_and_custom_rules(monkeypatch):
     event = {"selection": {"points": [{"y": "CODE_OF_RESOURCE"}]}}
     dd._render_cde_drilldown("EPT", dp, result, cfg, event)
     shown = fake_st.dataframe.call_args[0][0]
-    # Row 2 fails both the Standard rule and E1 on CODE_OF_RESOURCE.
+    # Row 2 fails both the Standard rule and DQ-EPT-1 on CODE_OF_RESOURCE.
     assert list(shown.index) == [2]
 
 
@@ -351,7 +351,7 @@ def test_rule_drilldown_no_selection_shows_hint(monkeypatch):
 
 def _custom_table_df() -> pd.DataFrame:
     return pd.DataFrame([
-        {"Rule ID": "E1", "Name": "ISO Code of Account Present (COR + SAB)",
+        {"Rule ID": "DQ-EPT-1", "Name": "ISO Code of Account Present (COR + SAB)",
          "Type": "Completeness", "Status": "Evaluated",
          "Weight (%)": 100.0, "Pass rate (%)": 75.0},
     ])
@@ -379,7 +379,7 @@ def test_custom_rule_drilldown_no_selection_shows_hint(monkeypatch):
 
 def test_custom_rule_drilldown_not_evaluated_shows_info(monkeypatch):
     dp, cfg, result = _custom_only_dp_cfg_result()
-    result.not_evaluated_custom_rules["E1"] = "reference dataset unavailable"
+    result.not_evaluated_custom_rules["DQ-EPT-1"] = "reference dataset unavailable"
     fake_st = MagicMock()
     monkeypatch.setattr(dd, "st", fake_st)
     dd._render_custom_rule_drilldown("EPT", dp, result, cfg, _custom_table_df(),
@@ -413,8 +413,8 @@ def test_render_failing_rows_appends_reference_columns(monkeypatch):
         system_code="EPT",
         cdes=["PLANVIEW_ID", "CODE_OF_RESOURCE"],
         custom_assignments=[
-            CustomDQRAssignment(rule_id="E1", weight=50.0),
-            CustomDQRAssignment(rule_id="E7", weight=50.0),
+            CustomDQRAssignment(rule_id="DQ-EPT-1", weight=50.0),
+            CustomDQRAssignment(rule_id="DQ-EPT-7", weight=50.0),
         ],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},

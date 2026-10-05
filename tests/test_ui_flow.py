@@ -859,17 +859,17 @@ def test_step4_1_only_iterates_dps_with_standard_source():
 
 
 def test_step4_2_lists_ept_e1_with_required_columns():
-    """Scenario 7 (UI): EPT custom flow shows E1 card + COR/SAB mapping."""
+    """Scenario 7 (UI): EPT custom flow shows DQ-EPT-1 card + COR/SAB mapping."""
     at = _new_app(**_preloaded_step4_2_state("EPT"))
     markdowns = [m.value for m in at.markdown]
     assert any("Step 4.2" in m for m in markdowns)
-    assert any("E1" in m and "ISO Code of Account Present" in m for m in markdowns)
+    assert any("DQ-EPT-1" in m and "ISO Code of Account Present" in m for m in markdowns)
 
 
 def test_step4_2_renders_ac1_card_for_acce():
-    """ACCE custom flow renders AC1 - ISO Code of Account Present -
+    """ACCE custom flow renders DQ-ACCE-1 - ISO Code of Account Present -
     once the data product opts into the Custom source. Replaces the
-    historical empty-state test now that ACCE ships AC1."""
+    historical empty-state test now that ACCE ships DQ-ACCE-1."""
     from src.models import DataProductConfig
     dp = _build_data_product_for("ACCE")
     cfg = DataProductConfig(
@@ -886,7 +886,7 @@ def test_step4_2_renders_ac1_card_for_acce():
     )
     markdowns = [m.value for m in at.markdown]
     assert any("Step 4.2" in m for m in markdowns)
-    assert any("AC1" in m and "ISO Code of Account" in m for m in markdowns)
+    assert any("DQ-ACCE-1" in m and "ISO Code of Account" in m for m in markdowns)
 
 
 def test_step4_2_renders_adr_cards_without_retired_rules():
@@ -950,7 +950,7 @@ def test_step5_shows_source_weights_summary():
     cfg = state["configs"]["EPT"]
     cfg.dqr_sources = ["standard", "custom"]
     cfg.source_weights = {"standard": 70.0, "custom": 30.0}
-    cfg.custom_assignments = [CustomDQRAssignment(rule_id="E1", weight=100.0)]
+    cfg.custom_assignments = [CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)]
     at = _new_app(**state)
     markdowns = [m.value for m in at.markdown]
     assert any(
@@ -969,7 +969,7 @@ def test_step6_combines_standard_and_custom_per_source_weights():
     cfg = state["configs"]["EPT"]
     cfg.dqr_sources = ["standard", "custom"]
     cfg.source_weights = {"standard": 70.0, "custom": 30.0}
-    cfg.custom_assignments = [CustomDQRAssignment(rule_id="E1", weight=100.0)]
+    cfg.custom_assignments = [CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)]
     at = _new_app(**state)
     result = at.session_state["scorecards"]["EPT"]
     assert result.standard_score is not None
@@ -985,7 +985,7 @@ def test_step6_presentation_includes_source_weights_and_custom_rule_results():
     cfg = state["configs"]["EPT"]
     cfg.dqr_sources = ["standard", "custom"]
     cfg.source_weights = {"standard": 70.0, "custom": 30.0}
-    cfg.custom_assignments = [CustomDQRAssignment(rule_id="E1", weight=100.0)]
+    cfg.custom_assignments = [CustomDQRAssignment(rule_id="DQ-EPT-1", weight=100.0)]
     at = _new_app(**state)
     markdowns = [m.value for m in at.markdown]
     # Assert against the styled source-weights card (the .src-mini element) -
@@ -999,7 +999,7 @@ def test_step6_presentation_includes_source_weights_and_custom_rule_results():
     # render. (AppTest doesn't expose the dataframe content directly, so we
     # assert the upstream payload.)
     result = at.session_state["scorecards"]["EPT"]
-    assert "E1" in result.custom_rule_pass_rates
+    assert "DQ-EPT-1" in result.custom_rule_pass_rates
 
 
 def test_step6_backward_compat_existing_flow_still_passes():
@@ -1013,14 +1013,14 @@ def test_step6_backward_compat_existing_flow_still_passes():
 
 
 # ---------------------------------------------------------------------------
-# Mock data sanity - ensure E1's required columns landed in the EPT schema
+# Mock data sanity - ensure DQ-EPT-1's required columns landed in the EPT schema
 # ---------------------------------------------------------------------------
 
 def test_ept_mock_data_includes_cor_and_sab():
     dp = _build_data_product_for("EPT")
     assert "CODE_OF_RESOURCE" in dp.df.columns
     assert "STANDARD_ACTIVITY_BREAKDOWN" in dp.df.columns
-    # Deliberately injected gaps must be present so E1 has failures to detect.
+    # Deliberately injected gaps must be present so DQ-EPT-1 has failures to detect.
     cor = dp.df["CODE_OF_RESOURCE"]
     sab = dp.df["STANDARD_ACTIVITY_BREAKDOWN"]
     has_cor_gap = cor.isna().any() or (cor.astype(str).str.strip() == "").any()
@@ -1034,11 +1034,11 @@ def test_ept_mock_data_includes_wbc_level_1():
     assert "WBC_LEVEL_1" in dp.df.columns
     wbc = dp.df["WBC_LEVEL_1"]
     has_gap = wbc.isna().any() or (wbc.astype(str).str.strip() == "").any()
-    assert has_gap, "Expected deliberate WBC_LEVEL_1 gaps so E4 has failures to detect"
+    assert has_gap, "Expected deliberate WBC_LEVEL_1 gaps so DQ-EPT-4 has failures to detect"
 
 
 def test_ept_mock_data_has_orphan_planview_ids_for_e7():
-    """E7 needs orphan PLANVIEW_IDs (not in VWS_GP_STANDARD_SHARE.PROJECT_ID)
+    """DQ-EPT-7 needs orphan PLANVIEW_IDs (not in VWS_GP_STANDARD_SHARE.PROJECT_ID)
     to exercise the referential-integrity failure branch."""
     from src.reference_data import get_reference_dataset
 
@@ -1052,32 +1052,32 @@ def test_ept_mock_data_has_orphan_planview_ids_for_e7():
 
 
 # ---------------------------------------------------------------------------
-# Step 4.2: E4 + E7 surfaced via AppTest
+# Step 4.2: DQ-EPT-4 + DQ-EPT-7 surfaced via AppTest
 # ---------------------------------------------------------------------------
 
 def test_step4_2_lists_e4_and_e7_alongside_e1():
     """Scenarios 6/7 (UI): when EPT is in custom mode, all three custom
-    rules (E1, E4, E7) are visible in Step 4.2 markdown."""
+    rules (DQ-EPT-1, DQ-EPT-4, DQ-EPT-7) are visible in Step 4.2 markdown."""
     at = _new_app(**_preloaded_step4_2_state("EPT"))
     markdowns = [m.value for m in at.markdown]
     body = "\n\n".join(markdowns)
-    assert "E1" in body
-    assert "E4" in body and "Level 1 cost category populated" in body
-    assert "E7" in body and "Project Key linkage" in body
-    # E7 reference dataset metadata is rendered (not just hidden in tooltips).
+    assert "DQ-EPT-1" in body
+    assert "DQ-EPT-4" in body and "Level 1 cost category populated" in body
+    assert "DQ-EPT-7" in body and "Project Key linkage" in body
+    # DQ-EPT-7 reference dataset metadata is rendered (not just hidden in tooltips).
     assert "VWS_GP_STANDARD_SHARE" in body
     assert "PLANVIEW_ID" in body            # source column in EPT
     assert "PROJECT_ID" in body             # reference column in the master
 
 
 # ---------------------------------------------------------------------------
-# Step 6: E4 + E7 end-to-end through AppTest
+# Step 6: DQ-EPT-4 + DQ-EPT-7 end-to-end through AppTest
 # ---------------------------------------------------------------------------
 
 def test_step6_with_e4_and_e7_combines_with_source_weights():
-    """Scenarios 27/28/29/30/31: full EPT flow with E4 + E7 selected,
+    """Scenarios 27/28/29/30/31: full EPT flow with DQ-EPT-4 + DQ-EPT-7 selected,
     custom-only source, weights distributed; assert custom subscore + final
-    overall score are populated and reflect E4/E7 results."""
+    overall score are populated and reflect DQ-EPT-4/DQ-EPT-7 results."""
     from src.models import CustomDQRAssignment
 
     state = _preloaded_step6_state()
@@ -1086,23 +1086,23 @@ def test_step6_with_e4_and_e7_combines_with_source_weights():
     cfg.source_weights = {"custom": 100.0}
     cfg.assignments = []
     cfg.custom_assignments = [
-        CustomDQRAssignment(rule_id="E4", weight=50.0),
-        CustomDQRAssignment(rule_id="E7", weight=50.0),
+        CustomDQRAssignment(rule_id="DQ-EPT-4", weight=50.0),
+        CustomDQRAssignment(rule_id="DQ-EPT-7", weight=50.0),
     ]
     at = _new_app(**state)
     result = at.session_state["scorecards"]["EPT"]
     assert result.custom_score is not None
-    assert "E4" in result.custom_rule_pass_rates
-    assert "E7" in result.custom_rule_pass_rates
+    assert "DQ-EPT-4" in result.custom_rule_pass_rates
+    assert "DQ-EPT-7" in result.custom_rule_pass_rates
     # Mock data has deliberate gaps → both rules should report < 100% pass rate.
-    assert result.custom_rule_pass_rates["E4"] < 100.0
-    assert result.custom_rule_pass_rates["E7"] < 100.0
+    assert result.custom_rule_pass_rates["DQ-EPT-4"] < 100.0
+    assert result.custom_rule_pass_rates["DQ-EPT-7"] < 100.0
     assert result.overall_score == result.custom_score
 
 
 def test_step6_presentation_lists_e4_and_e7_in_custom_rules():
     """Scenario 32: Step 6 renders the source weights and the rule-level
-    Custom DQR details (rule names from the catalog, including E4 and E7)."""
+    Custom DQR details (rule names from the catalog, including DQ-EPT-4 and DQ-EPT-7)."""
     from src.models import CustomDQRAssignment
 
     state = _preloaded_step6_state()
@@ -1110,17 +1110,17 @@ def test_step6_presentation_lists_e4_and_e7_in_custom_rules():
     cfg.dqr_sources = ["standard", "custom"]
     cfg.source_weights = {"standard": 50.0, "custom": 50.0}
     cfg.custom_assignments = [
-        CustomDQRAssignment(rule_id="E4", weight=50.0),
-        CustomDQRAssignment(rule_id="E7", weight=50.0),
+        CustomDQRAssignment(rule_id="DQ-EPT-4", weight=50.0),
+        CustomDQRAssignment(rule_id="DQ-EPT-7", weight=50.0),
     ]
     at = _new_app(**state)
     # The dashboard's "Custom Rules" tab calls _render_custom_rules_table,
     # which constructs a DataFrame including the rule names from the catalog.
-    # Assert that both E4 and E7 appear in the scorecard's pass-rate map and
+    # Assert that both DQ-EPT-4 and DQ-EPT-7 appear in the scorecard's pass-rate map and
     # that the source-weights header was rendered.
     result = at.session_state["scorecards"]["EPT"]
-    assert "E4" in result.custom_rule_pass_rates
-    assert "E7" in result.custom_rule_pass_rates
+    assert "DQ-EPT-4" in result.custom_rule_pass_rates
+    assert "DQ-EPT-7" in result.custom_rule_pass_rates
     markdowns = [m.value for m in at.markdown]
     body = "\n\n".join(markdowns)
     assert "Source weights" in body
@@ -1128,7 +1128,7 @@ def test_step6_presentation_lists_e4_and_e7_in_custom_rules():
 
 
 def test_step6_renders_not_evaluated_warning_for_e7_when_reference_missing(monkeypatch):
-    """Scenario 22 + presentation: when project_master is unavailable, E7
+    """Scenario 22 + presentation: when project_master is unavailable, DQ-EPT-7
     surfaces as 'Not evaluated' in Step 6 (via st.warning), not as a silent
     pass."""
     import src.reference_data as ref_mod
@@ -1141,10 +1141,10 @@ def test_step6_renders_not_evaluated_warning_for_e7_when_reference_missing(monke
     cfg.dqr_sources = ["custom"]
     cfg.source_weights = {"custom": 100.0}
     cfg.assignments = []
-    cfg.custom_assignments = [CustomDQRAssignment(rule_id="E7", weight=100.0)]
+    cfg.custom_assignments = [CustomDQRAssignment(rule_id="DQ-EPT-7", weight=100.0)]
     at = _new_app(**state)
     warnings = [w.value for w in at.warning]
-    assert any("E7" in w and "not evaluated" in w.lower() for w in warnings)
+    assert any("DQ-EPT-7" in w and "not evaluated" in w.lower() for w in warnings)
 
 
 def test_step5_with_e4_only_lands_with_blank_weight():
@@ -1160,7 +1160,7 @@ def test_step5_with_e4_only_lands_with_blank_weight():
         cdes=["PLANVIEW_ID"],
         dqr_sources=["custom"],
         source_weights={"custom": 100.0},
-        custom_assignments=[CustomDQRAssignment(rule_id="E4", weight=0.0)],
+        custom_assignments=[CustomDQRAssignment(rule_id="DQ-EPT-4", weight=0.0)],
     )
     at = _new_app(
         current_step="weight_assignment",
@@ -1189,7 +1189,7 @@ def test_step2_prefetches_reference_datasets_when_ept_selected():
 
 
 def test_step2_prefetches_acce_reference_datasets():
-    """ACCE ships AC1 (`ACCE_COA_MASTER`) and AC2 (`VWS_GP_STANDARD_SHARE`).
+    """ACCE ships DQ-ACCE-1 (`ACCE_COA_MASTER`) and DQ-ACCE-2 (`VWS_GP_STANDARD_SHARE`).
     Step 2 must prefetch both so the rules can evaluate in Step 6 without
     re-opening a Databricks connection."""
     from src.reference_data import _SESSION_STATE_KEY
@@ -1221,7 +1221,7 @@ def test_step2_prefetches_planview_share_for_adr():
 
 def test_step2_surfaces_reference_load_error_as_warning(monkeypatch):
     """If VWS_GP_STANDARD_SHARE fails to load, Step 2 shows a warning
-    pointing at the actual error so the user knows up-front that E7 will
+    pointing at the actual error so the user knows up-front that DQ-EPT-7 will
     be marked Not evaluated in Step 6."""
     import src.reference_data as ref_mod
 
@@ -1278,7 +1278,7 @@ def test_step5_preserves_source_weights_across_renders():
     cfg = state["configs"]["EPT"]
     cfg.dqr_sources = ["standard", "custom"]
     cfg.source_weights = {"standard": 80.0, "custom": 20.0}
-    cfg.custom_assignments = [CustomDQRAssignment(rule_id="E4", weight=0)]
+    cfg.custom_assignments = [CustomDQRAssignment(rule_id="DQ-EPT-4", weight=0)]
     at = _new_app(**state)
     final = at.session_state["configs"]["EPT"].source_weights
     assert final == {"standard": 80.0, "custom": 20.0}

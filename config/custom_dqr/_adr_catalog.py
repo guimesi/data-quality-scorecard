@@ -139,7 +139,7 @@ _ADR_RULE_DEFS = [
         ),
         notes=(
             "Mapping-quality statistical rule with a row-level "
-            "verdict, mirroring EPT E3 against ADR. The metric is "
+            "verdict, mirroring EPT DQ-EPT-3 against ADR. The metric is "
             "``COUNT(DISTINCT COMPLETE_WBC)`` per "
             "``(ISO_COR, SAB)`` bucket; the threshold is the "
             f"global {int(ADR_A3_PERCENTILE * 100)}th-percentile "
@@ -158,7 +158,7 @@ _ADR_RULE_DEFS = [
             "and pass. Default scope is global / dataset-wide; the "
             "project-scope toggle on the rule card switches the "
             "percentile to a per-PLANVIEW_ID baseline (mirrors EPT "
-            "E3). The rule raises ``CustomRuleNotEvaluated`` when "
+            "DQ-EPT-3). The rule raises ``CustomRuleNotEvaluated`` when "
             "the COA master is unavailable so the gap is never "
             "silent."
         ),
@@ -232,7 +232,7 @@ _ADR_RULE_DEFS = [
         notes=(
             "Project-level rule with row-level verdict: every row "
             "of a project that fails inherits the FAIL (same "
-            "row-level / group-verdict pattern as E6 / DQ-ADR-8). For "
+            "row-level / group-verdict pattern as DQ-EPT-6 / DQ-ADR-8). For "
             "each ``PLANVIEW_ID`` the rule first determines which "
             "core quantity types are *expected* from the per-row "
             "scope classification (``ITEM_TYPE`` + "
@@ -398,7 +398,7 @@ _ADR_RULE_DEFS = [
                     "with a composite project-type key "
                     "`(E05_DEPARTMENT, BUSINESS)` looked up from the "
                     "`VWS_GP_STANDARD_SHARE` reference via "
-                    "`PLANVIEW_ID → PROJECT_ID` - the same lookup E6 "
+                    "`PLANVIEW_ID → PROJECT_ID` - the same lookup DQ-EPT-6 "
                     "uses. The segment key becomes `(ITEM_TYPE, "
                     "QTY_UOM, E05_DEPARTMENT, BUSINESS)` and the IQR "
                     "is recomputed within each bucket, so a deepwater "
@@ -438,7 +438,7 @@ _ADR_RULE_DEFS = [
             "Project-level statistical rule with row-level verdict: "
             "every row of a project that is flagged on at least one "
             "ratio inherits the FAIL (same row-level / "
-            "group-verdict pattern as E6). Eligible rows are "
+            "group-verdict pattern as DQ-EPT-6). Eligible rows are "
             "positive-quantity rows with ``ITEM_TYPE``, ``QTY_UOM``, "
             "and ``ROOT_ITEM_NAME`` populated; rows the classifier "
             "doesn't recognise simply don't contribute to a ratio. "
@@ -496,7 +496,7 @@ _ADR_RULE_DEFS = [
                     "`(E05_DEPARTMENT, BUSINESS)` looked up from the "
                     "`VWS_GP_STANDARD_SHARE` reference via "
                     "`PLANVIEW_ID → PROJECT_ID` - the same lookup "
-                    "E6 / DQ-ADR-7 use. For each ratio the IQR is "
+                    "DQ-EPT-6 / DQ-ADR-7 use. For each ratio the IQR is "
                     "recomputed **within each segment**, so a "
                     "deepwater FPSO and an onshore refinery are no "
                     "longer pooled into the same baseline. Segments "

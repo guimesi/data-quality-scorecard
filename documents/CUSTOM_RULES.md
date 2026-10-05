@@ -28,9 +28,9 @@ option-builder helpers) and
 `_dispatcher.py` for `evaluate_custom_rules`).
 
 The catalog is keyed by Data Product (`ADR`, `ACCE`, `EPT`, `SQS`).
-**EPT** ships seven rules out of the box (E1 – E7), **ADR** ships eight
+**EPT** ships seven rules out of the box (DQ-EPT-1 – DQ-EPT-7), **ADR** ships eight
 (DQ-ADR-1, DQ-ADR-2, DQ-ADR-3, DQ-ADR-4, DQ-ADR-5, DQ-ADR-6, DQ-ADR-7, DQ-ADR-8), **ACCE** ships its own per-rule
-catalog (AC1, …) that mirrors the ADR rules against the ACCE schema,
+catalog (DQ-ACCE-1, …) that mirrors the ADR rules against the ACCE schema,
 and **SQS** (Quality domain) ships the Quality team's two curated
 rules, `dq-inspection-12` (Completeness - `TOTAL_CONSUMED_HOURS` must
 be recorded on Completed inspections) and `dq-inspection-13`
@@ -50,7 +50,7 @@ Each rule is a `CustomRuleDef` with the following fields
 
 | Field | Meaning |
 |-------|---------|
-| `id` | Stable identifier shown in the UI (e.g. `"E1"`, `"E7"`) and used as `rule_id` in scoring. |
+| `id` | Stable identifier shown in the UI (e.g. `"DQ-EPT-1"`, `"DQ-EPT-7"`) and used as `rule_id` in scoring. |
 | `name` | Human label for the rule card. |
 | `type` | Category - currently `"Completeness"`, `"Consistency"`, `"Referential Integrity"`, `"Statistical Outlier"`, `"Validity"`, or `"Business Rule"`. |
 | `description` | One-paragraph blurb shown by default on the rule card. |
@@ -60,26 +60,26 @@ Each rule is a `CustomRuleDef` with the following fields
 | `check` | `(df) -> pd.Series[bool]` (or `(df, params=...) -> pd.Series[bool]` for rules with options). True = row passes. |
 | `reference` | Optional. For Referential Integrity rules: `{"reference_dataset": str, "source_column": str, "reference_column": str, "lookup_column": str?}`. The UI surfaces it in the rule card details. |
 | `options` | Optional list of `CustomRuleOption(key, label, default, help, description, required_columns_when_enabled)`. Each option is rendered as an `st.toggle` below the rule's description; its value is persisted to `CustomDQRAssignment.params[key]` and routed to the check callable when it accepts a `params` argument. |
-| `select_options` | Optional list of `CustomRuleSelectOption(key, label, choices, default, help, description)`. Each option is rendered as an `st.selectbox` below the rule's description; `choices` is an ordered list of `(value, label)` pairs and the picked value is persisted to `CustomDQRAssignment.params[key]`. Used by every statistical-outlier rule (E3, E6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8, AC3, AC7, AC8) to expose a customizable threshold (percentile or IQR multiplier), see [Outlier thresholds](#outlier-thresholds-e3--e6--a3--a7--a8--ac3--ac7--ac8). |
+| `select_options` | Optional list of `CustomRuleSelectOption(key, label, choices, default, help, description)`. Each option is rendered as an `st.selectbox` below the rule's description; `choices` is an ordered list of `(value, label)` pairs and the picked value is persisted to `CustomDQRAssignment.params[key]`. Used by every statistical-outlier rule (DQ-EPT-3, DQ-EPT-6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8, DQ-ACCE-3, DQ-ACCE-7, DQ-ACCE-8) to expose a customizable threshold (percentile or IQR multiplier), see [Outlier thresholds](#outlier-thresholds-e3--e6--a3--a7--a8--ac3--ac7--ac8). |
 
 `effective_required_columns(rule, params)` composes the static
 `required_columns` map with whatever extras enabled options contribute via
 `required_columns_when_enabled`. Step 4.2 uses this composed map so that
-flipping an option on (e.g. E3's project-scope toggle) immediately demands
+flipping an option on (e.g. DQ-EPT-3's project-scope toggle) immediately demands
 the additional CDE. (`select_options` never contribute extra required
 columns, they only customize numeric thresholds.)
 
-### Behavioural toggles (E3 / DQ-ADR-3 / AC3 / E6 / DQ-ADR-7 / DQ-ADR-8 / AC7 / AC8)
+### Behavioural toggles (DQ-EPT-3 / DQ-ADR-3 / DQ-ACCE-3 / DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8 / DQ-ACCE-7 / DQ-ACCE-8)
 
 In addition to the threshold selectbox, the statistical-outlier
 rules expose behavioural toggles on their rule cards:
 
 | Rule(s) | Toggle | Default | Effect (when on) |
 |---|---|---|---|
-| **E3 / DQ-ADR-3** | `project_scoped` | `False` | Recompute the percentile baseline *within each `PLANVIEW_ID` partition* instead of globally. E3 adds `PLANVIEW_ID` to the required-CDE list; DQ-ADR-3 already requires it. Rows lacking `PLANVIEW_ID` are PASS (E7 / DQ-ADR-2 cover the missing-project linkage). AC3 does **not** expose this toggle, its baseline is always portfolio-wide. |
-| **E3 / DQ-ADR-3** | `detect_uniform_mapping` | `False` | After the percentile fail, additionally fail every *material* group whose `ratio == 1` - surfaces suspiciously uniform 1:1 mappings. Both branches combine with **OR**; materiality still gates both. |
-| **AC3** | `detect_uniform_mapping` | `False` | After the percentile fail, **also** fail every material 1:1 bucket, but only when ≥ `ACCE_AC3_UNIFORM_THRESHOLD` (default **80 %**) of eligible mappings in the portfolio are 1:1. The wider gate reflects that ACCE COA codes are inherently coarser than ADR's WBCs, so a few legitimate 1:1 mappings should not by themselves trip the rule. |
-| **E6 / DQ-ADR-7 / DQ-ADR-8 / AC7 / AC8** | `segment_by_project_type` | `False` | Extend the IQR segment key with the composite `(E05_DEPARTMENT, BUSINESS)` tuple resolved from `VWS_GP_STANDARD_SHARE` via `PLANVIEW_ID → PROJECT_ID`. DQ-ADR-7 extends `(ITEM_TYPE, QTY_UOM)` and AC7 extends `(DESCRIPTION, QTY_UOM)` → `(…, E05_DEPARTMENT, BUSINESS)`; DQ-ADR-8 / AC8 / E6 partition the per-ratio / per-project IQR baseline by `(E05_DEPARTMENT, BUSINESS)` alone. Per-segment populations below the rule's minimum-population floor stay NOT_APPLICABLE → PASS. Rows / projects whose segment cannot be resolved (missing PLANVIEW_ID, unmatched PROJECT_ID, or null/blank `E05_DEPARTMENT` / `BUSINESS`) are also NOT_APPLICABLE → PASS - completeness rules already cover those gaps. When the toggle is on and the reference dataset is unavailable, the check raises `CustomRuleNotEvaluated`. |
+| **DQ-EPT-3 / DQ-ADR-3** | `project_scoped` | `False` | Recompute the percentile baseline *within each `PLANVIEW_ID` partition* instead of globally. DQ-EPT-3 adds `PLANVIEW_ID` to the required-CDE list; DQ-ADR-3 already requires it. Rows lacking `PLANVIEW_ID` are PASS (DQ-EPT-7 / DQ-ADR-2 cover the missing-project linkage). DQ-ACCE-3 does **not** expose this toggle, its baseline is always portfolio-wide. |
+| **DQ-EPT-3 / DQ-ADR-3** | `detect_uniform_mapping` | `False` | After the percentile fail, additionally fail every *material* group whose `ratio == 1` - surfaces suspiciously uniform 1:1 mappings. Both branches combine with **OR**; materiality still gates both. |
+| **DQ-ACCE-3** | `detect_uniform_mapping` | `False` | After the percentile fail, **also** fail every material 1:1 bucket, but only when ≥ `ACCE_AC3_UNIFORM_THRESHOLD` (default **80 %**) of eligible mappings in the portfolio are 1:1. The wider gate reflects that ACCE COA codes are inherently coarser than ADR's WBCs, so a few legitimate 1:1 mappings should not by themselves trip the rule. |
+| **DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8 / DQ-ACCE-7 / DQ-ACCE-8** | `segment_by_project_type` | `False` | Extend the IQR segment key with the composite `(E05_DEPARTMENT, BUSINESS)` tuple resolved from `VWS_GP_STANDARD_SHARE` via `PLANVIEW_ID → PROJECT_ID`. DQ-ADR-7 extends `(ITEM_TYPE, QTY_UOM)` and DQ-ACCE-7 extends `(DESCRIPTION, QTY_UOM)` → `(…, E05_DEPARTMENT, BUSINESS)`; DQ-ADR-8 / DQ-ACCE-8 / DQ-EPT-6 partition the per-ratio / per-project IQR baseline by `(E05_DEPARTMENT, BUSINESS)` alone. Per-segment populations below the rule's minimum-population floor stay NOT_APPLICABLE → PASS. Rows / projects whose segment cannot be resolved (missing PLANVIEW_ID, unmatched PROJECT_ID, or null/blank `E05_DEPARTMENT` / `BUSINESS`) are also NOT_APPLICABLE → PASS - completeness rules already cover those gaps. When the toggle is on and the reference dataset is unavailable, the check raises `CustomRuleNotEvaluated`. |
 
 All toggles are opt-in so the rule's pre-feature behaviour is
 preserved when the user does not touch them. The toggle param keys
@@ -94,7 +94,7 @@ preserved when the user does not touch them. The toggle param keys
 threshold counterparts in
 [src/custom_dqr_engine.py](../src/custom_dqr_engine.py).
 
-### Outlier thresholds (E3 / E6 / DQ-ADR-3 / DQ-ADR-7 / DQ-ADR-8 / AC3 / AC7 / AC8)
+### Outlier thresholds (DQ-EPT-3 / DQ-EPT-6 / DQ-ADR-3 / DQ-ADR-7 / DQ-ADR-8 / DQ-ACCE-3 / DQ-ACCE-7 / DQ-ACCE-8)
 
 Every `"Statistical Outlier"` rule exposes a single-choice threshold
 selectbox on its Step 4.2 card. The default is the rule's documented
@@ -106,16 +106,16 @@ the check callable.
 
 | Rule | Param key | Choices (recommended in **bold**) | Default constant |
 |------|-----------|-----------------------------------|------------------|
-| **E3** | `threshold_percentile` | P75, **P90**, P95, P99 | `EPT_E3_PERCENTILE = 0.90` |
-| **E6** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `EPT_E6_MILD_IQR_MULTIPLIER = 1.5` |
+| **DQ-EPT-3** | `threshold_percentile` | P75, **P90**, P95, P99 | `EPT_E3_PERCENTILE = 0.90` |
+| **DQ-EPT-6** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `EPT_E6_MILD_IQR_MULTIPLIER = 1.5` |
 | **DQ-ADR-3** *(inactive)* | `threshold_percentile` | P75, **P90**, P95, P99 | `ADR_A3_PERCENTILE = 0.90` |
 | **DQ-ADR-7** *(retired 2026-09)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A7_MILD_IQR_MULTIPLIER = 1.5` |
 | **DQ-ADR-8** *(retired 2026-09)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A8_MILD_IQR_MULTIPLIER = 1.5` |
 | **DQ-ADR-9** | `tolerance_pct` | ±10% (strict), ±15%, ±20%, **±25%** | `ADR_A9_TOLERANCE = 0.25` |
 | **DQ-ADR-9** | `period_policy` | **nearest EMMA period**, exact only | `ADR_A9_PERIOD_POLICY = "nearest"` |
-| **AC3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ACCE_AC3_PERCENTILE = 0.90` |
-| **AC7** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC7_MILD_IQR_MULTIPLIER = 1.5` |
-| **AC8** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC8_MILD_IQR_MULTIPLIER = 1.5` |
+| **DQ-ACCE-3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ACCE_AC3_PERCENTILE = 0.90` |
+| **DQ-ACCE-7** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC7_MILD_IQR_MULTIPLIER = 1.5` |
+| **DQ-ACCE-8** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC8_MILD_IQR_MULTIPLIER = 1.5` |
 
 Param keys and choice lists live in [src/custom_dqr_engine.py](../src/custom_dqr_engine.py)
 (`<RULE>_THRESHOLD_PARAM`, `<RULE>_THRESHOLD_CHOICES`); both are
@@ -133,10 +133,10 @@ for IDE / type-checker use; `_coerce_threshold` still handles legacy
 string values at runtime.
 
 **Semantics.**
-- *Percentile-based* (E3, DQ-ADR-3, AC3): raising the threshold (P95,
+- *Percentile-based* (DQ-EPT-3, DQ-ADR-3, DQ-ACCE-3): raising the threshold (P95,
   P99) makes the rule **stricter**: only the most extreme mappings
   are flagged. Lowering it (P75) makes it **more sensitive**.
-- *IQR-based* (E6, DQ-ADR-7, DQ-ADR-8, AC7, AC8): raising the multiplier (2.0×,
+- *IQR-based* (DQ-EPT-6, DQ-ADR-7, DQ-ADR-8, DQ-ACCE-7, DQ-ACCE-8): raising the multiplier (2.0×,
   3.0×) **widens the PASS band**: fewer flagged outliers, more
   lenient. Lowering it would narrow the band; the catalog only
   exposes values ≥ 1.5× because going below the textbook mild bound
@@ -161,13 +161,13 @@ inputs are missing, that would hide the gap in the score.
 
 | Rule | Name | Type | Required columns | Reference data | Options |
 |------|------|------|------------------|----------------|---------|
-| **E1** | ISO Code of Account Present (COR + SAB)               | Completeness         | `CODE_OF_RESOURCE`, `STANDARD_ACTIVITY_BREAKDOWN` | - | - |
-| **E2** | Location + estimate date present                       | Completeness         | `CENTROID_DATE`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
-| **E3** | Statistical Excessive WBC to ISO Mapping               | Statistical Outlier  | `WBC_LEVEL_5`, `CODE_OF_RESOURCE`, `STANDARD_ACTIVITY_BREAKDOWN`, `TOTAL_HOURS`, `TOTAL_COST_USD` (+ `PLANVIEW_ID` when project-scope is on) | - | `threshold_percentile` (select, default P90), `project_scoped` (bool), `detect_uniform_mapping` (bool) |
-| **E4** | Level 1 cost category populated                        | Completeness         | `WBC_LEVEL_1` | - | - |
-| **E5** | FEED / Engineering hours estimate present when cost exists | Consistency      | `WBC_LEVEL_1`, `TOTAL_HOURS`, `TOTAL_COST_USD`, `TOTAL_COST_ESTIMATE_CURRENCY` | - | - |
-| **E6** | Cost-to-hours ratio outlier check                      | Statistical Outlier  | `PLANVIEW_ID`, `TOTAL_HOURS`, `TOTAL_COST_USD`, `TOTAL_COST_ESTIMATE_CURRENCY` | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
-| **E7** | Project Key linkage                                    | Referential Integrity| `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (`PLANVIEW_ID → PROJECT_ID`) | - |
+| **DQ-EPT-1** | ISO Code of Account Present (COR + SAB)               | Completeness         | `CODE_OF_RESOURCE`, `STANDARD_ACTIVITY_BREAKDOWN` | - | - |
+| **DQ-EPT-2** | Location + estimate date present                       | Completeness         | `CENTROID_DATE`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
+| **DQ-EPT-3** | Statistical Excessive WBC to ISO Mapping               | Statistical Outlier  | `WBC_LEVEL_5`, `CODE_OF_RESOURCE`, `STANDARD_ACTIVITY_BREAKDOWN`, `TOTAL_HOURS`, `TOTAL_COST_USD` (+ `PLANVIEW_ID` when project-scope is on) | - | `threshold_percentile` (select, default P90), `project_scoped` (bool), `detect_uniform_mapping` (bool) |
+| **DQ-EPT-4** | Level 1 cost category populated                        | Completeness         | `WBC_LEVEL_1` | - | - |
+| **DQ-EPT-5** | FEED / Engineering hours estimate present when cost exists | Consistency      | `WBC_LEVEL_1`, `TOTAL_HOURS`, `TOTAL_COST_USD`, `TOTAL_COST_ESTIMATE_CURRENCY` | - | - |
+| **DQ-EPT-6** | Cost-to-hours ratio outlier check                      | Statistical Outlier  | `PLANVIEW_ID`, `TOTAL_HOURS`, `TOTAL_COST_USD`, `TOTAL_COST_ESTIMATE_CURRENCY` | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **DQ-EPT-7** | Project Key linkage                                    | Referential Integrity| `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (`PLANVIEW_ID → PROJECT_ID`) | - |
 
 ## Quick reference (ADR)
 
@@ -202,14 +202,14 @@ for the field-level substitutions (e.g. `COMPLETE_WBC` → `COA`,
 
 | Rule | Name | Type | Required columns | Reference data | Options |
 |------|------|------|------------------|----------------|---------|
-| **AC1** | ISO Code of Account present (COR + SAB) | Completeness | `PLANVIEW_ID`, `COA` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA` - leading 3 characters of the 4-char ACCE COA; lookup `ISO_COR` + `SAB`) | - |
-| **AC2** | Location + estimate date present & valid | Completeness & Validity | `JOB_NO`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
-| **AC3** | Statistical COA-to-ISO mapping ratio | Statistical Outlier | `PLANVIEW_ID`, `COA`, `COST_MH`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA`; lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `detect_uniform_mapping` (bool - 80 % portfolio gate) |
-| **AC4** | Core quantities populated & non-negative project totals | Completeness & Validity | `PLANVIEW_ID`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` | - | - |
-| **AC5** | Design details present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `DESIGN_PROPERTY`, `DESIGN_VALUE` | - | - |
-| **AC6** | Construction hours present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COST_MH` | - | - |
-| **AC7** | Within-discipline quantity / hour ratio outlier | Statistical Outlier | `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS`, `COST_MH` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
-| **AC8** | Cross-discipline quantity ratios | Statistical Outlier | `COMPONENT_SOURCE`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **DQ-ACCE-1** | ISO Code of Account present (COR + SAB) | Completeness | `PLANVIEW_ID`, `COA` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA` - leading 3 characters of the 4-char ACCE COA; lookup `ISO_COR` + `SAB`) | - |
+| **DQ-ACCE-2** | Location + estimate date present & valid | Completeness & Validity | `JOB_NO`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
+| **DQ-ACCE-3** | Statistical COA-to-ISO mapping ratio | Statistical Outlier | `PLANVIEW_ID`, `COA`, `COST_MH`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA`; lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `detect_uniform_mapping` (bool - 80 % portfolio gate) |
+| **DQ-ACCE-4** | Core quantities populated & non-negative project totals | Completeness & Validity | `PLANVIEW_ID`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` | - | - |
+| **DQ-ACCE-5** | Design details present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `DESIGN_PROPERTY`, `DESIGN_VALUE` | - | - |
+| **DQ-ACCE-6** | Construction hours present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COST_MH` | - | - |
+| **DQ-ACCE-7** | Within-discipline quantity / hour ratio outlier | Statistical Outlier | `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS`, `COST_MH` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **DQ-ACCE-8** | Cross-discipline quantity ratios | Statistical Outlier | `COMPONENT_SOURCE`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 
 ## Quick reference (SQS - Quality domain)
 
@@ -228,28 +228,28 @@ new rules reuse the structural checks every Custom rule needs:
 - **`validate_completeness_rule(df, required_columns)`**: every column
   must be non-null and (string-typed) non-blank for the row to pass; if
   any required column is absent from `df`, the rule fails for every row.
-  Used by E1, E4, and dq-inspection-13.
+  Used by DQ-EPT-1, DQ-EPT-4, and dq-inspection-13.
 - **`validate_referential_integrity_rule(source_df, source_column,
   reference_df, reference_column)`**, the source value is non-blank and
   its string-stripped form appears in the reference column. A missing
   source/reference *column* makes every row fail; a missing reference
   *dataset* should be signalled by raising `CustomRuleNotEvaluated`
-  before invoking the validator. Used by E7.
+  before invoking the validator. Used by DQ-EPT-7.
 
-Statistical-outlier rules (E3, E6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8) compute group-level metrics
+Statistical-outlier rules (DQ-EPT-3, DQ-EPT-6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8) compute group-level metrics
 inside their own check function and propagate the per-group verdict back to
 every row of the failing group, same row-level / group-verdict pattern, no
 shared helper because the metrics differ. Each of these rules accepts a
 `params` argument and reads its threshold from
-`params[<RULE>_THRESHOLD_PARAM]` (percentile for E3 / DQ-ADR-3, IQR multiplier
-for E6 / DQ-ADR-7 / DQ-ADR-8); `_coerce_threshold(value, default)` keeps stale or
+`params[<RULE>_THRESHOLD_PARAM]` (percentile for DQ-EPT-3 / DQ-ADR-3, IQR multiplier
+for DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8); `_coerce_threshold(value, default)` keeps stale or
 malformed values from disabling the rule.
 
 ---
 
 ## Reference-data registry & eager loading
 
-Custom rules that need a reference dataset (E2, E7, DQ-ADR-1, DQ-ADR-2, DQ-ADR-3) resolve
+Custom rules that need a reference dataset (DQ-EPT-2, DQ-EPT-7, DQ-ADR-1, DQ-ADR-2, DQ-ADR-3) resolve
 it via [src/reference_data.py](../src/reference_data.py):
 
 - `prefetch_reference_datasets(names)` is called from **Step 2** right
@@ -286,12 +286,12 @@ with the cached error message appended.
 
 | Dataset | Loaded from | Consumers |
 |---------|-------------|-----------|
-| `VWS_GP_STANDARD_SHARE` | `{SF_DATABASE}.{SF_SCHEMA}.VWS_GP_STANDARD_SHARE` | E2 (lookup `COUNTRY`), E6 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), E7 (`PLANVIEW_ID → PROJECT_ID`), DQ-ADR-2 (lookup `COUNTRY`), DQ-ADR-7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ADR-8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), AC2 (lookup `COUNTRY`), AC7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), AC8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on) |
-| `ACCE_COA_MASTER`       | `INGESTION_DB.GP_ADF_CSE.ACCE_COA_MASTER`         | DQ-ADR-1 + DQ-ADR-3 + AC1 + AC3 (`ICARUS_COA → ISO_COR + SAB`). DQ-ADR-1 / AC1 validate the resolution (ADR via a `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation, ACCE via the **first three characters** of the 4-character `COA` - the analog of ADR's split); DQ-ADR-3 measures distinct-`COMPLETE_WBC` aggregation per resolved bucket; AC3 measures distinct-`COA` aggregation (over the *full* 4-character `COA`, not the truncated lookup key) per resolved bucket. |
+| `VWS_GP_STANDARD_SHARE` | `{SF_DATABASE}.{SF_SCHEMA}.VWS_GP_STANDARD_SHARE` | DQ-EPT-2 (lookup `COUNTRY`), DQ-EPT-6 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-EPT-7 (`PLANVIEW_ID → PROJECT_ID`), DQ-ADR-2 (lookup `COUNTRY`), DQ-ADR-7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ADR-8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ACCE-2 (lookup `COUNTRY`), DQ-ACCE-7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ACCE-8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on) |
+| `ACCE_COA_MASTER`       | `INGESTION_DB.GP_ADF_CSE.ACCE_COA_MASTER`         | DQ-ADR-1 + DQ-ADR-3 + DQ-ACCE-1 + DQ-ACCE-3 (`ICARUS_COA → ISO_COR + SAB`). DQ-ADR-1 / DQ-ACCE-1 validate the resolution (ADR via a `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation, ACCE via the **first three characters** of the 4-character `COA` - the analog of ADR's split); DQ-ADR-3 measures distinct-`COMPLETE_WBC` aggregation per resolved bucket; DQ-ACCE-3 measures distinct-`COA` aggregation (over the *full* 4-character `COA`, not the truncated lookup key) per resolved bucket. |
 
 ---
 
-## E1: ISO Code of Account Present (COR + SAB)
+## DQ-EPT-1: ISO Code of Account Present (COR + SAB)
 
 - **Type:** Completeness
 - **Implementation:** `check_ept_e1` →
@@ -313,7 +313,7 @@ via the EMMA factor, the row is unusable for downstream cost analytics.
 
 ---
 
-## E2: Location + Estimate Date Present
+## DQ-EPT-2: Location + Estimate Date Present
 
 - **Type:** Completeness
 - **Implementation:** `check_ept_e2` (uses `_is_filled` directly + a join
@@ -327,7 +327,7 @@ A row passes when **both** hold:
 2. `COUNTRY` (project location) is non-null and non-blank in the Planview
    reference, **after** joining `EPT.PLANVIEW_ID` against
    `VWS_GP_STANDARD_SHARE.PROJECT_ID`. An unmatched `PLANVIEW_ID` is
-   treated as a missing `COUNTRY` (i.e. the row fails E2).
+   treated as a missing `COUNTRY` (i.e. the row fails DQ-EPT-2).
 
 **Why it matters.** COUNTRY + CENTROID_DATE together pick the correct CU
 period for EMMA normalization. CENTROID_DATE is the *estimate basis date*,
@@ -350,14 +350,14 @@ not the data-entry date.
 
 ---
 
-## E3: Statistical Excessive WBC to ISO Mapping
+## DQ-EPT-3: Statistical Excessive WBC to ISO Mapping
 
 - **Type:** Statistical Outlier
 - **Implementation:** `check_ept_e3(df, params)` (params-aware).
 
 Group-level statistical rule with a row-level verdict, every row inherits
 its mapping's pass/fail so the rule plugs into the same per-row scoring
-pipeline as E1 / E2 / E4 / E5 / E7.
+pipeline as DQ-EPT-1 / DQ-EPT-2 / DQ-EPT-4 / DQ-EPT-5 / DQ-EPT-7.
 
 ### Default scope (project_scoped = False)
 
@@ -372,8 +372,8 @@ pipeline as E1 / E2 / E4 / E5 / E7.
 4. A group **fails** when `ratio > P90` **and** the group is *material*
    (`hours_sum > 0` or `cost_sum ≥ EPT_E3_MATERIALITY_USD`, default
    100,000 USD). Every row inside a failing group inherits the FAIL.
-5. Rows whose ISO key (COR/SAB) is null/blank are treated as PASS - E1
-   already flags those gaps and E3 cannot meaningfully evaluate
+5. Rows whose ISO key (COR/SAB) is null/blank are treated as PASS - DQ-EPT-1
+   already flags those gaps and DQ-EPT-3 cannot meaningfully evaluate
    over-aggregation when the bucket is missing.
 
 ### Project scope (project_scoped = True, opt-in via the rule card)
@@ -385,7 +385,7 @@ pipeline as E1 / E2 / E4 / E5 / E7.
   by peers that aggregate aggressively.
 - `PLANVIEW_ID` becomes a **required column** (Step 4.2 folds it into the
   CDE-coverage check via `required_columns_when_enabled`).
-- Rows lacking `PLANVIEW_ID` in project mode are treated as PASS - E7
+- Rows lacking `PLANVIEW_ID` in project mode are treated as PASS - DQ-EPT-7
   already covers the missing-project linkage.
 
 ### Uniform 1:1 mapping detection (detect_uniform_mapping = True, opt-in)
@@ -435,7 +435,7 @@ when the latter is enabled.
 
 ---
 
-## E4: Level 1 cost category populated
+## DQ-EPT-4: Level 1 cost category populated
 
 - **Type:** Completeness
 - **Implementation:** `check_ept_e4` →
@@ -458,7 +458,7 @@ without it cannot participate in any cost-category roll-up.
 
 ---
 
-## E5: FEED / Engineering hours estimate present when cost exists
+## DQ-EPT-5: FEED / Engineering hours estimate present when cost exists
 
 - **Type:** Consistency
 - **Implementation:** `check_ept_e5`.
@@ -504,7 +504,7 @@ scope is judged here.
 
 ---
 
-## E6: Cost-to-hours ratio outlier check
+## DQ-EPT-6: Cost-to-hours ratio outlier check
 
 - **Type:** Statistical Outlier
 - **Implementation:** `check_ept_e6`.
@@ -542,20 +542,20 @@ Project-level outlier detection with a row-level verdict.
 
 ### NOT_APPLICABLE (treated as PASS) cases
 
-E6 does not surface a separate "NA" bucket, it returns Booleans only.
+DQ-EPT-6 does not surface a separate "NA" bucket, it returns Booleans only.
 The cases below are mapped to PASS to avoid double-counting against rules
 that already cover those gaps:
 
-- **Project where `hours_sum ≤ 0`**: the ratio cannot be calculated; E5
+- **Project where `hours_sum ≤ 0`**: the ratio cannot be calculated; DQ-EPT-5
   already flags FEED cost-without-hours.
 - **Rows with null/blank `PLANVIEW_ID`**: cannot be assigned to a
-  project; E7 already covers the missing-project linkage.
+  project; DQ-EPT-7 already covers the missing-project linkage.
 - **Eligible-project population below `EPT_E6_MIN_POPULATION` (default 5)**: too small to define an outlier population. When segmentation is on,
   the same floor is applied **per segment** so a thinly-populated bucket
   does not flag every project inside it as an outlier of itself.
 - **Project whose segment cannot be resolved** (only when segmentation
   is on) - unmatched `PROJECT_ID`, or null/blank `E05_DEPARTMENT` /
-  `BUSINESS` from the join - NOT_APPLICABLE → PASS. E7 / E2 already
+  `BUSINESS` from the join - NOT_APPLICABLE → PASS. DQ-EPT-7 / DQ-EPT-2 already
   cover those referential / completeness gaps.
 
 ### Notes
@@ -571,7 +571,7 @@ that already cover those gaps:
   falls outside the lower IQR bound and the project is flagged for
   review.
 - **Schema-level missing column → all rows fail**, mirroring the
-  convention used by E1 / E3 / E4 / E5.
+  convention used by DQ-EPT-1 / DQ-EPT-3 / DQ-EPT-4 / DQ-EPT-5.
 - **Segmented mode requires the reference.** When
   `segment_by_project_type` is on and `VWS_GP_STANDARD_SHARE` is
   unavailable (or is missing `E05_DEPARTMENT` / `BUSINESS`), the rule
@@ -621,7 +621,7 @@ feature, one global IQR across the dataset.
 
 ---
 
-## E7: Project Key linkage
+## DQ-EPT-7: Project Key linkage
 
 - **Type:** Referential Integrity
 - **Implementation:** `check_ept_e7` → resolves the
@@ -808,12 +808,12 @@ means many ADR `COMPLETE_WBC` strings collapse through the same
 buckets that aggregate beyond what the ADR portfolio's distribution
 considers normal.
 
-DQ-ADR-3 mirrors EPT E3 against the ADR data product. Same row-level
+DQ-ADR-3 mirrors EPT DQ-EPT-3 against the ADR data product. Same row-level
 verdict / group-level threshold pattern, same materiality framing,
 same global-`P90` baseline, but the ratio is sourced from
 `COUNT(DISTINCT COMPLETE_WBC)` per resolved `(ISO_COR, SAB)` bucket
 instead of `COUNT(DISTINCT WBC_LEVEL_5)` per ISO key. DQ-ADR-3 also exposes
-the same two opt-in toggles as E3: **project-scoped percentile**
+the same two opt-in toggles as DQ-EPT-3: **project-scoped percentile**
 (per-`PLANVIEW_ID` baseline) and **uniform 1:1 mapping detection**.
 
 ### Algorithm
@@ -873,7 +873,7 @@ the same two opt-in toggles as E3: **project-scoped percentile**
   CDE-coverage check already enforces it; the toggle additionally
   treats rows lacking `PLANVIEW_ID` as PASS (DQ-ADR-2 already covers the
   missing-project linkage).
-- Mirrors EPT E3's `project_scoped` toggle, same wording, same
+- Mirrors EPT DQ-EPT-3's `project_scoped` toggle, same wording, same
   behaviour, same per-project P90 framing.
 
 ### Uniform 1:1 mapping detection (detect_uniform_mapping = True, opt-in)
@@ -1028,7 +1028,7 @@ For each `PLANVIEW_ID`:
 
 5. **Row-level verdict.** A row fails iff its `PLANVIEW_ID` is
    flagged. Rows with null/blank `PLANVIEW_ID` pass, they cannot be
-   assigned to a project group (E7 / DQ-ADR-2 already cover the missing-
+   assigned to a project group (DQ-EPT-7 / DQ-ADR-2 already cover the missing-
    project linkage).
 
 ### Discipline classifier (scope detection vs. population detection)
@@ -1175,7 +1175,7 @@ Where:
   `1324.0-X` or `Foo 324.0` do not satisfy `324.0`.
 - `HAS_ANY_DESIGN = DESIGN_KEY_PARAMETER_NAMES is non-null and non-blank`
   (whitespace-only strings are treated as blank, same `_is_filled`
-  semantics used by E1 / E4 / DQ-ADR-2). Because the builder only lists
+  semantics used by DQ-EPT-1 / DQ-EPT-4 / DQ-ADR-2). Because the builder only lists
   names whose value is populated, a non-empty list means at least one
   design parameter carries a value.
 
@@ -1452,7 +1452,7 @@ they are wrong.
   segmentation toggle extends the key for users who need it (see
   below).
 - **Schema-level missing column → all rows fail**, mirroring the
-  convention used by E1 / E3 / E4 / E6 / DQ-ADR-5 / DQ-ADR-6. When
+  convention used by DQ-EPT-1 / DQ-EPT-3 / DQ-EPT-4 / DQ-EPT-6 / DQ-ADR-5 / DQ-ADR-6. When
   `segment_by_project_type` is on, `PLANVIEW_ID` becomes structurally
   required too - Step 4.2's CDE-coverage badge surfaces the gap before
   the rule is even allowed to run.
@@ -1473,7 +1473,7 @@ a greenfield deepwater FPSO can need wildly different labour for the
 same `(ITEM_TYPE, QTY_UOM)`. Pooling them widens the discipline-only
 IQR enough that genuine within-archetype outliers hide in the middle.
 The toggle splits the population before deriving the IQR, mirrors the
-[E6 segmentation toggle](#project-type-segmentation-segment_by_project_type).
+[DQ-EPT-6 segmentation toggle](#project-type-segmentation-segment_by_project_type).
 
 When on:
 
@@ -1667,7 +1667,7 @@ a genuinely unusual project. DQ-ADR-8 surfaces those projects for review.
   superscript-vs-`^N` spellings normalise so the classifier is robust
   to source-system variation.
 - **Schema-level missing column → all rows fail**, mirroring the
-  convention used by E1 / E3 / E6 / DQ-ADR-5 / DQ-ADR-6 / DQ-ADR-7. When
+  convention used by DQ-EPT-1 / DQ-EPT-3 / DQ-EPT-6 / DQ-ADR-5 / DQ-ADR-6 / DQ-ADR-7. When
   `segment_by_project_type` is on, `PLANVIEW_ID` becomes structurally
   required too - Step 4.2's CDE-coverage badge surfaces the gap
   before the rule is even allowed to run.
@@ -1688,7 +1688,7 @@ on the steel-to-concrete or pipe-to-equipment scale. Pooling them
 widens the global IQR enough that genuine within-archetype outliers
 hide in the middle. The toggle splits the population before deriving
 the per-ratio IQR, mirrors the
-[E6](#project-type-segmentation-segment_by_project_type) and
+[DQ-EPT-6](#project-type-segmentation-segment_by_project_type) and
 [DQ-ADR-7](#project-type-segmentation-segment_by_project_type-a7) toggles.
 
 When on:
@@ -1888,20 +1888,20 @@ the rule has real FAIL cases.
 
 ACCE rules replicate the ADR rules' business logic against the ACCE
 schema. The denormalized ACCE data product surfaces the columns below;
-every rule (AC1, …) reads from this denormalized view exactly like
+every rule (DQ-ACCE-1, …) reads from this denormalized view exactly like
 ADR rules read from theirs.
 
 | ADR column (denormalized) | ACCE column (denormalized) | Source table | Notes |
 |---|---|---|---|
-| `COMPLETE_WBC` | `COA` | `ACCE_ESTIMATEITEMRECORD` | ADR uses a dot-delimited WBC whose first segment is the 3-character ICARUS Code of Account group (`SPLIT_PART(COMPLETE_WBC, '.', 1)`). ACCE uses a 4-character numeric COA code whose **leading 3 characters** are the ICARUS group (e.g. `3131 → 313`). AC1 / AC3 take the first three characters of `COA` before joining to `ACCE_COA_MASTER.ICARUS_COA` - the analog of ADR's `SPLIT_PART` derivation. |
+| `COMPLETE_WBC` | `COA` | `ACCE_ESTIMATEITEMRECORD` | ADR uses a dot-delimited WBC whose first segment is the 3-character ICARUS Code of Account group (`SPLIT_PART(COMPLETE_WBC, '.', 1)`). ACCE uses a 4-character numeric COA code whose **leading 3 characters** are the ICARUS group (e.g. `3131 → 313`). DQ-ACCE-1 / DQ-ACCE-3 take the first three characters of `COA` before joining to `ACCE_COA_MASTER.ICARUS_COA` - the analog of ADR's `SPLIT_PART` derivation. |
 | `COST_UPDATE` | `JOB_NO` | `ACCE_ESTIMATEITEMRECORD` | ADR uses `COST_UPDATE` as the estimate basis date; ACCE uses `JOB_NO` (estimate job / period, e.g. `2Q23 RP1`) as proxy. |
-| `ITEM_TYPE` | `DESCRIPTION` | `ACCE_ESTIMATEITEMRECORD` | ADR classifies discipline via `Estimate*` item-type substring sweeps. ACCE's discipline classifier (AC4 / AC7 / AC8) keys off the `DESCRIPTION` estimate-line label instead - the former `ACCT` account-code classifier (`2-EQP`, `3-PIP`, …) was retired, so ADR's `ITEM_TYPE` role is now served by the same `DESCRIPTION` column below. |
+| `ITEM_TYPE` | `DESCRIPTION` | `ACCE_ESTIMATEITEMRECORD` | ADR classifies discipline via `Estimate*` item-type substring sweeps. ACCE's discipline classifier (DQ-ACCE-4 / DQ-ACCE-7 / DQ-ACCE-8) keys off the `DESCRIPTION` estimate-line label instead - the former `ACCT` account-code classifier (`2-EQP`, `3-PIP`, …) was retired, so ADR's `ITEM_TYPE` role is now served by the same `DESCRIPTION` column below. |
 | `ITEM_DESCRIPTION` | `DESCRIPTION` | `ACCE_ESTIMATEITEMRECORD` | Item description field - also the discipline classifier (see the `ITEM_TYPE` row above). |
 | `ROOT_ITEM_NAME` | `PROJECT_NAME` | `ACCE_ESTIMATEITEMRECORD` | Project / scope grouping key. |
 | `PLANVIEW_ID` | `PLANVIEW_ID` | `ACCE_ESTIMATEITEMRECORD` | Same field name. |
 | `QTY_QUANTITY` | `QTY_QUANTITY` | Derived: row-level `COALESCE(KEY_QTY, OTHER_QTY)` → SUM per ROW_ID. Applied by the builder's `derive_columns` hook on the `ACCE_ESTIMATEQTYRESULTS` `TableDef` so the COALESCE happens *before* the group-by SUM. | ADR carries one quantity column; ACCE has two parallel pairs (`KEY_QTY` / `OTHER_QTY`) that must be merged row-by-row, then summed. |
 | `QTY_UOM` | `QTY_UOM` | Derived: row-level `COALESCE(KEY_UNITS, OTHER_UNITS)` → `FIRST` per ROW_ID (same hook). | Same merge logic on the UOM side; aggregation is `FIRST` (non-null) because UOMs are categorical. |
-| `COST_TOTAL_HOURS` | `COST_MH` | Derived: `MH` from `ACCE_ESTIMATECOSTRESULTS` | ACCE stores construction hours in `MH`; after the COST prefix the denormalized column is **`COST_MH`** (not `COST_TOTAL_HOURS`). AC3, AC6, and AC7 all read from `COST_MH` on ACCE. |
+| `COST_TOTAL_HOURS` | `COST_MH` | Derived: `MH` from `ACCE_ESTIMATECOSTRESULTS` | ACCE stores construction hours in `MH`; after the COST prefix the denormalized column is **`COST_MH`** (not `COST_TOTAL_HOURS`). DQ-ACCE-3, DQ-ACCE-6, and DQ-ACCE-7 all read from `COST_MH` on ACCE. |
 | `COST_DB_TOTAL_HOURS` | - (not available) | - | ACCE does not separate database hours; the ACCE counterpart of DQ-ADR-6 uses **`COST_MH` only**. |
 | `COST_TOTAL_COST` | `COST_TOTAL_COST` | Derived: `TOTAL_COST` from `ACCE_ESTIMATECOSTRESULTS` | Direct mapping. |
 | `DESIGN_PARAMETER_VALUE` | `DESIGN_VALUE` | Derived: `VALUE` from `ACCE_ESTIMATEDESIGNDETAILS` (builder prefixes with `DESIGN_`) | Design property value (1:N child of the item record). ADR's analogue column is `DESIGN_PARAMETER_VALUE`; ACCE source column is `VALUE` so the prefixed result is **`DESIGN_VALUE`**: different physical column name. |
@@ -1917,25 +1917,25 @@ differences below are mechanical adaptations to ACCE's schema.
 
 | Aspect | ADR | ACCE | Difference |
 |---|---|---|---|
-| **AC1 COA derivation** | `SPLIT_PART(COMPLETE_WBC, '.', 1)` → lookup | `COA[:3]` → lookup | ACCE stores a 4-char `COA` whose leading 3 chars are the ICARUS group; the slice is the analog of ADR's dot-split. |
-| **AC2 Date proxy** | `COST_UPDATE` | `JOB_NO` | Different field name, same role, the estimate-basis-date proxy used by the EMMA normalization period selector. Both carry a Validity format check, but the shapes differ: DQ-ADR-2's `COST_UPDATE` is a 4-digit-year quarter (`[1-4]Q<YYYY>`, e.g. `2Q2019`); AC2's `JOB_NO` is a 2-digit-year quarter with an optional revision suffix (`[1-4]Q<YY>`, e.g. `2Q23 RP1`). |
-| **AC4 Negative-total check** | Project fails when `SUM(QTY_QUANTITY) < 0` | Project fails when `SUM(QTY_KEY_QTY) + SUM(QTY_OTHER_QTY) < 0` | Same Validity concept (a project's quantities must not net negative); ACCE sums both split quantity slots since it has no single coalesced quantity column in AC4's input set. Row-level negatives are allowed in both. |
-| **AC3 Ratio numerator** | `COUNT(DISTINCT COMPLETE_WBC)` | `COUNT(DISTINCT COA)` (over the full 4-char `COA`) | Different granularity - ACCE's metric counts distinct 4-char codes per resolved bucket, naturally capped at ten per 3-char ICARUS group; same statistical (IQR-bound) logic. |
-| **AC4 Discipline keys** | `ITEM_TYPE` (pattern-matched `Estimate*` labels) | `DESCRIPTION` (explicit per-core-type value lists, e.g. `PIPING` / `CS PIPE ERECTION` for piping, `CENTRIFUGAL PUMPS` / `S&T EXCHANGER` for equipment), matched on `UPPER(TRIM(DESCRIPTION))`; `MODULE_COUNT` keeps a `MODULE` / `MODULAR` substring match | ACCE classifies straight off the estimate-line label rather than a discipline account code; both scope and population use the same `DESCRIPTION` lists. |
-| **AC4 Quantity / UOM source** | Coalesced `QTY_QUANTITY` + `QTY_UOM` (sum / first per item) | Split `QTY_KEY_QTY` / `QTY_OTHER_QTY` and `QTY_KEY_UNITS` / `QTY_OTHER_UNITS`; a type is populated when **either** slot has qty > 0 and **either** unit is in the type's UOM set, compared on `UPPER(TRIM(units))` with no alias normalization | Mirrors the SQL spec's per-row `(KEY_QTY > 0 OR OTHER_QTY > 0)` and `(KEY_UNITS IN (...) OR OTHER_UNITS IN (...))` before the project-level `MAX()`. |
-| **AC5 Design source** | `DESIGN_KEY_PARAMETER_NAMES` (builder-derived list of populated parameter names, 1:N join on `ROW_ID`); at least one name must start with the item type's COA prefix (any populated parameter for unmapped types) | `DESIGN_PROPERTY` + `DESIGN_VALUE` (source columns `PROPERTY` / `VALUE` on `ACCE_ESTIMATEDESIGNDETAILS`, joined via `DESIGN_ID` - builder prefixes with `DESIGN_`) | ACCE requires BOTH a named parameter and a value (the "120 m of what?" interpretability gate); DQ-ADR-5 checks only the value. Also: AC5's quantity gate is strictly positive (negatives are "no quantity"). |
-| **AC6 Hours source** | `COST_TOTAL_HOURS` OR `COST_DB_TOTAL_HOURS` | **`COST_MH` only** (sourced from `MH` on `ACCE_ESTIMATECOSTRESULTS`) | ACCE has no separate Design-Build hours column; AC6 evaluates only `COST_MH`. Equivalent to DQ-ADR-6's two-column OR when only one hours column exists. |
-| **AC7 Segment keys** | `(ITEM_TYPE, QTY_UOM)` | `(DESCRIPTION, QTY_UOM)` | Same per-segment IQR logic; AC7 partitions by the raw `UPPER(TRIM(DESCRIPTION))` value + effective UOM (`COALESCE(KEY_UNITS, OTHER_UNITS)`) - finer-grained (per-label) than ADR's discipline-level types. |
-| **AC8 Project key** | `ROOT_ITEM_NAME` | `COMPONENT_SOURCE` | Same field semantics, the project / scope grouping key; different column name. |
-| **AC8 Category classifier** | Pattern-match on `ITEM_TYPE` + `QTY_UOM`, plus a closed `(ITEM_TYPE, UOM)` allow-list for `EQUIPMENT_COUNT` | `DESCRIPTION` value lists (the same taxonomy AC4 uses) gated by a `KEY_UNITS` / `OTHER_UNITS` family match | ACCE keys off the estimate-line label rather than a discipline code. **AC8's volume set differs from AC4's**: AC8 admits `YD` where AC4 admits `YDS`; the equipment list spells `TURBO-EXPAND, COMPRESSOR` (comma) where AC4 uses a period. |
-| **AC8 Ratio eligibility** | (n/a - DQ-ADR-8's ratio logic is the same shape) | A ratio is calculable when the **denominator > 0** (`NULLIF(den, 0)`); the numerator is allowed to be `0`. A project with no pipe but some equipment contributes a valid `0` ratio to the population. | Locked-in for SQL parity. Differs from a naïve `num > 0 AND den > 0` filter that would silently drop legitimate zero-ratio projects. |
-| **AC3 project scope** | `params["project_scoped"]` recomputes the percentile baseline within each `PLANVIEW_ID` partition | - (not exposed) | AC3's baseline is always portfolio-wide; ACCE COA granularity is already coarser so per-project scope adds noise. |
-| **AC3 uniform 1:1 detection** | Flags every material 1:1 bucket when the toggle is on | Flags material 1:1 buckets only when ≥ 80 % (`ACCE_AC3_UNIFORM_THRESHOLD`) of eligible mappings in the portfolio are 1:1 | The wider gate reflects that ACCE COA codes are inherently coarser, so a handful of legitimate 1:1 mappings should not by themselves trip the rule. |
-| **AC7 / AC8 project scope** | `params["segment_by_project_type"]` extends the IQR partition with `(E05_DEPARTMENT, BUSINESS)` from Planview | Same toggle exposed as `params["segment_by_project_type"]` | Identical semantics - off by default. AC7 extends `(DESCRIPTION, QTY_UOM)` → `(DESCRIPTION, QTY_UOM, E05_DEPARTMENT, BUSINESS)`; AC8 partitions the per-ratio IQR baseline by `(E05_DEPARTMENT, BUSINESS)`. When on, the Planview reference must be available or the check raises `CustomRuleNotEvaluated`. |
+| **DQ-ACCE-1 COA derivation** | `SPLIT_PART(COMPLETE_WBC, '.', 1)` → lookup | `COA[:3]` → lookup | ACCE stores a 4-char `COA` whose leading 3 chars are the ICARUS group; the slice is the analog of ADR's dot-split. |
+| **DQ-ACCE-2 Date proxy** | `COST_UPDATE` | `JOB_NO` | Different field name, same role, the estimate-basis-date proxy used by the EMMA normalization period selector. Both carry a Validity format check, but the shapes differ: DQ-ADR-2's `COST_UPDATE` is a 4-digit-year quarter (`[1-4]Q<YYYY>`, e.g. `2Q2019`); DQ-ACCE-2's `JOB_NO` is a 2-digit-year quarter with an optional revision suffix (`[1-4]Q<YY>`, e.g. `2Q23 RP1`). |
+| **DQ-ACCE-4 Negative-total check** | Project fails when `SUM(QTY_QUANTITY) < 0` | Project fails when `SUM(QTY_KEY_QTY) + SUM(QTY_OTHER_QTY) < 0` | Same Validity concept (a project's quantities must not net negative); ACCE sums both split quantity slots since it has no single coalesced quantity column in DQ-ACCE-4's input set. Row-level negatives are allowed in both. |
+| **DQ-ACCE-3 Ratio numerator** | `COUNT(DISTINCT COMPLETE_WBC)` | `COUNT(DISTINCT COA)` (over the full 4-char `COA`) | Different granularity - ACCE's metric counts distinct 4-char codes per resolved bucket, naturally capped at ten per 3-char ICARUS group; same statistical (IQR-bound) logic. |
+| **DQ-ACCE-4 Discipline keys** | `ITEM_TYPE` (pattern-matched `Estimate*` labels) | `DESCRIPTION` (explicit per-core-type value lists, e.g. `PIPING` / `CS PIPE ERECTION` for piping, `CENTRIFUGAL PUMPS` / `S&T EXCHANGER` for equipment), matched on `UPPER(TRIM(DESCRIPTION))`; `MODULE_COUNT` keeps a `MODULE` / `MODULAR` substring match | ACCE classifies straight off the estimate-line label rather than a discipline account code; both scope and population use the same `DESCRIPTION` lists. |
+| **DQ-ACCE-4 Quantity / UOM source** | Coalesced `QTY_QUANTITY` + `QTY_UOM` (sum / first per item) | Split `QTY_KEY_QTY` / `QTY_OTHER_QTY` and `QTY_KEY_UNITS` / `QTY_OTHER_UNITS`; a type is populated when **either** slot has qty > 0 and **either** unit is in the type's UOM set, compared on `UPPER(TRIM(units))` with no alias normalization | Mirrors the SQL spec's per-row `(KEY_QTY > 0 OR OTHER_QTY > 0)` and `(KEY_UNITS IN (...) OR OTHER_UNITS IN (...))` before the project-level `MAX()`. |
+| **DQ-ACCE-5 Design source** | `DESIGN_KEY_PARAMETER_NAMES` (builder-derived list of populated parameter names, 1:N join on `ROW_ID`); at least one name must start with the item type's COA prefix (any populated parameter for unmapped types) | `DESIGN_PROPERTY` + `DESIGN_VALUE` (source columns `PROPERTY` / `VALUE` on `ACCE_ESTIMATEDESIGNDETAILS`, joined via `DESIGN_ID` - builder prefixes with `DESIGN_`) | ACCE requires BOTH a named parameter and a value (the "120 m of what?" interpretability gate); DQ-ADR-5 checks only the value. Also: DQ-ACCE-5's quantity gate is strictly positive (negatives are "no quantity"). |
+| **DQ-ACCE-6 Hours source** | `COST_TOTAL_HOURS` OR `COST_DB_TOTAL_HOURS` | **`COST_MH` only** (sourced from `MH` on `ACCE_ESTIMATECOSTRESULTS`) | ACCE has no separate Design-Build hours column; DQ-ACCE-6 evaluates only `COST_MH`. Equivalent to DQ-ADR-6's two-column OR when only one hours column exists. |
+| **DQ-ACCE-7 Segment keys** | `(ITEM_TYPE, QTY_UOM)` | `(DESCRIPTION, QTY_UOM)` | Same per-segment IQR logic; DQ-ACCE-7 partitions by the raw `UPPER(TRIM(DESCRIPTION))` value + effective UOM (`COALESCE(KEY_UNITS, OTHER_UNITS)`) - finer-grained (per-label) than ADR's discipline-level types. |
+| **DQ-ACCE-8 Project key** | `ROOT_ITEM_NAME` | `COMPONENT_SOURCE` | Same field semantics, the project / scope grouping key; different column name. |
+| **DQ-ACCE-8 Category classifier** | Pattern-match on `ITEM_TYPE` + `QTY_UOM`, plus a closed `(ITEM_TYPE, UOM)` allow-list for `EQUIPMENT_COUNT` | `DESCRIPTION` value lists (the same taxonomy DQ-ACCE-4 uses) gated by a `KEY_UNITS` / `OTHER_UNITS` family match | ACCE keys off the estimate-line label rather than a discipline code. **DQ-ACCE-8's volume set differs from DQ-ACCE-4's**: DQ-ACCE-8 admits `YD` where DQ-ACCE-4 admits `YDS`; the equipment list spells `TURBO-EXPAND, COMPRESSOR` (comma) where DQ-ACCE-4 uses a period. |
+| **DQ-ACCE-8 Ratio eligibility** | (n/a - DQ-ADR-8's ratio logic is the same shape) | A ratio is calculable when the **denominator > 0** (`NULLIF(den, 0)`); the numerator is allowed to be `0`. A project with no pipe but some equipment contributes a valid `0` ratio to the population. | Locked-in for SQL parity. Differs from a naïve `num > 0 AND den > 0` filter that would silently drop legitimate zero-ratio projects. |
+| **DQ-ACCE-3 project scope** | `params["project_scoped"]` recomputes the percentile baseline within each `PLANVIEW_ID` partition | - (not exposed) | DQ-ACCE-3's baseline is always portfolio-wide; ACCE COA granularity is already coarser so per-project scope adds noise. |
+| **DQ-ACCE-3 uniform 1:1 detection** | Flags every material 1:1 bucket when the toggle is on | Flags material 1:1 buckets only when ≥ 80 % (`ACCE_AC3_UNIFORM_THRESHOLD`) of eligible mappings in the portfolio are 1:1 | The wider gate reflects that ACCE COA codes are inherently coarser, so a handful of legitimate 1:1 mappings should not by themselves trip the rule. |
+| **DQ-ACCE-7 / DQ-ACCE-8 project scope** | `params["segment_by_project_type"]` extends the IQR partition with `(E05_DEPARTMENT, BUSINESS)` from Planview | Same toggle exposed as `params["segment_by_project_type"]` | Identical semantics - off by default. DQ-ACCE-7 extends `(DESCRIPTION, QTY_UOM)` → `(DESCRIPTION, QTY_UOM, E05_DEPARTMENT, BUSINESS)`; DQ-ACCE-8 partitions the per-ratio IQR baseline by `(E05_DEPARTMENT, BUSINESS)`. When on, the Planview reference must be available or the check raises `CustomRuleNotEvaluated`. |
 
 ---
 
-## AC1: ISO Code of Account Present (COR + SAB) - ACCE
+## DQ-ACCE-1: ISO Code of Account Present (COR + SAB) - ACCE
 
 - **Type:** Completeness · **Blocking:** **Yes** · **Data product:** ACCE
 - **Implementation:** `check_acce_ac1` (reuses `_a1_value_valid` for the
@@ -1960,7 +1960,7 @@ the value contains the substrings `ERROR` or `N/A` (case-insensitive), same vali
 
 ACCE source data carries 4-character `COA` codes (e.g. `3131`,
 `6320`); the master keys (`ICARUS_COA`) are the 3-character group
-prefixes (e.g. `313`, `632`). AC1 takes the **first three
+prefixes (e.g. `313`, `632`). DQ-ACCE-1 takes the **first three
 characters** of `COA` as the lookup key, the analog of DQ-ADR-1's
 `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation:
 
@@ -1995,8 +1995,8 @@ check fails (no silent pass).
 `ISO_COR` and `SAB` together pick the EMMA normalization factor for
 cost benchmarking. Without them, ACCE cost data cannot be normalized
 across projects, the row is unusable for downstream cross-project
-cost analytics. Hence AC1 is **critical** (same rationale as DQ-ADR-1 and
-EPT E1).
+cost analytics. Hence DQ-ACCE-1 is **critical** (same rationale as DQ-ADR-1 and
+EPT DQ-EPT-1).
 
 ### Failure modes
 
@@ -2025,7 +2025,7 @@ EPT E1).
 
 ---
 
-## AC2: Location + Estimate Date Present & Valid (ACCE)
+## DQ-ACCE-2: Location + Estimate Date Present & Valid (ACCE)
 
 - **Type:** Completeness & Validity · **Data product:** ACCE
 - **Implementation:** `check_acce_ac2` (uses `_is_filled` for completeness
@@ -2051,7 +2051,7 @@ A row passes when **all** hold:
 3. `COUNTRY` (project location) is non-null and non-blank in the
    Planview reference, **after** joining `ACCE.PLANVIEW_ID` against
    `VWS_GP_STANDARD_SHARE.PROJECT_ID`. An unmatched `PLANVIEW_ID` is
-   treated as a missing `COUNTRY` (i.e. the row fails AC2).
+   treated as a missing `COUNTRY` (i.e. the row fails DQ-ACCE-2).
 
 **Why it matters.** COUNTRY + JOB_NO together pick the correct CU
 period for EMMA normalization. `JOB_NO` is the *estimate job / period*
@@ -2080,15 +2080,15 @@ quarter-year shape.
 
 ---
 
-## AC3: Statistical COA-to-ISO mapping ratio (ACCE)
+## DQ-ACCE-3: Statistical COA-to-ISO mapping ratio (ACCE)
 
 - **Type:** Statistical Outlier · **Data product:** ACCE
 - **Implementation:** `check_acce_ac3` (with `_resolve_coa_master_lookups`
-  shared with AC1).
+  shared with DQ-ACCE-1).
 - **Reference dataset:** `ACCE_COA_MASTER`
   (`ACCE.COA[:3] → ICARUS_COA`, lookup `ISO_COR` and `SAB`).
 - **Join key vs distinct count.** The lookup uses the first three
-  characters of `COA` (same derivation as AC1) so multiple distinct
+  characters of `COA` (same derivation as DQ-ACCE-1) so multiple distinct
   4-character source COAs sharing a 3-character prefix all resolve
   to the same `(ISO_COR, SAB)` bucket. The per-bucket
   `COUNT(DISTINCT COA)` metric, however, runs over the **full**
@@ -2096,14 +2096,14 @@ quarter-year shape.
   prefix contribute to the bucket's ratio individually rather than
   collapsing to one.
 
-AC3 is the statistical counterpart of AC1: where AC1 enforces that
-every row resolves to a valid `ISO_COR + SAB`, AC3 asks whether each
+DQ-ACCE-3 is the statistical counterpart of DQ-ACCE-1: where DQ-ACCE-1 enforces that
+every row resolves to a valid `ISO_COR + SAB`, DQ-ACCE-3 asks whether each
 ISO bucket *holds too many distinct ACCE `COA`s*. A high
 `COA_TO_ISO_RATIO` means many ACCE `COA` values collapse into the same
 ISO mapping, and the rule flags the buckets that aggregate beyond
 what the ACCE portfolio's distribution considers normal.
 
-AC3 mirrors ADR DQ-ADR-3 against the ACCE data product. Same row-level
+DQ-ACCE-3 mirrors ADR DQ-ADR-3 against the ACCE data product. Same row-level
 verdict / group-level threshold pattern, same materiality framing,
 same global-P90 baseline, but the ratio is sourced from
 `COUNT(DISTINCT COA)` per resolved `(ISO_COR, SAB)` bucket instead of
@@ -2119,8 +2119,8 @@ same global-P90 baseline, but the ratio is sourced from
    AND the same prefix resolves to a valid SAB in the COA master
    ```
 
-   Validity rejects null / blank / `ERROR` / `N/A` (case-insensitive), same `_a1_value_valid` semantics AC1 uses. Rows that fail any of
-   these are **PASS** for AC3 because AC1 already covers the COA /
+   Validity rejects null / blank / `ERROR` / `N/A` (case-insensitive), same `_a1_value_valid` semantics DQ-ACCE-1 uses. Rows that fail any of
+   these are **PASS** for DQ-ACCE-3 because DQ-ACCE-1 already covers the COA /
    COR / SAB completeness gap.
 
 2. **Bucket metric.** Group eligible rows by `(ISO_COR, SAB)`, then:
@@ -2168,9 +2168,9 @@ same global-P90 baseline, but the ratio is sourced from
 
 ### NOT_APPLICABLE (treated as PASS) cases
 
-- **`COA` missing**: AC1's territory.
+- **`COA` missing**: DQ-ACCE-1's territory.
 - **Resolved `ISO_COR` / `SAB` invalid** (null / blank / `ERROR` /
-  `N/A`) - AC1's territory.
+  `N/A`) - DQ-ACCE-1's territory.
 - **Eligible-mapping population below
   `ACCE_AC3_MIN_MAPPING_POPULATION`** (default `10`) - too few
   buckets to derive a meaningful P90.
@@ -2194,9 +2194,9 @@ SME review**, not as a definitive "this data is wrong" signal.
 
 ### Uniform 1:1 mapping detection (opt-in toggle)
 
-When `detect_uniform_mapping = True`, AC3 layers a portfolio-wide
+When `detect_uniform_mapping = True`, DQ-ACCE-3 layers a portfolio-wide
 uniform detector on top of the percentile fail. Unlike DQ-ADR-3, which
-flags every material 1:1 bucket the moment its toggle is on - AC3
+flags every material 1:1 bucket the moment its toggle is on - DQ-ACCE-3
 only trips the uniform branch when the *proportion* of eligible
 mappings with `ratio == 1` reaches `ACCE_AC3_UNIFORM_THRESHOLD`
 (default **80 %**). When the gate trips, every material 1:1 bucket
@@ -2255,7 +2255,7 @@ power degrades.
 
 | Valid ISO mapping | Material bucket | `ratio` vs P90 | Result |
 |---|---|---|---|
-| No | (any) | (any) | PASS *(AC1 territory)* |
+| No | (any) | (any) | PASS *(DQ-ACCE-1 territory)* |
 | Yes | No | (any) | PASS |
 | Yes | Yes | ≤ P90 | PASS |
 | Yes | Yes | > P90 | **FAIL** |
@@ -2263,13 +2263,13 @@ power degrades.
 
 ---
 
-## AC4: Core quantities populated & non-negative project totals (ACCE)
+## DQ-ACCE-4: Core quantities populated & non-negative project totals (ACCE)
 
 - **Type:** Completeness & Validity · **Data product:** ACCE
 - **Implementation:** `check_acce_ac4` (with `_classify_ac4_scope_acce`
   and `_classify_ac4_quantity_acce` for the discipline mapping).
 
-AC4 is a **project-level Completeness & Validity rule with a row-level
+DQ-ACCE-4 is a **project-level Completeness & Validity rule with a row-level
 verdict**. For each `PLANVIEW_ID` it asks two questions: (a) of the seven
 core quantity types this project's scope implies, is each one actually
 populated? and (b) is the project's combined quantity total
@@ -2308,7 +2308,7 @@ For each `PLANVIEW_ID`:
    project — is **strictly negative**. Individual rows may carry
    negative quantities (corrections / reversals) without failing; only
    the project aggregate is checked, and a total of exactly zero passes.
-   Project **fails** AC4 iff it is flagged by step 3 **or** step 4.
+   Project **fails** DQ-ACCE-4 iff it is flagged by step 3 **or** step 4.
 
 5. **Row-level verdict.** A row fails iff its `PLANVIEW_ID` is
    flagged. Rows with null/blank `PLANVIEW_ID` pass, they cannot
@@ -2336,7 +2336,7 @@ an exact list.
 
 UOM matching is case-insensitive (`UPPER(TRIM(units))`) and compared
 directly against the canonical spellings in each type's UOM set -
-**no alias normalization** is applied on AC4 (unlike AC8, which uses
+**no alias normalization** is applied on DQ-ACCE-4 (unlike DQ-ACCE-8, which uses
 the shared `_A8_UOM_ALIASES` map). The full per-type `DESCRIPTION`
 allow-lists live in `src/custom_dqr/_acce_rules.py`
 (`_AC4_*_DESCRIPTIONS`); the abbreviated examples above are
@@ -2349,7 +2349,7 @@ Same reasoning as DQ-ADR-4: scope detection accepts any UOM (a matching
 requires a specific UOM family. If a piping item is recorded with a
 count unit (`EA`) instead of a length unit (`FEET`), the project still
 has piping scope, but no `PIPING_LF` quantity is populated - FAIL.
-That mismatch is what AC4 surfaces. Both sides share the same
+That mismatch is what DQ-ACCE-4 surfaces. Both sides share the same
 `DESCRIPTION` allow-lists, so the asymmetry is purely the UOM +
 positive-quantity gate that population adds on top of scope; there is
 no per-type special case (the historical `CONCRETE_CY` carve-out that
@@ -2362,7 +2362,7 @@ ADR labels its discipline via `ITEM_TYPE` strings like
 `EstimatePump`, `EstimateSteelStructure` - DQ-ADR-4 detects scope via
 substring matches on those labels. ACCE originally mirrored this with
 the `ACCT` account code (`2-EQP`, `3-PIP`, …), but that classifier was
-retired: AC4 / AC7 / AC8 now key off the `DESCRIPTION` estimate-line
+retired: DQ-ACCE-4 / DQ-ACCE-7 / DQ-ACCE-8 now key off the `DESCRIPTION` estimate-line
 label, an explicit per-core-type allow-list matched on
 `UPPER(TRIM(DESCRIPTION))`. The description carries the finer-grained
 signal the account code lacked (e.g. it distinguishes concrete from
@@ -2410,7 +2410,7 @@ code.
 
 ---
 
-## AC5: Design details present when quantity exists (ACCE)
+## DQ-ACCE-5: Design details present when quantity exists (ACCE)
 
 - **Type:** Consistency · **Data product:** ACCE
 - **Implementation:** `check_acce_ac5`
@@ -2428,7 +2428,7 @@ detail (named parameter + value) is present for the same item.
 
 ### Where the inputs come from
 
-AC5 operates on the **denormalized ACCE data product** built by the
+DQ-ACCE-5 operates on the **denormalized ACCE data product** built by the
 data-product builder, which left-joins the child tables onto the
 primary item record. The split quantity slots and the design columns
 survive the per-`ROW_ID` / per-`DESIGN_ID` aggregation:
@@ -2457,7 +2457,7 @@ Where:
   (the check is strictly positive).
 - `HAS_DESIGN_DETAIL = DESIGN_PROPERTY is non-blank AND DESIGN_VALUE
   is non-blank` (whitespace-only strings are treated as blank, same
-  `_is_filled` semantics used by AC1 / AC2). A bare value with no
+  `_is_filled` semantics used by DQ-ACCE-1 / DQ-ACCE-2). A bare value with no
   named parameter - the "120 m of what?" case - is **not** a usable
   detail.
 
@@ -2465,7 +2465,7 @@ Where:
 
 A quantity without supporting design information cannot be
 normalized, compared across items, or validated, the analytical
-value of the estimate drops sharply. AC5 is the lightweight gate
+value of the estimate drops sharply. DQ-ACCE-5 is the lightweight gate
 that surfaces the most consequential omission: **a quantity exists
 but the engineering context that explains it does not.** Requiring a
 named parameter alongside the value closes the loophole where a
@@ -2500,7 +2500,7 @@ stray value with no parameter name would otherwise satisfy the rule.
 
 ---
 
-## AC6: Construction hours present when quantity exists (ACCE)
+## DQ-ACCE-6: Construction hours present when quantity exists (ACCE)
 
 - **Type:** Consistency · **Data product:** ACCE
 - **Implementation:** `check_acce_ac6`
@@ -2508,7 +2508,7 @@ stray value with no parameter name would otherwise satisfy the rule.
 A row passes when one of the following holds:
 
 1. The estimate item has **no positive quantity** (out-of-scope,
-   treated as PASS, same one-directional framing as AC5).
+   treated as PASS, same one-directional framing as DQ-ACCE-5).
 2. The estimate item has a **positive quantity** *and* the
    construction-hours aggregate is strictly greater than zero.
 
@@ -2517,13 +2517,13 @@ zero / null / negative for the same item.
 
 ### Where the inputs come from
 
-AC6 operates on the **denormalized ACCE data product**. Both the
+DQ-ACCE-6 operates on the **denormalized ACCE data product**. Both the
 quantity and the hours columns live on 1:N child tables of the item
 record:
 
 | Source table | Source column | Denormalized column | Notes |
 |---|---|---|---|
-| `ACCE_ESTIMATEQTYRESULTS` (1:N) | `KEY_QTY` | `QTY_KEY_QTY` | `SUM(KEY_QTY)` per item, same split inputs AC5 uses. |
+| `ACCE_ESTIMATEQTYRESULTS` (1:N) | `KEY_QTY` | `QTY_KEY_QTY` | `SUM(KEY_QTY)` per item, same split inputs DQ-ACCE-5 uses. |
 | `ACCE_ESTIMATEQTYRESULTS` (1:N) | `OTHER_QTY` | `QTY_OTHER_QTY` | `SUM(OTHER_QTY)` per item. |
 | `ACCE_ESTIMATECOSTRESULTS` (1:N) | `MH` | `COST_MH` | Sum of man-hours across cost rows. **Note:** ADR's analog is `COST_TOTAL_HOURS` (sourced from `TOTAL_HOURS`); ACCE's source column is `MH`, prefixed by the builder to `COST_MH`. |
 
@@ -2539,7 +2539,7 @@ record:
 Where:
 
 - `HAS_QUANTITY = (QTY_KEY_QTY > 0) OR (QTY_OTHER_QTY > 0)`. Same
-  definition as AC5 - null, zero, and **negative** aggregates in both
+  definition as DQ-ACCE-5 - null, zero, and **negative** aggregates in both
   slots all count as "no quantity" (the check is strictly positive).
 - `HAS_CONSTRUCTION_HOURS = (COST_MH > 0)`. Null inputs are coerced
   to zero. Negative aggregates do **not** count as hours present,
@@ -2577,7 +2577,7 @@ are consumed downstream.
 ### Notes
 
 - **One-directional check.** Hours without a quantity is **PASS**,
-  not fail - AC6 only enforces the implication
+  not fail - DQ-ACCE-6 only enforces the implication
   `quantity → construction hours`. Items with hours but no
   quantity are out of scope.
 - **Aggregation caveat.** Because the data-product builder
@@ -2595,12 +2595,12 @@ are consumed downstream.
 
 ---
 
-## AC7: Within-discipline quantity / hour ratio outlier (ACCE)
+## DQ-ACCE-7: Within-discipline quantity / hour ratio outlier (ACCE)
 
 - **Type:** Statistical Outlier · **Data product:** ACCE
 - **Implementation:** `check_acce_ac7`
 
-A per-item Statistical Outlier rule with row-level verdict. AC7
+A per-item Statistical Outlier rule with row-level verdict. DQ-ACCE-7
 looks for items whose **hours-per-quantity ratio** is unusual
 *within its peer group*, same raw `DESCRIPTION` (estimate-line
 label) and same `QTY_UOM`. The threshold is derived from the segment
@@ -2663,12 +2663,12 @@ itself (IQR), not from a fixed benchmark.
 
 ### NOT_APPLICABLE (treated as PASS) cases
 
-AC7 does not surface a separate "NA" bucket, it returns Booleans
+DQ-ACCE-7 does not surface a separate "NA" bucket, it returns Booleans
 only. The cases below map to PASS to avoid double-counting against
 rules that already cover those gaps:
 
 - **Ratio cannot be calculated** (no positive qty, or hours missing
-  / zero / negative) - AC6 covers the missing-hours case for
+  / zero / negative) - DQ-ACCE-6 covers the missing-hours case for
   positive quantities.
 - **`DESCRIPTION` or the effective UOM blank**: no segment to compare
   against.
@@ -2680,7 +2680,7 @@ rules that already cover those gaps:
 
 ### Where the inputs come from
 
-AC7 operates on the **denormalized ACCE data product**. `DESCRIPTION`
+DQ-ACCE-7 operates on the **denormalized ACCE data product**. `DESCRIPTION`
 is a pass-through from the primary item table; the split quantity /
 unit columns and hours come from the SUM-aggregated 1:N child tables:
 
@@ -2695,17 +2695,17 @@ unit columns and hours come from the SUM-aggregated 1:N child tables:
 
 ### Why it matters
 
-AC7 is the productivity sanity check. Hours per foot of pipe, hours
+DQ-ACCE-7 is the productivity sanity check. Hours per foot of pipe, hours
 per cubic yard of concrete, hours per ton of steel, these ratios
 are tight within a discipline because they reflect physical effort.
 A row that lies far outside its segment's IQR almost always points
 to one of: an incorrect quantity, an incorrect hours total, a UOM
-mismatch, or a genuinely unusual project condition. AC7 surfaces
+mismatch, or a genuinely unusual project condition. DQ-ACCE-7 surfaces
 those rows for review; it does **not** assert they are wrong.
 
 ### Differences from ADR DQ-ADR-7
 
-| Aspect | DQ-ADR-7 (ADR) | AC7 (ACCE) |
+| Aspect | DQ-ADR-7 (ADR) | DQ-ACCE-7 (ACCE) |
 |---|---|---|
 | Segment key | `(ITEM_TYPE, QTY_UOM)` (substring match on `Estimate*` labels) | `(DESCRIPTION, QTY_UOM)` (raw `UPPER(TRIM(DESCRIPTION))` value + effective UOM) |
 | Quantity | `SUM(QUANTITY)` per item | `COALESCE(KEY_QTY, 0) + COALESCE(OTHER_QTY, 0)`; eligible when either slot > 0 |
@@ -2755,14 +2755,14 @@ those rows for review; it does **not** assert they are wrong.
 
 ---
 
-## AC8: Cross-discipline quantity ratios (ACCE)
+## DQ-ACCE-8: Cross-discipline quantity ratios (ACCE)
 
 - **Type:** Statistical Outlier · **Data product:** ACCE
 - **Implementation:** `check_acce_ac8` (with
   `_classify_ac8_category_acce` for the discipline mapping).
 
-AC8 validates the **overall shape of each project**. Where AC7 looks
-at hours-per-quantity within a single discipline, AC8 looks at the
+DQ-ACCE-8 validates the **overall shape of each project**. Where DQ-ACCE-7 looks
+at hours-per-quantity within a single discipline, DQ-ACCE-8 looks at the
 proportions *between* disciplines - pipe length per equipment count,
 cable length per transmitter count, steel weight per concrete
 volume. A project whose proportions sit far from the peer-project
@@ -2781,7 +2781,7 @@ population is flagged for review.
 
 2. **Discipline classification.** Each eligible row is mapped to one
    of six categories using `DESCRIPTION` (an explicit per-discipline
-   value list, the same taxonomy AC4 uses) plus a per-category unit
+   value list, the same taxonomy DQ-ACCE-4 uses) plus a per-category unit
    gate: the row classifies when its `DESCRIPTION` is in the list AND
    `KEY_UNITS` **or** `OTHER_UNITS` is in the category's UOM family
    (all compared on `UPPER(TRIM(...))`):
@@ -2795,12 +2795,12 @@ population is flagged for review.
 | `TRANSMITTER_COUNT` | `INSTRUMENTATION`, `FLOW INSTRUMENTS`, … | `EACH`, `EA`, `ITEM`, `ITEMS`, `ITEM(S)` |
 | `EQUIPMENT_COUNT` | `CENTRIFUGAL PUMPS`, `S&T EXCHANGER`, … | `EACH`, `EA`, `ITEM`, `ITEMS`, `ITEM(S)` |
 
-> **AC8's volume UOM set differs from AC4's.** AC8 admits the bare
-> `YD` spelling where AC4 admits `YDS`; the length / weight / count
+> **DQ-ACCE-8's volume UOM set differs from DQ-ACCE-4's.** DQ-ACCE-8 admits the bare
+> `YD` spelling where DQ-ACCE-4 admits `YDS`; the length / weight / count
 > sets carry the same spellings. The six `DESCRIPTION` lists match
-> AC4's taxonomy except AC8's equipment list spells the
+> DQ-ACCE-4's taxonomy except DQ-ACCE-8's equipment list spells the
 > turbo-expander compressor `TURBO-EXPAND, COMPRESSOR` (comma) where
-> AC4 uses a period.
+> DQ-ACCE-4 uses a period.
 
 Rows the classifier does not recognise are **not eligible** for any
 ratio and have no effect on the result.
@@ -2809,7 +2809,7 @@ ratio and have no effect on the result.
    quantity `COALESCE(KEY_QTY, 0) + COALESCE(OTHER_QTY, 0)` is summed,
    the discipline-level total used as numerator or denominator.
 
-4. **Compute cross-discipline ratios per project.** AC8 evaluates
+4. **Compute cross-discipline ratios per project.** DQ-ACCE-8 evaluates
    three:
 
    ```
@@ -2844,7 +2844,7 @@ ratio and have no effect on the result.
    mild outlier and therefore a FAIL, so the Boolean check uses
    only the mild bound.
 
-6. **Row-level verdict.** A row **fails** AC8 iff its
+6. **Row-level verdict.** A row **fails** DQ-ACCE-8 iff its
    `COMPONENT_SOURCE` is flagged on at least one of the ratios above.
    Rows whose project is unknown (null / blank `COMPONENT_SOURCE`)
    pass, they cannot be assigned to a project group.
@@ -2863,7 +2863,7 @@ ratio and have no effect on the result.
 
 ### Where the inputs come from
 
-AC8 operates on the **denormalized ACCE data product**.
+DQ-ACCE-8 operates on the **denormalized ACCE data product**.
 `COMPONENT_SOURCE` and `DESCRIPTION` are pass-throughs from the
 primary item table; the split QTY columns survive the 1:N child
 aggregation (numerics summed, units kept as the first non-null):
@@ -2885,12 +2885,12 @@ you can't have a hundred pumps without commensurate piping and
 cable. When that proportion breaks, it's almost always a sign of:
 data-entry error, missing quantities for one discipline, UOM
 mismatch, mis-classified scope, or a genuinely unusual project.
-AC8 surfaces those projects for review; it does **not** assert
+DQ-ACCE-8 surfaces those projects for review; it does **not** assert
 they are wrong.
 
 ### Differences from ADR DQ-ADR-8
 
-| Aspect | DQ-ADR-8 (ADR) | AC8 (ACCE) |
+| Aspect | DQ-ADR-8 (ADR) | DQ-ACCE-8 (ACCE) |
 |---|---|---|
 | Project key | `ROOT_ITEM_NAME` | `COMPONENT_SOURCE` |
 | Classifier | Substring sweep over `Estimate*` `ITEM_TYPE` labels, per-(`ITEM_TYPE`, `UOM`) allow-list for `EQUIPMENT_COUNT` | `DESCRIPTION` value lists (per discipline) gated by a `KEY_UNITS` / `OTHER_UNITS` family match |
@@ -2906,7 +2906,7 @@ they are wrong.
   failing.
 - **Classification uses `DESCRIPTION` value lists instead of ADR's
   `ITEM_TYPE` substrings.** The six per-discipline lists are the same
-  taxonomy AC4 keys off; a row classifies when its `DESCRIPTION` is in
+  taxonomy DQ-ACCE-4 keys off; a row classifies when its `DESCRIPTION` is in
   a list and either unit slot is in the category's UOM family.
 - **UOM matching is case-insensitive** after `UPPER(TRIM(...))`, with
   no alias normalization (the lists carry the canonical spellings).
@@ -3094,7 +3094,7 @@ the step.
 
 > **Tip.** Step 3 surfaces a 🎯 cue on rows whose physical column is
 > required by at least one Custom DQR (rule IDs are listed inline, e.g.
-> `🎯 E1, E3`). The same chip is rendered on the corresponding selected-CDE
+> `🎯 DQ-EPT-1, DQ-EPT-3`). The same chip is rendered on the corresponding selected-CDE
 > badge above the grid, so the user can see which picks are powering
 > which rules. Each Step 3 DP card also exposes a
 > **🎯 Select all CDEs required by Custom DQRs** shortcut that unions
@@ -3110,7 +3110,7 @@ to the rule cards. Clicking it pre-populates every rule checkbox's
 `session_state` entry to True before the cards render, so the user's
 Apply ticks land on the same render and the dp-block writer persists a
 `CustomDQRAssignment` for each rule. The shortcut is **not pre-applied**: the user must click it explicitly, and any previously-stored weight
-or option params (e.g. E3's `project_scoped` toggle) are preserved across
+or option params (e.g. DQ-EPT-3's `project_scoped` toggle) are preserved across
 the bulk-select because the writer re-reads `cfg.custom_assignments`
 when deciding what to carry forward. The shortcut is hidden for data
 products whose catalog entry is empty.
@@ -3134,7 +3134,7 @@ exposes a per-rule toggle below the rule's description in Step 4.2:
 - **CDE-coverage validation.** `effective_required_columns(rule, params)`
   folds `required_columns_when_enabled` from each *enabled* option into
   the rule's static `required_columns`. Step 4.2 uses this composed map
-  so flipping E3's project-scope toggle on immediately demands
+  so flipping DQ-EPT-3's project-scope toggle on immediately demands
   `PLANVIEW_ID` as a CDE.
 
 ---
@@ -3181,7 +3181,7 @@ full scoring math and edge cases.
      reference_df, reference_column)` - non-blank source value present in
      the reference column. Raise `CustomRuleNotEvaluated` *before*
      calling this helper if your reference dataset is missing.
-   - For statistical-outlier rules, replicate the E3 / E6 pattern:
+   - For statistical-outlier rules, replicate the DQ-EPT-3 / DQ-EPT-6 pattern:
      compute group-level metrics and propagate the per-group verdict
      back to every row of the failing group.
 
