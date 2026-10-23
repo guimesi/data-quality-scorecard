@@ -915,6 +915,31 @@ def test_step4_2_renders_adr_cards_without_retired_rules():
     assert not any(f'rule-id">DQ-ADR-{n}<' in m for m in headers for n in ("2", "7", "8"))
 
 
+def test_step4_2_renders_acce_cards_without_retired_rules():
+    """ACCE mirrors ADR: its active rule cards (DQ-ACCE-1 first) and the
+    inactive DQ-ACCE-3 card render, but never the retired DQ-ACCE-2 / 7 / 8
+    (nor a DQ-ACCE-9, which does not exist)."""
+    from src.models import DataProductConfig
+    dp = _build_data_product_for("ACCE")
+    cfg = DataProductConfig(
+        system_code="ACCE",
+        cdes=["PLANVIEW_ID", "COA"],
+        dqr_sources=["custom"],
+        source_weights={"custom": 100.0},
+    )
+    at = _new_app(
+        current_step="dqr_custom_rules",
+        selected_systems=["ACCE"],
+        data_products={"ACCE": dp},
+        configs={"ACCE": cfg},
+    )
+    markdowns = [m.value for m in at.markdown]
+    assert any("DQ-ACCE-1" in m and "ISO Code" in m for m in markdowns)
+    assert any("DQ-ACCE-3" in m and "Inactive" in m for m in markdowns)
+    headers = [m for m in markdowns if 'class="rule-id"' in m]
+    assert not any(f'rule-id">DQ-ACCE-{n}<' in m for m in headers for n in ("2", "7", "8", "9"))
+
+
 def test_step4_2_when_no_dp_uses_custom_shows_info():
     """Defensive: hitting Step 4.2 with no DP using 'custom' shows an info
     message rather than blank."""
@@ -1189,9 +1214,10 @@ def test_step2_prefetches_reference_datasets_when_ept_selected():
 
 
 def test_step2_prefetches_acce_reference_datasets():
-    """ACCE ships DQ-ACCE-1 (`ACCE_COA_MASTER`) and DQ-ACCE-2 (`VWS_GP_STANDARD_SHARE`).
-    Step 2 must prefetch both so the rules can evaluate in Step 6 without
-    re-opening a Databricks connection."""
+    """ACCE's only active reference-backed rule is DQ-ACCE-1
+    (`ACCE_COA_MASTER`); DQ-ACCE-2 (Planview) is retired and ACCE has no
+    MFC rule. Step 2 must prefetch the COA master so the rule can evaluate
+    in Step 6 without re-opening a Databricks connection."""
     from src.reference_data import _SESSION_STATE_KEY
 
     at = _new_app(
@@ -1201,7 +1227,6 @@ def test_step2_prefetches_acce_reference_datasets():
     assert _SESSION_STATE_KEY in at.session_state
     cache = at.session_state[_SESSION_STATE_KEY]
     assert "ACCE_COA_MASTER" in cache
-    assert "VWS_GP_STANDARD_SHARE" in cache
 
 
 def test_step2_prefetches_planview_share_for_adr():

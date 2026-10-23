@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from config.custom_dqr._acce_catalog import ACCE_RULES
+from config.custom_dqr._acce_catalog import ACCE_RETIRED_RULES, ACCE_RULES
 from config.custom_dqr._adr_catalog import ADR_RETIRED_RULES, ADR_RULES
 from config.custom_dqr._ept_catalog import EPT_RULES
 from config.custom_dqr._shared import (
@@ -48,6 +48,7 @@ CUSTOM_DQR_RULES: Dict[str, List[CustomRuleDef]] = {
 # they are not registered anywhere the user can select them.
 RETIRED_CUSTOM_DQR_RULES: Dict[str, List[CustomRuleDef]] = {
     "ADR": ADR_RETIRED_RULES,
+    "ACCE": ACCE_RETIRED_RULES,
 }
 
 

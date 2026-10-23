@@ -28,9 +28,11 @@ option-builder helpers) and
 `_dispatcher.py` for `evaluate_custom_rules`).
 
 The catalog is keyed by Data Product (`ADR`, `ACCE`, `EPT`, `SQS`).
-**EPT** ships seven rules out of the box (DQ-EPT-1 – DQ-EPT-7), **ADR** ships eight
-(DQ-ADR-1, DQ-ADR-2, DQ-ADR-3, DQ-ADR-4, DQ-ADR-5, DQ-ADR-6, DQ-ADR-7, DQ-ADR-8), **ACCE** ships its own per-rule
-catalog (DQ-ACCE-1, …) that mirrors the ADR rules against the ACCE schema,
+**EPT** ships seven rules out of the box (DQ-EPT-1 – DQ-EPT-7), **ADR** ships nine
+(DQ-ADR-1 … DQ-ADR-9; DQ-ADR-3 inactive, DQ-ADR-2 / 7 / 8 retired), **ACCE** ships
+its own per-rule catalog (DQ-ACCE-1 … DQ-ACCE-8) that mirrors DQ-ADR-1 … DQ-ADR-8 -
+lifecycle included - against the ACCE schema (DQ-ADR-9 has no ACCE
+counterpart: the ACCE cost results carry no material factor codes),
 and **SQS** (Quality domain) ships the Quality team's two curated
 rules, `dq-inspection-12` (Completeness - `TOTAL_CONSUMED_HOURS` must
 be recorded on Completed inspections) and `dq-inspection-13`
@@ -78,7 +80,7 @@ rules expose behavioural toggles on their rule cards:
 |---|---|---|---|
 | **DQ-EPT-3 / DQ-ADR-3** | `project_scoped` | `False` | Recompute the percentile baseline *within each `PLANVIEW_ID` partition* instead of globally. DQ-EPT-3 adds `PLANVIEW_ID` to the required-CDE list; DQ-ADR-3 already requires it. Rows lacking `PLANVIEW_ID` are PASS (DQ-EPT-7 / DQ-ADR-2 cover the missing-project linkage). DQ-ACCE-3 does **not** expose this toggle, its baseline is always portfolio-wide. |
 | **DQ-EPT-3 / DQ-ADR-3** | `detect_uniform_mapping` | `False` | After the percentile fail, additionally fail every *material* group whose `ratio == 1` - surfaces suspiciously uniform 1:1 mappings. Both branches combine with **OR**; materiality still gates both. |
-| **DQ-ACCE-3** | `detect_uniform_mapping` | `False` | After the percentile fail, **also** fail every material 1:1 bucket, but only when ≥ `ACCE_AC3_UNIFORM_THRESHOLD` (default **80 %**) of eligible mappings in the portfolio are 1:1. The wider gate reflects that ACCE COA codes are inherently coarser than ADR's WBCs, so a few legitimate 1:1 mappings should not by themselves trip the rule. |
+| **DQ-ACCE-3** *(inactive)* | `detect_uniform_mapping` | `False` | After the percentile fail, **also** fail every material 1:1 bucket, but only when ≥ `ACCE_AC3_UNIFORM_THRESHOLD` (default **80 %**) of eligible mappings in the portfolio are 1:1. The wider gate reflects that ACCE COA codes are inherently coarser than ADR's WBCs, so a few legitimate 1:1 mappings should not by themselves trip the rule. |
 | **DQ-EPT-6 / DQ-ADR-7 / DQ-ADR-8 / DQ-ACCE-7 / DQ-ACCE-8** | `segment_by_project_type` | `False` | Extend the IQR segment key with the composite `(E05_DEPARTMENT, BUSINESS)` tuple resolved from `VWS_GP_STANDARD_SHARE` via `PLANVIEW_ID → PROJECT_ID`. DQ-ADR-7 extends `(ITEM_TYPE, QTY_UOM)` and DQ-ACCE-7 extends `(DESCRIPTION, QTY_UOM)` → `(…, E05_DEPARTMENT, BUSINESS)`; DQ-ADR-8 / DQ-ACCE-8 / DQ-EPT-6 partition the per-ratio / per-project IQR baseline by `(E05_DEPARTMENT, BUSINESS)` alone. Per-segment populations below the rule's minimum-population floor stay NOT_APPLICABLE → PASS. Rows / projects whose segment cannot be resolved (missing PLANVIEW_ID, unmatched PROJECT_ID, or null/blank `E05_DEPARTMENT` / `BUSINESS`) are also NOT_APPLICABLE → PASS - completeness rules already cover those gaps. When the toggle is on and the reference dataset is unavailable, the check raises `CustomRuleNotEvaluated`. |
 
 All toggles are opt-in so the rule's pre-feature behaviour is
@@ -113,9 +115,9 @@ the check callable.
 | **DQ-ADR-8** *(retired 2026-09)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ADR_A8_MILD_IQR_MULTIPLIER = 1.5` |
 | **DQ-ADR-9** | `tolerance_pct` | ±10% (strict), ±15%, ±20%, **±25%** | `ADR_A9_TOLERANCE = 0.25` |
 | **DQ-ADR-9** | `period_policy` | **nearest EMMA period**, exact only | `ADR_A9_PERIOD_POLICY = "nearest"` |
-| **DQ-ACCE-3** | `threshold_percentile` | P75, **P90**, P95, P99 | `ACCE_AC3_PERCENTILE = 0.90` |
-| **DQ-ACCE-7** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC7_MILD_IQR_MULTIPLIER = 1.5` |
-| **DQ-ACCE-8** | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC8_MILD_IQR_MULTIPLIER = 1.5` |
+| **DQ-ACCE-3** *(inactive)* | `threshold_percentile` | P75, **P90**, P95, P99 | `ACCE_AC3_PERCENTILE = 0.90` |
+| **DQ-ACCE-7** *(retired 2026-10)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC7_MILD_IQR_MULTIPLIER = 1.5` |
+| **DQ-ACCE-8** *(retired 2026-10)* | `threshold_iqr_multiplier` | **1.5×IQR (mild)**, 2.0×IQR, 3.0×IQR (extreme) | `ACCE_AC8_MILD_IQR_MULTIPLIER = 1.5` |
 
 Param keys and choice lists live in [src/custom_dqr_engine.py](../src/custom_dqr_engine.py)
 (`<RULE>_THRESHOLD_PARAM`, `<RULE>_THRESHOLD_CHOICES`); both are
@@ -125,7 +127,7 @@ malformed values fall back to the default via
 no longer in the catalog never silently disables the rule.
 
 Each parametric rule also declares a `TypedDict` (`EPTE3Params`,
-`EPTE6Params`, `ADRA3Params`, `ADRA7Params`, `ADRA8Params`,
+`EPTE6Params`, `ADRA3Params`, `ADRA7Params`, `ADRA8Params`, `ADRA9Params`,
 `ACCEAC3Params`, `ACCEAC7Params`, `ACCEAC8Params`) describing the
 shape of `assignment.params`. They are `total=False`, so a missing key
 falls back to the module-level default. The TypedDicts are documentation
@@ -198,18 +200,30 @@ id out of `ADR_RETIRED_RULE_IDS`.
 
 ACCE rules mirror the ADR rules' business logic against the ACCE schema, see the [ADR → ACCE column mapping](#adr--acce-column-mapping) below
 for the field-level substitutions (e.g. `COMPLETE_WBC` → `COA`,
-`COST_UPDATE` → `JOB_NO`, `ITEM_TYPE` → `DESCRIPTION`).
+`COST_UPDATE` → `JOB_NO`, `ITEM_TYPE` → `DESCRIPTION` / `COA`).
+
+**Rule status (since 2026-10-05, mirrors ADR).** Active: DQ-ACCE-1, 4, 5, 6
+(DQ-ADR-9 has no ACCE counterpart - `ACCE_ESTIMATECOSTRESULTS` carries no
+material factor codes).
+**Inactive**: DQ-ACCE-3 - stays in the catalog (`active=False`), its card
+is rendered greyed-out in Step 4.2 but cannot be selected; One-click and
+Step 3 hints skip it and a lingering assignment is reported as "Not
+evaluated". **Retired**: DQ-ACCE-2, 7, 8 - withdrawn from the catalog
+(`ACCE_RETIRED_RULES` in `config/custom_dqr/_acce_catalog.py`); the
+definitions, check functions and this documentation are kept so
+historical runs can be read and a rule can be reinstated by moving its
+id out of `ACCE_RETIRED_RULE_IDS`.
 
 | Rule | Name | Type | Required columns | Reference data | Options |
 |------|------|------|------------------|----------------|---------|
 | **DQ-ACCE-1** | ISO Code of Account present (COR + SAB) | Completeness | `PLANVIEW_ID`, `COA` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA` - leading 3 characters of the 4-char ACCE COA; lookup `ISO_COR` + `SAB`) | - |
-| **DQ-ACCE-2** | Location + estimate date present & valid | Completeness & Validity | `JOB_NO`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
-| **DQ-ACCE-3** | Statistical COA-to-ISO mapping ratio | Statistical Outlier | `PLANVIEW_ID`, `COA`, `COST_MH`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA`; lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `detect_uniform_mapping` (bool - 80 % portfolio gate) |
+| **DQ-ACCE-2** *(retired 2026-10)* | Location + estimate date present & valid | Completeness & Validity | `JOB_NO`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
+| **DQ-ACCE-3** *(inactive)* | Statistical COA-to-ISO mapping ratio | Statistical Outlier | `PLANVIEW_ID`, `COA`, `COST_MH`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA`; lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `detect_uniform_mapping` (bool - 80 % portfolio gate) |
 | **DQ-ACCE-4** | Core quantities populated & non-negative project totals | Completeness & Validity | `PLANVIEW_ID`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` | - | - |
-| **DQ-ACCE-5** | Design details present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `DESIGN_PROPERTY`, `DESIGN_VALUE` | - | - |
+| **DQ-ACCE-5** | Key design details present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COA`, `DESIGN_KEY_PARAMETER_NAMES` (derived by the builder) | - | - |
 | **DQ-ACCE-6** | Construction hours present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COST_MH` | - | - |
-| **DQ-ACCE-7** | Within-discipline quantity / hour ratio outlier | Statistical Outlier | `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS`, `COST_MH` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
-| **DQ-ACCE-8** | Cross-discipline quantity ratios | Statistical Outlier | `COMPONENT_SOURCE`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **DQ-ACCE-7** *(retired 2026-10)* | Within-discipline quantity / hour ratio outlier | Statistical Outlier | `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS`, `COST_MH` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
+| **DQ-ACCE-8** *(retired 2026-10)* | Cross-discipline quantity ratios | Statistical Outlier | `COMPONENT_SOURCE`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 
 ## Quick reference (SQS - Quality domain)
 
@@ -249,8 +263,10 @@ malformed values from disabling the rule.
 
 ## Reference-data registry & eager loading
 
-Custom rules that need a reference dataset (DQ-EPT-2, DQ-EPT-7, DQ-ADR-1, DQ-ADR-2, DQ-ADR-3) resolve
-it via [src/reference_data.py](../src/reference_data.py):
+Custom rules that need a reference dataset (DQ-EPT-2, DQ-EPT-7, DQ-ADR-1,
+DQ-ADR-3, DQ-ADR-9, DQ-ACCE-1, DQ-ACCE-3 - plus the retired DQ-ADR-2 /
+DQ-ACCE-2) resolve it via
+[src/reference_data.py](../src/reference_data.py):
 
 - `prefetch_reference_datasets(names)` is called from **Step 2** right
   after the system tables are built, with the names returned by
@@ -276,7 +292,7 @@ relevant rule (`check_ept_e2` / `check_ept_e7` / `check_ept_e6` (only
 when `segment_by_project_type` is on) / `check_adr_a1` /
 `check_adr_a2` / `check_adr_a3` / `check_adr_a7` (only when
 `segment_by_project_type` is on) / `check_adr_a8` (only when
-`segment_by_project_type` is on) / `check_acce_ac1` /
+`segment_by_project_type` is on) / `check_adr_a9` / `check_acce_ac1` /
 `check_acce_ac2` / `check_acce_ac3` / `check_acce_ac7` (only when
 `segment_by_project_type` is on) / `check_acce_ac8` (only when
 `segment_by_project_type` is on)) raises `CustomRuleNotEvaluated`
@@ -286,7 +302,8 @@ with the cached error message appended.
 
 | Dataset | Loaded from | Consumers |
 |---------|-------------|-----------|
-| `VWS_GP_STANDARD_SHARE` | `{SF_DATABASE}.{SF_SCHEMA}.VWS_GP_STANDARD_SHARE` | DQ-EPT-2 (lookup `COUNTRY`), DQ-EPT-6 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-EPT-7 (`PLANVIEW_ID → PROJECT_ID`), DQ-ADR-2 (lookup `COUNTRY`), DQ-ADR-7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ADR-8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ACCE-2 (lookup `COUNTRY`), DQ-ACCE-7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ACCE-8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on) |
+| `VWS_GP_STANDARD_SHARE` | `{SF_DATABASE}.{SF_SCHEMA}.VWS_GP_STANDARD_SHARE` | DQ-EPT-2 (lookup `COUNTRY`), DQ-EPT-6 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-EPT-7 (`PLANVIEW_ID → PROJECT_ID`), DQ-ADR-2 (lookup `COUNTRY`), DQ-ADR-7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ADR-8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ACCE-2 (lookup `COUNTRY`), DQ-ACCE-7 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ACCE-8 (lookup `E05_DEPARTMENT` + `BUSINESS` - only when `segment_by_project_type` is on), DQ-ADR-9 (lookup `COUNTRY` → ISO-2 prefix of the EMMA `locationCode`; declared as an `extra_reference_datasets` entry so Step 2 keeps prefetching the table for ADR now that DQ-ADR-2 is retired). ACCE no longer prefetches this table: DQ-ACCE-2 is retired and the DQ-ACCE-7 / 8 toggles (retired too) would load it lazily. |
+| `MFC`                   | `{catalog}.{schema}.mfc` (loader aliases `code` / `locationCode` / `costUpdateReportingPeriod_name` / `factorValue` to `CODE` / `LOCATION_CODE` / `PERIOD` / `FACTOR_VALUE`) | DQ-ADR-9 (EMMA Market Analysis material factors per code, site and period). No ACCE consumer: `ACCE_ESTIMATECOSTRESULTS` carries no material factor codes. |
 | `ACCE_COA_MASTER`       | `INGESTION_DB.GP_ADF_CSE.ACCE_COA_MASTER`         | DQ-ADR-1 + DQ-ADR-3 + DQ-ACCE-1 + DQ-ACCE-3 (`ICARUS_COA → ISO_COR + SAB`). DQ-ADR-1 / DQ-ACCE-1 validate the resolution (ADR via a `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation, ACCE via the **first three characters** of the 4-character `COA` - the analog of ADR's split); DQ-ADR-3 measures distinct-`COMPLETE_WBC` aggregation per resolved bucket; DQ-ACCE-3 measures distinct-`COA` aggregation (over the *full* 4-character `COA`, not the truncated lookup key) per resolved bucket. |
 
 ---
@@ -1894,7 +1911,7 @@ ADR rules read from theirs.
 | ADR column (denormalized) | ACCE column (denormalized) | Source table | Notes |
 |---|---|---|---|
 | `COMPLETE_WBC` | `COA` | `ACCE_ESTIMATEITEMRECORD` | ADR uses a dot-delimited WBC whose first segment is the 3-character ICARUS Code of Account group (`SPLIT_PART(COMPLETE_WBC, '.', 1)`). ACCE uses a 4-character numeric COA code whose **leading 3 characters** are the ICARUS group (e.g. `3131 → 313`). DQ-ACCE-1 / DQ-ACCE-3 take the first three characters of `COA` before joining to `ACCE_COA_MASTER.ICARUS_COA` - the analog of ADR's `SPLIT_PART` derivation. |
-| `COST_UPDATE` | `JOB_NO` | `ACCE_ESTIMATEITEMRECORD` | ADR uses `COST_UPDATE` as the estimate basis date; ACCE uses `JOB_NO` (estimate job / period, e.g. `2Q23 RP1`) as proxy. |
+| `COST_UPDATE` | `JOB_NO` | `ACCE_ESTIMATEITEMRECORD` | ADR uses `COST_UPDATE` (`2Q2019`) as the estimate basis date; ACCE uses `JOB_NO` (estimate job / period, e.g. `2Q23 RP1`) as proxy. Both consumers (DQ-ADR-2 / DQ-ACCE-2) are retired. |
 | `ITEM_TYPE` | `DESCRIPTION` | `ACCE_ESTIMATEITEMRECORD` | ADR classifies discipline via `Estimate*` item-type substring sweeps. ACCE's discipline classifier (DQ-ACCE-4 / DQ-ACCE-7 / DQ-ACCE-8) keys off the `DESCRIPTION` estimate-line label instead - the former `ACCT` account-code classifier (`2-EQP`, `3-PIP`, …) was retired, so ADR's `ITEM_TYPE` role is now served by the same `DESCRIPTION` column below. |
 | `ITEM_DESCRIPTION` | `DESCRIPTION` | `ACCE_ESTIMATEITEMRECORD` | Item description field - also the discipline classifier (see the `ITEM_TYPE` row above). |
 | `ROOT_ITEM_NAME` | `PROJECT_NAME` | `ACCE_ESTIMATEITEMRECORD` | Project / scope grouping key. |
@@ -1904,7 +1921,10 @@ ADR rules read from theirs.
 | `COST_TOTAL_HOURS` | `COST_MH` | Derived: `MH` from `ACCE_ESTIMATECOSTRESULTS` | ACCE stores construction hours in `MH`; after the COST prefix the denormalized column is **`COST_MH`** (not `COST_TOTAL_HOURS`). DQ-ACCE-3, DQ-ACCE-6, and DQ-ACCE-7 all read from `COST_MH` on ACCE. |
 | `COST_DB_TOTAL_HOURS` | - (not available) | - | ACCE does not separate database hours; the ACCE counterpart of DQ-ADR-6 uses **`COST_MH` only**. |
 | `COST_TOTAL_COST` | `COST_TOTAL_COST` | Derived: `TOTAL_COST` from `ACCE_ESTIMATECOSTRESULTS` | Direct mapping. |
-| `DESIGN_PARAMETER_VALUE` | `DESIGN_VALUE` | Derived: `VALUE` from `ACCE_ESTIMATEDESIGNDETAILS` (builder prefixes with `DESIGN_`) | Design property value (1:N child of the item record). ADR's analogue column is `DESIGN_PARAMETER_VALUE`; ACCE source column is `VALUE` so the prefixed result is **`DESIGN_VALUE`**: different physical column name. |
+| `DESIGN_PARAMETER_NAME` / `DESIGN_PARAMETER_VALUE` | `DESIGN_PROPERTY` / `DESIGN_VALUE` | `PROPERTY` / `VALUE` from `ACCE_ESTIMATEDESIGNDETAILS` (builder prefixes with `DESIGN_`) | Design property name / value, 1:N per design (`DESIGN_ID`). Only the **first** row survives the builder's default text collapse, which is why no rule reads these two columns directly any more. |
+| `DESIGN_KEY_PARAMETER_NAMES` | `DESIGN_KEY_PARAMETER_NAMES` | Derived by the builder (`_make_design_key_names_derive` + `join_unique` in `config/systems.py`): ADR from `DESIGN_PARAMETER_NAME` / `DESIGN_PARAMETER_VALUE` (1:N on `ROW_ID`), ACCE from `DESIGN_PROPERTY` / `DESIGN_VALUE` (1:N on `DESIGN_ID`) | Same derived column on both data products: the `\|`-separated list of design parameter names whose value is populated, `(unnamed)` for a value with no name, null when nothing is populated. Input of DQ-ADR-5 / DQ-ACCE-5. |
+| `ITEM_TYPE` → `_A5_KEY_DESIGN_PREFIX` | `COA` → `_AC5_KEY_DESIGN_PROPERTIES` | `ACCE_ESTIMATEITEMRECORD` | DQ-ADR-5 maps the item type to the COA prefix its parameter names carry (`324.0-Pump Type`). ACCE property names are bare (production, 2026-10-16: `Item type`, `Source of quote`, `Total weight` …), so DQ-ACCE-5 maps the item's 4-digit `COA` (or its 3-digit ICARUS group) to the expected property *names*. The mapping ships empty until the data owner supplies it; unmapped items use the any-named-property check. |
+| `COST_BASE_MATERIAL_MFC`, `COST_VENDOR_SHOP_FAB_MFC`, `COST_*_COST` / `COST_DB_*_COST` | - (not available) | - | `ACCE_ESTIMATECOSTRESULTS` carries only ROW_INDEX, ROW_ID, ACCE_ID, MH, LABOR_COST, UNIT_MATL_COST, MATL_COST, TOTAL_COST, ACCE_VERSION (production, 2026-10-16): no material factor codes and no database-cost pairs, so DQ-ADR-9 (MFC vs EMMA) has no ACCE counterpart. |
 
 ---
 
@@ -1918,12 +1938,13 @@ differences below are mechanical adaptations to ACCE's schema.
 | Aspect | ADR | ACCE | Difference |
 |---|---|---|---|
 | **DQ-ACCE-1 COA derivation** | `SPLIT_PART(COMPLETE_WBC, '.', 1)` → lookup | `COA[:3]` → lookup | ACCE stores a 4-char `COA` whose leading 3 chars are the ICARUS group; the slice is the analog of ADR's dot-split. |
-| **DQ-ACCE-2 Date proxy** | `COST_UPDATE` | `JOB_NO` | Different field name, same role, the estimate-basis-date proxy used by the EMMA normalization period selector. Both carry a Validity format check, but the shapes differ: DQ-ADR-2's `COST_UPDATE` is a 4-digit-year quarter (`[1-4]Q<YYYY>`, e.g. `2Q2019`); DQ-ACCE-2's `JOB_NO` is a 2-digit-year quarter with an optional revision suffix (`[1-4]Q<YY>`, e.g. `2Q23 RP1`). |
+| **Rule lifecycle** | DQ-ADR-3 inactive; DQ-ADR-2 / 7 / 8 retired (2026-09-17); DQ-ADR-9 active | DQ-ACCE-3 inactive; DQ-ACCE-2 / 7 / 8 retired (2026-10-05); no DQ-ACCE-9 | Number-for-number parity for 1-8: active (1, 4, 5, 6), inactive (3), retired (2, 7, 8). DQ-ADR-9 has no ACCE counterpart because the ACCE cost results carry no material factor codes. |
+| **DQ-ACCE-2 Date proxy** *(both retired)* | `COST_UPDATE` | `JOB_NO` | Different field name, same role, the estimate-basis-date proxy used by the EMMA normalization period selector. Both carry a Validity format check, but the shapes differ: DQ-ADR-2's `COST_UPDATE` is a 4-digit-year quarter (`[1-4]Q<YYYY>`, e.g. `2Q2019`); DQ-ACCE-2's `JOB_NO` is a 2-digit-year quarter with an optional revision suffix (`[1-4]Q<YY>`, e.g. `2Q23 RP1`). |
 | **DQ-ACCE-4 Negative-total check** | Project fails when `SUM(QTY_QUANTITY) < 0` | Project fails when `SUM(QTY_KEY_QTY) + SUM(QTY_OTHER_QTY) < 0` | Same Validity concept (a project's quantities must not net negative); ACCE sums both split quantity slots since it has no single coalesced quantity column in DQ-ACCE-4's input set. Row-level negatives are allowed in both. |
 | **DQ-ACCE-3 Ratio numerator** | `COUNT(DISTINCT COMPLETE_WBC)` | `COUNT(DISTINCT COA)` (over the full 4-char `COA`) | Different granularity - ACCE's metric counts distinct 4-char codes per resolved bucket, naturally capped at ten per 3-char ICARUS group; same statistical (IQR-bound) logic. |
 | **DQ-ACCE-4 Discipline keys** | `ITEM_TYPE` (pattern-matched `Estimate*` labels) | `DESCRIPTION` (explicit per-core-type value lists, e.g. `PIPING` / `CS PIPE ERECTION` for piping, `CENTRIFUGAL PUMPS` / `S&T EXCHANGER` for equipment), matched on `UPPER(TRIM(DESCRIPTION))`; `MODULE_COUNT` keeps a `MODULE` / `MODULAR` substring match | ACCE classifies straight off the estimate-line label rather than a discipline account code; both scope and population use the same `DESCRIPTION` lists. |
 | **DQ-ACCE-4 Quantity / UOM source** | Coalesced `QTY_QUANTITY` + `QTY_UOM` (sum / first per item) | Split `QTY_KEY_QTY` / `QTY_OTHER_QTY` and `QTY_KEY_UNITS` / `QTY_OTHER_UNITS`; a type is populated when **either** slot has qty > 0 and **either** unit is in the type's UOM set, compared on `UPPER(TRIM(units))` with no alias normalization | Mirrors the SQL spec's per-row `(KEY_QTY > 0 OR OTHER_QTY > 0)` and `(KEY_UNITS IN (...) OR OTHER_UNITS IN (...))` before the project-level `MAX()`. |
-| **DQ-ACCE-5 Design source** | `DESIGN_KEY_PARAMETER_NAMES` (builder-derived list of populated parameter names, 1:N join on `ROW_ID`); at least one name must start with the item type's COA prefix (any populated parameter for unmapped types) | `DESIGN_PROPERTY` + `DESIGN_VALUE` (source columns `PROPERTY` / `VALUE` on `ACCE_ESTIMATEDESIGNDETAILS`, joined via `DESIGN_ID` - builder prefixes with `DESIGN_`) | ACCE requires BOTH a named parameter and a value (the "120 m of what?" interpretability gate); DQ-ADR-5 checks only the value. Also: DQ-ACCE-5's quantity gate is strictly positive (negatives are "no quantity"). |
+| **DQ-ACCE-5 Design source** | `DESIGN_KEY_PARAMETER_NAMES` (builder-derived list of populated parameter names, 1:N join on `ROW_ID`); at least one name must start with the item type's COA prefix from `_A5_KEY_DESIGN_PREFIX` (any populated parameter for unmapped types) | Same derived `DESIGN_KEY_PARAMETER_NAMES` (from `PROPERTY` / `VALUE`, 1:N join on `DESIGN_ID`); the item's `COA` (4-digit, else 3-digit group) selects the expected property *names* in `_AC5_KEY_DESIGN_PROPERTIES` (any *named* populated property when the COA is unmapped) | Same mechanism - full property list, key parameter per commodity type - but ACCE property names carry no COA prefix, so the key is a name mapping that the data owner has to supply (empty today → every item uses the fallback). Two ACCE-only nuances: the fallback requires a *named* property (`(unnamed)` does not count - the "120 m of what?" gate) and the quantity gate is strictly positive (negatives are "no quantity"; DQ-ADR-5 uses `<> 0`). |
 | **DQ-ACCE-6 Hours source** | `COST_TOTAL_HOURS` OR `COST_DB_TOTAL_HOURS` | **`COST_MH` only** (sourced from `MH` on `ACCE_ESTIMATECOSTRESULTS`) | ACCE has no separate Design-Build hours column; DQ-ACCE-6 evaluates only `COST_MH`. Equivalent to DQ-ADR-6's two-column OR when only one hours column exists. |
 | **DQ-ACCE-7 Segment keys** | `(ITEM_TYPE, QTY_UOM)` | `(DESCRIPTION, QTY_UOM)` | Same per-segment IQR logic; DQ-ACCE-7 partitions by the raw `UPPER(TRIM(DESCRIPTION))` value + effective UOM (`COALESCE(KEY_UNITS, OTHER_UNITS)`) - finer-grained (per-label) than ADR's discipline-level types. |
 | **DQ-ACCE-8 Project key** | `ROOT_ITEM_NAME` | `COMPONENT_SOURCE` | Same field semantics, the project / scope grouping key; different column name. |
@@ -2027,6 +2048,8 @@ EPT DQ-EPT-1).
 
 ## DQ-ACCE-2: Location + Estimate Date Present & Valid (ACCE)
 
+> **Status: retired (2026-10-05).** Not in the catalog; kept for reference in `ACCE_RETIRED_RULES` (mirrors DQ-ADR-2).
+
 - **Type:** Completeness & Validity · **Data product:** ACCE
 - **Implementation:** `check_acce_ac2` (uses `_is_filled` for completeness
   + a `str.fullmatch` against `ACCE_AC2_JOB_NO_PATTERN` for validity + a
@@ -2081,6 +2104,8 @@ quarter-year shape.
 ---
 
 ## DQ-ACCE-3: Statistical COA-to-ISO mapping ratio (ACCE)
+
+> **Status: inactive (2026-10-05).** In the catalog with `active=False`: visible in Step 4.2, not selectable, not scored (mirrors DQ-ADR-3).
 
 - **Type:** Statistical Outlier · **Data product:** ACCE
 - **Implementation:** `check_acce_ac3` (with `_resolve_coa_master_lookups`
@@ -2410,84 +2435,119 @@ code.
 
 ---
 
-## DQ-ACCE-5: Design details present when quantity exists (ACCE)
+## DQ-ACCE-5: Key design details present when quantity exists (ACCE)
 
 - **Type:** Consistency · **Data product:** ACCE
-- **Implementation:** `check_acce_ac5`
+- **Implementation:** `check_acce_ac5` (with `_ac5_expected_properties` /
+  `_AC5_KEY_DESIGN_PROPERTIES` for the `COA → key property` resolution).
+  Mirrors `check_adr_a5` against the ACCE data product.
 
-A row passes when one of the following holds:
+DQ-ACCE-5 is the ACCE twin of DQ-ADR-5. A row passes when one of the
+following holds:
 
-1. The estimate item has **no positive quantity** (out-of-scope,
-   treated as PASS).
-2. The estimate item has a **positive quantity** *and* a usable
-   design detail - BOTH a named `DESIGN_PROPERTY` and a populated
-   `DESIGN_VALUE`.
+1. The estimate item has **no positive quantity** (out-of-scope, treated
+   as PASS).
+2. The item's `COA` is listed in `_AC5_KEY_DESIGN_PROPERTIES` *and* at
+   least one of the expected property names is populated for its design.
+3. The item's `COA` is **not** listed (null / blank / malformed / simply
+   absent from the mapping) *and* at least one *named* design property
+   carries a value (the original check, tightened to a named property).
 
-A row fails when a positive quantity exists *but* no usable design
-detail (named parameter + value) is present for the same item.
+A row fails when a positive quantity exists but the design parameter
+that explains it is missing: for a mapped COA that means the *key*
+property (expected name, populated value); otherwise any named populated
+property.
 
 ### Where the inputs come from
 
-DQ-ACCE-5 operates on the **denormalized ACCE data product** built by the
-data-product builder, which left-joins the child tables onto the
-primary item record. The split quantity slots and the design columns
-survive the per-`ROW_ID` / per-`DESIGN_ID` aggregation:
+DQ-ACCE-5 operates on the **denormalized ACCE data product** built by
+[src/data_product_builder.py](../src/data_product_builder.py):
 
 | Source table | Source column | Denormalized column | Notes |
 |---|---|---|---|
-| `ACCE_ESTIMATEQTYRESULTS` (1:N) | `KEY_QTY` | `QTY_KEY_QTY` | `SUM(KEY_QTY)` per item. |
-| `ACCE_ESTIMATEQTYRESULTS` (1:N) | `OTHER_QTY` | `QTY_OTHER_QTY` | `SUM(OTHER_QTY)` per item. |
-| `ACCE_ESTIMATEDESIGNDETAILS` (1:N) | `PROPERTY` | `DESIGN_PROPERTY` | Builder prefixes child columns with `DESIGN_`. The parameter **name**. |
-| `ACCE_ESTIMATEDESIGNDETAILS` (1:N) | `VALUE` | `DESIGN_VALUE` | The parameter **value**. Existence check requires both `PROPERTY` and `VALUE` non-blank for the item's `DESIGN_ID`. |
+| `ACCE_ESTIMATEITEMRECORD` (primary) | `COA` | `COA` | Pass-through; the 4-character Code of Account (`3240`) = 3-character ICARUS group (`324`) + sub-account digit. Looked up in the mapping (4-digit entry first, then the group). |
+| `ACCE_ESTIMATEQTYRESULTS` (1:N) | `KEY_QTY` / `OTHER_QTY` | `QTY_KEY_QTY` / `QTY_OTHER_QTY` | `SUM` per item; the row has a quantity when either slot is `> 0`. |
+| `ACCE_ESTIMATEDESIGNDETAILS` (1:N on `DESIGN_ID`) | `PROPERTY` + `VALUE` | `DESIGN_KEY_PARAMETER_NAMES` | **Derived.** One design row per property - **62,827 rows for 3,035 designs in production (2026-10-16), about 21 per design**. Row by row, `_acce_design_derive` keeps the property *name* when its *value* is populated (`(unnamed)` when the value is populated but the name is blank). The builder then joins the per-design names with `\|` via `join_unique` (`TableDef.column_aggregations`), e.g. `Item type\|Source of quote\|Total weight`. Null when no property of the design carries a value. Many items can share one `DESIGN_ID`; each receives the same list. |
+
+The plain `DESIGN_PROPERTY` / `DESIGN_VALUE` columns are still present on
+the data product but hold only the **first** design row of each design
+(the builder's default for text columns in a 1:N join). The earlier
+DQ-ACCE-5 read those two columns and therefore judged each item on one
+arbitrary property out of ~21.
 
 ### Pass / fail matrix
 
-| `HAS_QUANTITY` | `HAS_DESIGN_DETAIL` | Result |
-|---|---|---|
-| 0 | 0 | PASS |
-| 0 | 1 | PASS |
-| 1 | 0 | **FAIL** |
-| 1 | 1 | PASS |
+Rows with `HAS_QUANTITY = 0` always pass. For the rest:
+
+| `KNOWN_COA` | `HAS_KEY_DESIGN` | `HAS_NAMED_DESIGN` | Result |
+|---:|---:|---:|---|
+| 1 | 1 | - | PASS |
+| 1 | 0 | - | **FAIL** |
+| 0 | - | 1 | PASS |
+| 0 | - | 0 | **FAIL** |
 
 Where:
 
-- `HAS_QUANTITY = (QTY_KEY_QTY > 0) OR (QTY_OTHER_QTY > 0)`. Each slot
-  is the per-`ROW_ID` SUM of `KEY_QTY` / `OTHER_QTY`. Null, zero, and
-  **negative** aggregates in both slots all count as "no quantity"
-  (the check is strictly positive).
-- `HAS_DESIGN_DETAIL = DESIGN_PROPERTY is non-blank AND DESIGN_VALUE
-  is non-blank` (whitespace-only strings are treated as blank, same
-  `_is_filled` semantics used by DQ-ACCE-1 / DQ-ACCE-2). A bare value with no
-  named parameter - the "120 m of what?" case - is **not** a usable
-  detail.
+- `HAS_QUANTITY = (QTY_KEY_QTY > 0) OR (QTY_OTHER_QTY > 0)`. Null, zero
+  and **negative** aggregates in both slots are "no quantity" (ACCE keeps
+  its strictly positive gate; DQ-ADR-5 uses `<> 0`).
+- `KNOWN_COA = TRIM(COA)` (a numeric column's `3240.0` is tolerated) is a
+  4-digit code listed in `_AC5_KEY_DESIGN_PROPERTIES`, or its 3-digit
+  group is; the 4-digit entry wins.
+- `HAS_KEY_DESIGN = at least one entry of DESIGN_KEY_PARAMETER_NAMES
+  equals one of the expected names`, compared after collapsing whitespace
+  and lower-casing (`"PUMP  TYPE"` matches `"Pump type"`; `"Pump type
+  ratio"` does not).
+- `HAS_NAMED_DESIGN = at least one entry is non-blank and not
+  "(unnamed)"` - a bare value with no parameter name (the "120 m of
+  what?" case) is **not** a usable design detail.
+
+### Why a `COA → property` mapping instead of ADR's prefix match
+
+DQ-ADR-5 matches the *prefix* of the parameter name because ADR names
+carry the COA (`324.0-Pump Type`). ACCE property names are bare
+(`Item type`, `Source of quote`, `Total weight` …, production check of
+2026-10-16), so the key property of a commodity type cannot be read off
+the data. `_AC5_KEY_DESIGN_PROPERTIES` plays the role of
+`_A5_KEY_DESIGN_PREFIX`: 4-digit COA or 3-digit ICARUS group → the
+property names that must be populated.
+
+> **Pending input from the data owner.** The mapping ships **empty**, so
+> today every item takes the fallback branch ("any named populated
+> property"). Ask for "the design property that must be populated for
+> each Code of Account" (e.g. `3240 → Pump type`, `313 → Line size`) and
+> add the entries to `_AC5_KEY_DESIGN_PROPERTIES` in
+> `src/custom_dqr/_acce_rules.py`; filling the map only tightens the rule.
 
 ### Why it matters
 
-A quantity without supporting design information cannot be
-normalized, compared across items, or validated, the analytical
-value of the estimate drops sharply. DQ-ACCE-5 is the lightweight gate
-that surfaces the most consequential omission: **a quantity exists
-but the engineering context that explains it does not.** Requiring a
-named parameter alongside the value closes the loophole where a
-stray value with no parameter name would otherwise satisfy the rule.
+A quantity without the design information that explains it cannot be
+normalized, compared across items, or validated. Reading the full
+property list already closes the gap the old rule had (one arbitrary
+property per design); the mapping, once filled, sharpens the gate the
+way DQ-ADR-5 does: a pump with a populated *driver* property but no
+*pump type* still cannot be benchmarked, so it fails.
 
 ### Failure modes
 
-- Missing any of `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `DESIGN_PROPERTY`,
-  or `DESIGN_VALUE` → all rows fail (structural incompleteness; same
-  convention as the other custom rules).
+- Missing `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COA` or
+  `DESIGN_KEY_PARAMETER_NAMES` → all rows fail (structural
+  incompleteness). The derived column is absent when the design extract
+  lacks `PROPERTY` / `VALUE`, so a renamed source column surfaces as a
+  missing CDE rather than a silent pass.
+- Items without a `DESIGN_ID`, or whose `DESIGN_ID` has no matching rows
+  in the design table, have no design detail and fail when they carry a
+  quantity.
 
 ### Notes
 
-- The rule does not validate the *type* of design detail - any
-  populated `(PROPERTY, VALUE)` pair in `ACCE_ESTIMATEDESIGNDETAILS`
-  is sufficient. ACCE stores detailed properties (diameter, pressure,
-  temperature, weight) which could enable stricter validation in a
-  future extension.
-- The `DESIGN_ID` join (item ↔ design) is the key link. Items
-  without a `DESIGN_ID`, or whose `DESIGN_ID` has no matching rows
-  in the design table, will have no design detail and will fail
-  if quantity > 0.
+- Mock mode generates a 1:N design table with bare property names (4-8
+  per design), independent null / blank gaps in `VALUE` and `PROPERTY`
+  (→ `(unnamed)` entries) and a few designs with every value blank, so the
+  demo exercises both verdicts; the type-aware branch is covered by the
+  tests, which pin a mapping.
+- The match works on a positional index internally, so a data product
+  whose index carries duplicates still gets one verdict per row.
 
 ### Inputs
 
@@ -2495,8 +2555,8 @@ stray value with no parameter name would otherwise satisfy the rule.
 |---|---|
 | Key Quantity | `QTY_KEY_QTY` |
 | Other Quantity | `QTY_OTHER_QTY` |
-| Design Parameter Name | `DESIGN_PROPERTY` |
-| Design Parameter Value | `DESIGN_VALUE` |
+| Code of Account | `COA` |
+| Key Parameter Names | `DESIGN_KEY_PARAMETER_NAMES` |
 
 ---
 
@@ -2596,6 +2656,8 @@ are consumed downstream.
 ---
 
 ## DQ-ACCE-7: Within-discipline quantity / hour ratio outlier (ACCE)
+
+> **Status: retired (2026-10-05).** Not in the catalog; kept for reference in `ACCE_RETIRED_RULES` (mirrors DQ-ADR-7).
 
 - **Type:** Statistical Outlier · **Data product:** ACCE
 - **Implementation:** `check_acce_ac7`
@@ -2756,6 +2818,8 @@ those rows for review; it does **not** assert they are wrong.
 ---
 
 ## DQ-ACCE-8: Cross-discipline quantity ratios (ACCE)
+
+> **Status: retired (2026-10-05).** Not in the catalog; kept for reference in `ACCE_RETIRED_RULES` (mirrors DQ-ADR-8).
 
 - **Type:** Statistical Outlier · **Data product:** ACCE
 - **Implementation:** `check_acce_ac8` (with

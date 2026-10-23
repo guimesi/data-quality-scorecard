@@ -350,3 +350,147 @@ def test_join_unique_aggregator_semantics():
     assert join_unique(pd.Series(["b", "a", "b", None, np.nan, "  ", " a "])) == "b|a"
     assert join_unique(pd.Series([None, np.nan, ""])) is None
     assert join_unique(pd.Series([], dtype=object)) is None
+
+
+
+# ---------------------------------------------------------------------------
+# ACCE design details: 1:N on DESIGN_ID, DESIGN_KEY_PARAMETER_NAMES derivation
+# ---------------------------------------------------------------------------
+
+def _acce_fetcher(design_rows):
+    """Minimal ACCE fetcher: three items (two pumps sharing COA 3240, one
+    item without a COA), a 1:N design table from ``design_rows`` (list of
+    dicts with DESIGN_ID / PROPERTY / VALUE)."""
+    import pandas as pd
+
+    frames = {
+        "ACCE_ESTIMATEITEMRECORD": pd.DataFrame({
+            "ROW_ID": ["r1", "r2", "r3"],
+            "PLANVIEW_ID": ["P1", "P1", "P1"],
+            "DESIGN_ID": ["d1", "d2", "d3"],
+            "COA": ["3240", "3240", None],
+        }),
+        "ACCE_ESTIMATECOSTRESULTS": pd.DataFrame({
+            "ROW_ID": ["r1"], "MH": [1.0], "TOTAL_COST": [1.0],
+        }),
+        "ACCE_ESTIMATEQTYRESULTS": pd.DataFrame({
+            "ROW_ID": ["r1", "r2", "r3"],
+            "KEY_QTY": [1.0, 2.0, 3.0],
+            "OTHER_QTY": [None, None, None],
+            "KEY_UNITS": ["EA", "EA", "EA"],
+            "OTHER_UNITS": [None, None, None],
+        }),
+        "ACCE_ESTIMATEDESIGNDETAILS": pd.DataFrame(
+            design_rows, columns=["DESIGN_ID", "PROPERTY", "VALUE"]
+        ),
+    }
+    return lambda name: frames[name]
+
+
+def test_acce_design_details_join_every_populated_property_name_per_design():
+    """Several design rows per DESIGN_ID collapse to one item row whose
+    DESIGN_KEY_PARAMETER_NAMES lists every property that carries a value -
+    distinct, first-seen order, blank-valued names dropped,
+    unnamed-but-valued rows kept as ``(unnamed)``."""
+    fetch = _acce_fetcher([
+        {"DESIGN_ID": "d1", "PROPERTY": "Driver power", "VALUE": "75 kW"},
+        {"DESIGN_ID": "d1", "PROPERTY": "Pump type", "VALUE": "Centrifugal"},
+        {"DESIGN_ID": "d1", "PROPERTY": "Pump type", "VALUE": "Centrifugal"},
+        {"DESIGN_ID": "d1", "PROPERTY": "Pump material", "VALUE": None},
+        {"DESIGN_ID": "d1", "PROPERTY": "Rating", "VALUE": "   "},
+        {"DESIGN_ID": "d2", "PROPERTY": "Driver power", "VALUE": "75 kW"},
+        {"DESIGN_ID": "d3", "PROPERTY": None, "VALUE": "free text"},
+        {"DESIGN_ID": "d3", "PROPERTY": "  ", "VALUE": "more"},
+    ])
+    dp = build_data_product("ACCE", fetcher=fetch)
+    df = dp.df.set_index("ROW_ID")
+    # No duplication of the primary rows.
+    assert len(dp.df) == 3
+    assert df.loc["r1", "DESIGN_KEY_PARAMETER_NAMES"] == "Driver power|Pump type"
+    assert df.loc["r2", "DESIGN_KEY_PARAMETER_NAMES"] == "Driver power"
+    assert df.loc["r3", "DESIGN_KEY_PARAMETER_NAMES"] == "(unnamed)"
+    # The other text columns keep the builder's default ``first``.
+    assert df.loc["r1", "DESIGN_PROPERTY"] == "Driver power"
+    assert df.loc["r1", "DESIGN_VALUE"] == "75 kW"
+
+
+def test_acce_design_details_shared_design_feeds_every_referencing_item():
+    """Many items can reference one DESIGN_ID: each gets the same list."""
+    import pandas as pd
+    fetch = _acce_fetcher([
+        {"DESIGN_ID": "d1", "PROPERTY": "Pump type", "VALUE": "Centrifugal"},
+    ])
+    inner = fetch
+
+    def fetch2(name):
+        if name == "ACCE_ESTIMATEITEMRECORD":
+            return pd.DataFrame({
+                "ROW_ID": ["r1", "r2"], "PLANVIEW_ID": ["P1", "P1"],
+                "DESIGN_ID": ["d1", "d1"], "COA": ["3240", "3240"],
+            })
+        return inner(name)
+
+    dp = build_data_product("ACCE", fetcher=fetch2)
+    assert dp.df["DESIGN_KEY_PARAMETER_NAMES"].tolist() == ["Pump type"] * 2
+
+
+def test_acce_design_details_derived_column_is_null_when_no_value_populated():
+    import pandas as pd
+    fetch = _acce_fetcher([
+        {"DESIGN_ID": "d1", "PROPERTY": "Pump type", "VALUE": None},
+        {"DESIGN_ID": "d1", "PROPERTY": "Rating", "VALUE": ""},
+    ])
+    dp = build_data_product("ACCE", fetcher=fetch)
+    df = dp.df.set_index("ROW_ID")
+    assert pd.isna(df.loc["r1", "DESIGN_KEY_PARAMETER_NAMES"])
+    # Items whose design has no rows at all (left join) are null too.
+    assert pd.isna(df.loc["r2", "DESIGN_KEY_PARAMETER_NAMES"])
+
+
+def test_acce_design_details_feed_ac5_end_to_end(monkeypatch):
+    """With ``3240 → Pump type`` pinned in the key-property mapping: r1
+    (COA 3240) has the key property among others → PASS; r2 (COA 3240)
+    has only a driver property (the pump type row has no value) → FAIL;
+    r3 (no COA) has a named populated property → PASS via the fallback."""
+    import src.custom_dqr._acce_rules as acce
+    from src.custom_dqr_engine import check_acce_ac5
+    monkeypatch.setattr(acce, "_AC5_KEY_DESIGN_PROPERTIES", {"3240": ("Pump type",)})
+    fetch = _acce_fetcher([
+        {"DESIGN_ID": "d1", "PROPERTY": "Driver power", "VALUE": "75 kW"},
+        {"DESIGN_ID": "d1", "PROPERTY": "Pump type", "VALUE": "Centrifugal"},
+        {"DESIGN_ID": "d2", "PROPERTY": "Driver power", "VALUE": "75 kW"},
+        {"DESIGN_ID": "d2", "PROPERTY": "Pump type", "VALUE": None},
+        {"DESIGN_ID": "d3", "PROPERTY": "Anything", "VALUE": "x"},
+    ])
+    dp = build_data_product("ACCE", fetcher=fetch)
+    df = dp.df.sort_values("ROW_ID").reset_index(drop=True)
+    assert check_acce_ac5(df).tolist() == [True, False, True]
+    # Without the mapping every item takes the any-named-property branch.
+    monkeypatch.setattr(acce, "_AC5_KEY_DESIGN_PROPERTIES", {})
+    assert check_acce_ac5(df).tolist() == [True, True, True]
+
+
+def test_acce_design_derive_is_a_no_op_without_the_property_columns():
+    """A design extract without PROPERTY / VALUE must not crash the build;
+    the derived column is simply absent and DQ-ACCE-5 reports the missing
+    column the usual way."""
+    import pandas as pd
+    fetch = _acce_fetcher([])
+    frames_design = pd.DataFrame({"DESIGN_ID": ["d1"], "MATERIAL_SPEC": ["CS"]})
+    inner = fetch
+
+    def fetch2(name):
+        if name == "ACCE_ESTIMATEDESIGNDETAILS":
+            return frames_design
+        return inner(name)
+
+    dp = build_data_product("ACCE", fetcher=fetch2)
+    assert "DESIGN_KEY_PARAMETER_NAMES" not in dp.df.columns
+    assert "DESIGN_MATERIAL_SPEC" in dp.df.columns
+
+
+def test_mock_acce_data_product_carries_the_derived_design_column():
+    dp = build_data_product("ACCE")
+    assert "DESIGN_KEY_PARAMETER_NAMES" in dp.df.columns
+    names = dp.df["DESIGN_KEY_PARAMETER_NAMES"].dropna()
+    assert names.str.contains("|", regex=False).any()   # several properties per design

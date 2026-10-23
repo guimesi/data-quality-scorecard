@@ -1,4 +1,12 @@
-"""ACCE custom rule list."""
+"""ACCE custom rule list.
+
+The ACCE catalog mirrors the ADR catalog's lifecycle (Oct-2026): DQ-ACCE-3 is
+inactive, DQ-ACCE-2 / 7 / 8 are retired (``ACCE_RETIRED_RULES``) and DQ-ACCE-5
+reads every design property like DQ-ADR-5. DQ-ADR-9 (MFC vs EMMA) has no ACCE
+counterpart: ``ACCE_ESTIMATECOSTRESULTS`` carries no material factor codes
+(production columns, 2026-10-16: ROW_INDEX, ROW_ID, ACCE_ID, MH, LABOR_COST,
+UNIT_MATL_COST, MATL_COST, TOTAL_COST, ACCE_VERSION).
+"""
 from __future__ import annotations
 
 from config.custom_dqr._shared import (
@@ -48,7 +56,7 @@ from src.custom_dqr_engine import (
     check_acce_ac8,
 )
 
-ACCE_RULES = [
+_ACCE_RULE_DEFS = [
     CustomRuleDef(
         id="DQ-ACCE-1",
         name="ISO Code of Account present (COR + SAB)",
@@ -163,6 +171,10 @@ ACCE_RULES = [
         required_columns=dict(ACCE_AC3_REQUIRED_COLUMNS),
         check=check_acce_ac3,
         reference=dict(ACCE_AC3_REFERENCE),
+        # Inactive since Oct-2026 (mirrors DQ-ADR-3, business decision):
+        # kept in the catalog, visible but not selectable. Flip to True
+        # to reinstate.
+        active=False,
         select_options=[
             _percentile_threshold_option(
                 ACCE_AC3_THRESHOLD_PARAM,
@@ -256,33 +268,50 @@ ACCE_RULES = [
     ),
     CustomRuleDef(
         id="DQ-ACCE-5",
-        name="Design details present when quantity exists",
+        name="Key design details present when quantity exists",
         type="Consistency",
         description=(
-            "Each ACCE estimate item with a positive aggregated "
-            "quantity (``QTY_KEY_QTY`` or ``QTY_OTHER_QTY`` > 0) "
-            "must carry a usable design parameter - BOTH a named "
-            "``DESIGN_PROPERTY`` and a populated ``DESIGN_VALUE`` "
-            "from the design-details child table. Quantities "
-            "without supporting design context cannot be "
-            "normalized, compared across items, or validated "
-            "downstream."
+            "When an ACCE estimate item has a positive quantity, a "
+            "design property that explains it must be populated. "
+            "Mirrors DQ-ADR-5: the rule reads *every* design property "
+            "of the item's design (``ACCE_ESTIMATEDESIGNDETAILS`` is 1:N "
+            "on ``DESIGN_ID``, about 21 properties per design) through "
+            "the builder-derived ``DESIGN_KEY_PARAMETER_NAMES`` list. "
+            "Items whose Code of Account has an entry in the "
+            "``COA → key property`` mapping must have one of those "
+            "properties populated; every other item needs any named, "
+            "populated design property."
         ),
         notes=(
-            "Row-level Consistency: a row fails only when at least "
-            "one quantity slot is strictly positive AND the item "
-            "lacks a usable design detail. ACCE's split quantities "
-            "are the per-``ROW_ID`` SUMs of ``KEY_QTY`` / "
-            "``OTHER_QTY`` from ``ACCE_ESTIMATEQTYRESULTS``; a "
-            "null / zero / negative quantity in both slots counts "
-            "as 'no quantity' (PASS). ``DESIGN_PROPERTY`` / "
-            "``DESIGN_VALUE`` are the ``PROPERTY`` / ``VALUE`` "
-            "fields from ``ACCE_ESTIMATEDESIGNDETAILS`` joined via "
-            "``DESIGN_ID`` - BOTH must be non-null and non-blank "
-            "(a bare value with no named parameter is not a usable "
-            "detail). Items without a ``DESIGN_ID`` or with no "
-            "matching design row are treated as having no design "
-            "detail. Missing required column → all rows fail."
+            "Evaluated at the ROW_ID grain on the denormalized data "
+            "product. A row has a quantity when ``QTY_KEY_QTY > 0`` "
+            "OR ``QTY_OTHER_QTY > 0`` (the per-``ROW_ID`` SUMs of "
+            "``KEY_QTY`` / ``OTHER_QTY``); null / zero / negative in "
+            "both slots is 'no quantity' (PASS). "
+            "``ACCE_ESTIMATEDESIGNDETAILS`` is 1:N on ``DESIGN_ID`` "
+            "(production, 2026-10-16: 62,827 property rows for 3,035 "
+            "designs), so - exactly as for ADR - the data product "
+            "builder derives ``DESIGN_KEY_PARAMETER_NAMES``: the "
+            "pipe-separated list of ``PROPERTY`` names whose ``VALUE`` "
+            "is populated, ``(unnamed)`` when a value has no name, null "
+            "when nothing is populated; the previous version of the "
+            "rule read only the first property of each design. "
+            "Type-awareness: ADR maps ``ITEM_TYPE`` to the COA prefix "
+            "its parameter names carry (``324.0-Pump Type``); ACCE "
+            "property names are bare (``Item type``, ``Source of "
+            "quote``, ``Total weight`` …), so the key property per Code "
+            "of Account must be declared in "
+            "``_AC5_KEY_DESIGN_PROPERTIES`` (4-digit ``COA`` or 3-digit "
+            "ICARUS group → property names, matched case- and "
+            "whitespace-insensitively). The mapping ships empty until "
+            "the data owner provides the list; filling it only "
+            "tightens the rule. Items whose ``COA`` is not mapped keep "
+            "the original check, tightened to a *named* populated "
+            "property - a bare value with no parameter name "
+            "(``(unnamed)``) is not a usable detail. Items without a "
+            "``DESIGN_ID`` or with no matching design row have no "
+            "design detail and fail when they carry a quantity. "
+            "Missing required column → all rows fail."
         ),
         required_columns=dict(ACCE_AC5_REQUIRED_COLUMNS),
         check=check_acce_ac5,
@@ -502,3 +531,14 @@ ACCE_RULES = [
         ],
     ),
 ]
+
+# Retired on 2026-10-05 (mirrors the ADR decision of 2026-09-17): DQ-ACCE-2
+# (location + estimate date), DQ-ACCE-7 (within-discipline hours / quantity
+# outlier) and DQ-ACCE-8 (cross-discipline quantity ratios) are withdrawn
+# from the catalog. Their definitions stay here - and their check
+# functions in ``_acce_rules`` - so historical runs can still be read and
+# the rules can be reinstated by moving the id back out of this set.
+ACCE_RETIRED_RULE_IDS = frozenset({"DQ-ACCE-2", "DQ-ACCE-7", "DQ-ACCE-8"})
+
+ACCE_RETIRED_RULES = [r for r in _ACCE_RULE_DEFS if r.id in ACCE_RETIRED_RULE_IDS]
+ACCE_RULES = [r for r in _ACCE_RULE_DEFS if r.id not in ACCE_RETIRED_RULE_IDS]

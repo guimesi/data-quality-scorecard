@@ -67,6 +67,7 @@ from src.custom_dqr._acce_rules import (
     ACCEAC3Params,
     ACCEAC7Params,
     ACCEAC8Params,
+    _ac5_expected_properties,
     _classify_ac4_quantity_acce,
     _classify_ac4_scope_acce,
     _classify_ac8_category_acce,
@@ -373,4 +374,5 @@ __all__ = [
     "_classify_ac4_quantity_acce",
     "_classify_ac4_scope_acce",
     "_classify_ac8_category_acce",
+    "_ac5_expected_properties",
 ]

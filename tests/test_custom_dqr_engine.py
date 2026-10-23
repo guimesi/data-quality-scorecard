@@ -10,13 +10,19 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from config.custom_dqr._acce_catalog import ACCE_RETIRED_RULES
 from config.custom_dqr._adr_catalog import ADR_RETIRED_RULES
-from src.custom_dqr_engine import (  # noqa: E402 - used by the retired-rule dispatch tests
-    check_adr_a2, check_adr_a3, check_adr_a7, check_adr_a8,
-)
 from config.custom_dqr_catalog import get_available_custom_dqr_rules
-from src.custom_dqr_engine import (
+from src.custom_dqr_engine import (  # noqa: E402 - used by the retired / inactive rule dispatch tests
     EPT_E1_REQUIRED_COLUMNS,
+    check_acce_ac2,
+    check_acce_ac3,
+    check_acce_ac7,
+    check_acce_ac8,
+    check_adr_a2,
+    check_adr_a3,
+    check_adr_a7,
+    check_adr_a8,
     check_ept_e1,
     evaluate_custom_rules,
 )
@@ -1472,11 +1478,11 @@ def test_required_reference_datasets_for_acce_includes_coa_master():
 
 
 def test_acce_has_custom_rule_ac2_available():
-    """ACCE catalog exposes DQ-ACCE-2 - Completeness & Validity rule
+    """ACCE retired list keeps DQ-ACCE-2 - Completeness & Validity rule
     that joins ``PLANVIEW_ID`` to ``VWS_GP_STANDARD_SHARE.PROJECT_ID`` and
     requires ``JOB_NO`` filled and well-formed (ACCE's estimate-basis-date
-    proxy)."""
-    rules = get_available_custom_dqr_rules("ACCE")
+    proxy). Retired on 2026-10-05, mirroring DQ-ADR-2."""
+    rules = ACCE_RETIRED_RULES
     by_id = {r.id: r for r in rules}
     assert "DQ-ACCE-2" in by_id
     rule = by_id["DQ-ACCE-2"]
@@ -1495,7 +1501,7 @@ def test_acce_has_custom_rule_ac2_available():
 def test_acce_ac2_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ACCE_AC2_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ACCE") if r.id == "DQ-ACCE-2"
+        r for r in ACCE_RETIRED_RULES if r.id == "DQ-ACCE-2"
     )
     assert rule.required_columns == ACCE_AC2_REQUIRED_COLUMNS
 
@@ -1682,17 +1688,20 @@ def test_evaluate_custom_rules_dispatches_to_ac2(_ac2_reference_with_countries):
     })
     assignments = [CustomDQRAssignment(rule_id="DQ-ACCE-2", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ACCE")
-    assert "DQ-ACCE-2" in out.columns
-    assert out["DQ-ACCE-2"].tolist() == [True, True]
+    # Retired rule: the assignment is skipped silently (no column, no
+    # "not evaluated" entry) - the check itself still works directly.
+    assert "DQ-ACCE-2" not in out.columns
     assert not_evaluated == {}
+    assert check_acce_ac2(df).tolist() == [True, True]
 
 
 def test_required_reference_datasets_for_acce_now_includes_planview_share():
-    """DQ-ACCE-2 introduces ``VWS_GP_STANDARD_SHARE`` alongside
-    ``ACCE_COA_MASTER`` for ACCE. Step 2 must prefetch both."""
+    """DQ-ACCE-2 (retired) used to bring ``VWS_GP_STANDARD_SHARE`` in for
+    ACCE. Nothing in the active ACCE catalog needs it now (DQ-ACCE-7 / 8
+    are retired too and ACCE has no MFC rule), so Step 2 prefetches only
+    ``ACCE_COA_MASTER`` for ACCE."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
     }
 
@@ -1780,9 +1789,11 @@ def _ac3_baseline_population(hours: float = 100.0, cost: float = 50.0):
 def test_acce_has_custom_rule_ac3_available():
     """ACCE catalog exposes DQ-ACCE-3 as a Statistical Outlier
     rule joined to the COA master through the direct ``COA`` column."""
-    rules = get_available_custom_dqr_rules("ACCE")
+    rules = get_available_custom_dqr_rules("ACCE", include_inactive=True)
     by_id = {r.id: r for r in rules}
     assert "DQ-ACCE-3" in by_id
+    assert by_id["DQ-ACCE-3"].active is False        # inactive since 2026-10-05
+    assert "DQ-ACCE-3" not in {r.id for r in get_available_custom_dqr_rules("ACCE")}
     rule = by_id["DQ-ACCE-3"]
     assert rule.type == "Statistical Outlier"
     assert rule.required_columns == {
@@ -1800,7 +1811,7 @@ def test_acce_has_custom_rule_ac3_available():
 def test_acce_ac3_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ACCE_AC3_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ACCE") if r.id == "DQ-ACCE-3"
+        r for r in get_available_custom_dqr_rules("ACCE", include_inactive=True) if r.id == "DQ-ACCE-3"
     )
     assert rule.required_columns == ACCE_AC3_REQUIRED_COLUMNS
 
@@ -1824,7 +1835,7 @@ def test_acce_ac3_does_not_expose_project_scope_option():
     ADR DQ-ADR-3). This guards against accidentally adding it in the future,
     which would change the rule's user contract."""
     rule = next(
-        r for r in get_available_custom_dqr_rules("ACCE") if r.id == "DQ-ACCE-3"
+        r for r in get_available_custom_dqr_rules("ACCE", include_inactive=True) if r.id == "DQ-ACCE-3"
     )
     option_keys = {opt.key for opt in (rule.options or ())}
     assert "project_scoped" not in option_keys
@@ -2126,11 +2137,14 @@ def test_evaluate_custom_rules_dispatches_to_ac3(
     df = _make_ac3_df(rows)
     assignments = [CustomDQRAssignment(rule_id="DQ-ACCE-3", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ACCE")
-    assert "DQ-ACCE-3" in out.columns
+    # Inactive rule: the dispatcher reports it instead of scoring it. The
+    # check itself still works directly.
+    assert "DQ-ACCE-3" not in out.columns
+    assert "inactive" in not_evaluated["DQ-ACCE-3"]
+    result = check_acce_ac3(df)
     overload_mask = df["COA"].astype(str).str[:3] == "313"
-    assert (~out["DQ-ACCE-3"][overload_mask]).all()
-    assert out["DQ-ACCE-3"][~overload_mask].all()
-    assert not_evaluated == {}
+    assert (~result[overload_mask]).all()
+    assert result[~overload_mask].all()
 
 
 # ----- DQ-ACCE-3 - percentile threshold (params={"threshold_percentile": …}) -------
@@ -2850,35 +2864,33 @@ def test_evaluate_custom_rules_dispatches_to_ac4():
 
 def test_acce_ac4_does_not_add_reference_dataset_to_prefetch():
     """DQ-ACCE-4 has no ``reference`` dataset, so the ACCE system's prefetch
-    list is the same one DQ-ACCE-1 + DQ-ACCE-2 already require."""
+    list is the one DQ-ACCE-1 alone requires."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
     }
 
 
 # =============================================================================
-# DQ-ACCE-5: Design details present when quantity exists (ACCE; mirrors ADR DQ-ADR-5)
+# DQ-ACCE-5: Key design details present when quantity exists (ACCE; mirrors ADR DQ-ADR-5)
 # =============================================================================
 
-def _ac5_required_cols():
-    return ["QTY_KEY_QTY", "QTY_OTHER_QTY", "DESIGN_PROPERTY", "DESIGN_VALUE"]
+_AC5_COLS = ["QTY_KEY_QTY", "QTY_OTHER_QTY", "COA", "DESIGN_KEY_PARAMETER_NAMES"]
 
 
 def _make_ac5_df(rows):
     """Build an ACCE-shaped denormalized DataFrame from a list of dicts.
     Missing keys default to None so the rule sees them as null."""
-    cols = _ac5_required_cols()
-    completed = [{**{c: None for c in cols}, **r} for r in rows]
-    return pd.DataFrame(completed, columns=cols)
+    completed = [{**{c: None for c in _AC5_COLS}, **r} for r in rows]
+    return pd.DataFrame(completed, columns=_AC5_COLS)
 
 
-def _ac5_row(qty=None, value=None, prop="DESIGN PRESSURE", *, slot="key"):
-    """One DQ-ACCE-5 row: a single populated qty slot (KEY by default) plus a
-    design parameter name (``prop``, defaults to a populated name) and
-    value. A populated detail needs BOTH ``prop`` and ``value`` set."""
-    row = {"DESIGN_PROPERTY": prop, "DESIGN_VALUE": value}
+def _ac5_row(qty=None, coa="3240", names=None, *, slot="key"):
+    """One DQ-ACCE-5 row: a single populated qty slot (KEY by default), the
+    item's 4-digit ``COA`` (default ``3240``, a pump) and ``names``, the
+    builder-derived pipe-separated list of property names whose value is
+    populated (``DESIGN_KEY_PARAMETER_NAMES``)."""
+    row = {"COA": coa, "DESIGN_KEY_PARAMETER_NAMES": names}
     if slot == "other":
         row["QTY_OTHER_QTY"] = qty
     else:
@@ -2886,20 +2898,36 @@ def _ac5_row(qty=None, value=None, prop="DESIGN PRESSURE", *, slot="key"):
     return row
 
 
+@pytest.fixture
+def _ac5_key_map(monkeypatch):
+    """Pin a ``COA → key property`` mapping. The shipped mapping is empty
+    (production property names are bare, the data owner has to supply the
+    list), so the type-aware branch is exercised through this fixture."""
+    import src.custom_dqr._acce_rules as acce
+    mapping = {
+        "3240": ("Pump type",),                   # 4-digit COA
+        "313": ("Line size", "Pipe material"),    # 3-digit ICARUS group
+        "3110": (),                               # listed but empty → unmapped
+    }
+    monkeypatch.setattr(acce, "_AC5_KEY_DESIGN_PROPERTIES", mapping)
+    return mapping
+
+
 def test_acce_has_custom_rule_ac5_available():
-    """ACCE catalog exposes DQ-ACCE-5 as a Consistency rule
-    with the documented physical column mapping (split qty + named
-    design parameter)."""
+    """ACCE catalog exposes DQ-ACCE-5 as a Consistency rule with the
+    documented physical column mapping (split qty + COA + the
+    builder-derived key-parameter list), mirroring DQ-ADR-5."""
     rules = get_available_custom_dqr_rules("ACCE")
     by_id = {r.id: r for r in rules}
     assert "DQ-ACCE-5" in by_id
     rule = by_id["DQ-ACCE-5"]
+    assert rule.name == "Key design details present when quantity exists"
     assert rule.type == "Consistency"
     assert rule.required_columns == {
         "Key Quantity": "QTY_KEY_QTY",
         "Other Quantity": "QTY_OTHER_QTY",
-        "Design Parameter Name": "DESIGN_PROPERTY",
-        "Design Parameter Value": "DESIGN_VALUE",
+        "Code of Account": "COA",
+        "Key Parameter Names": "DESIGN_KEY_PARAMETER_NAMES",
     }
     # DQ-ACCE-5 does not consult an external reference dataset.
     assert rule.reference is None
@@ -2913,98 +2941,217 @@ def test_acce_ac5_required_columns_constant_matches_catalog():
     assert rule.required_columns == ACCE_AC5_REQUIRED_COLUMNS
 
 
-def test_acce_ac5_passes_when_quantity_and_design_detail_both_present():
-    """Happy path: positive quantity + both DESIGN_PROPERTY and
-    DESIGN_VALUE populated. The quantity may sit in either slot."""
+def test_acce_ac5_key_property_mapping_ships_empty():
+    """Production ACCE property names carry no COA prefix (``Item type``,
+    ``Source of quote``, ``Total weight`` …), so the key property per Code
+    of Account cannot be derived from the data. The mapping is empty until
+    the data owner supplies it; every item then uses the
+    any-named-property check."""
+    from src.custom_dqr._acce_rules import _AC5_KEY_DESIGN_PROPERTIES
+    assert _AC5_KEY_DESIGN_PROPERTIES == {}
+
+
+def test_ac5_expected_properties_resolves_four_digit_code_then_group(_ac5_key_map):
+    """4-digit COA first, then its 3-digit ICARUS group; whitespace and a
+    numeric dtype's ``.0`` suffix are tolerated; names come back
+    normalised; anything unmapped / unparseable has no expectation."""
+    from src.custom_dqr_engine import _ac5_expected_properties
+    assert _ac5_expected_properties("3240") == ("pump type",)
+    assert _ac5_expected_properties("3131") == ("line size", "pipe material")
+    assert _ac5_expected_properties(" 3132 ") == ("line size", "pipe material")
+    assert _ac5_expected_properties(3131) == ("line size", "pipe material")
+    assert _ac5_expected_properties(3131.0) == ("line size", "pipe material")
+    assert _ac5_expected_properties("313") == ("line size", "pipe material")
+    for unmapped in ("3110", "9999", "324", None, float("nan"), "", "   ", "31311", "31A1", "ABCD"):
+        assert _ac5_expected_properties(unmapped) == (), unmapped
+    # Explicit mapping argument wins over the module constant.
+    assert _ac5_expected_properties("9999", {"9999": ("X  y",)}) == ("x y",)
+
+
+# ----- shipped behaviour: empty mapping -----------------------------------------
+
+def test_acce_ac5_with_empty_mapping_requires_any_named_property():
+    """With the shipped (empty) mapping every item takes the fallback
+    branch: a positive quantity needs at least one *named* populated
+    property anywhere in the list; ``(unnamed)`` alone is not enough."""
+    from src.custom_dqr._acce_rules import _AC5_KEY_DESIGN_PROPERTIES
+    from src.custom_dqr_engine import check_acce_ac5
+    assert _AC5_KEY_DESIGN_PROPERTIES == {}
+    df = _make_ac5_df([
+        _ac5_row(10.0, "3240", "Item type|Total weight"),
+        _ac5_row(10.0, "3240", "(unnamed)|Material"),
+        _ac5_row(10.0, "3240", "(unnamed)"),
+        _ac5_row(10.0, "3240", None),
+        _ac5_row(10.0, None, "Material"),
+        _ac5_row(10.0, None, "   "),
+    ])
+    assert check_acce_ac5(df).tolist() == [True, True, False, False, True, False]
+
+
+# ----- mapped COA: key-property check --------------------------------------------
+
+def test_acce_ac5_passes_mapped_coa_when_key_property_present(_ac5_key_map):
     from src.custom_dqr_engine import check_acce_ac5
     df = _make_ac5_df([
-        _ac5_row(10.0, "SCH 40"),
-        _ac5_row(0.5, "Carbon Steel"),
-        _ac5_row(3.0, "6 in", slot="other"),   # qty in OTHER slot
+        _ac5_row(10.0, "3240", "Pump type"),
+        # key property is not the first entry of the list
+        _ac5_row(10.0, "3240", "Item type|Source of quote|Pump type"),
+        # case / whitespace insensitive
+        _ac5_row(10.0, "3240", "Item type| PUMP  TYPE "),
+        # 3-digit group covers every sub-account; any of the listed names
+        _ac5_row(0.5, "3131", "Pipe material"),
+        _ac5_row(0.5, "3132", "Total weight|Line size"),
+        _ac5_row(3.0, "3240", "Pump type", slot="other"),
+    ])
+    assert check_acce_ac5(df).tolist() == [True] * 6
+
+
+def test_acce_ac5_fails_mapped_coa_when_key_property_missing(_ac5_key_map):
+    """Populated properties that are not the expected one are not enough
+    for a mapped COA; the match is on the whole normalised name."""
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(10.0, "3240", "Item type|Total weight"),
+        _ac5_row(10.0, "3240", "Pump"),
+        _ac5_row(10.0, "3240", "Pump type ratio"),
+        _ac5_row(10.0, "3240", "(unnamed)"),
+        _ac5_row(10.0, "3240", None),
+        _ac5_row(10.0, "3240", "   "),
+        _ac5_row(10.0, "3131", "Pump type"),      # right name, wrong COA
+    ])
+    assert check_acce_ac5(df).tolist() == [False] * 7
+
+
+def test_acce_ac5_four_digit_entry_wins_over_its_group(monkeypatch):
+    import src.custom_dqr._acce_rules as acce
+    from src.custom_dqr_engine import check_acce_ac5
+    monkeypatch.setattr(acce, "_AC5_KEY_DESIGN_PROPERTIES", {
+        "3240": ("Pump type",),
+        "324": ("Driver power",),
+    })
+    df = _make_ac5_df([
+        _ac5_row(1.0, "3240", "Driver power"),   # 4-digit entry wins → FAIL
+        _ac5_row(1.0, "3240", "Pump type"),
+        _ac5_row(1.0, "3241", "Driver power"),   # falls back to the group → PASS
+        _ac5_row(1.0, "3241", "Pump type"),
+    ])
+    assert check_acce_ac5(df).tolist() == [False, True, True, False]
+
+
+def test_acce_ac5_coa_is_matched_after_strip_and_numeric_coercion(_ac5_key_map):
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(1.0, "  3240  ", "Pump type"),
+        _ac5_row(1.0, 3240, "Pump type"),
+        _ac5_row(1.0, 3240.0, "Pump type"),
+        _ac5_row(1.0, "3240.0", "Pump type"),
+        _ac5_row(1.0, 3240, "Item type"),
+    ])
+    assert check_acce_ac5(df).tolist() == [True, True, True, True, False]
+
+
+def test_acce_ac5_numeric_coa_column_dtype_is_supported(_ac5_key_map):
+    from src.custom_dqr_engine import check_acce_ac5
+    df = pd.DataFrame({
+        "QTY_KEY_QTY": [1.0, 1.0, 1.0],
+        "QTY_OTHER_QTY": [None, None, None],
+        "COA": [3240.0, 3240.0, None],
+        "DESIGN_KEY_PARAMETER_NAMES": ["Pump type", "Item type", "Item type"],
+    })
+    assert check_acce_ac5(df).tolist() == [True, False, True]
+
+
+# ----- unmapped COA: any-named-property fallback ----------------------------------
+
+def test_acce_ac5_unmapped_coa_falls_back_to_any_named_property(_ac5_key_map):
+    """Null / blank / malformed COA, a COA outside the mapping, or a COA
+    mapped to an empty tuple keep the original check, tightened to a
+    *named* populated property: ``(unnamed)`` does not count."""
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(10.0, None, "Item type"),
+        _ac5_row(10.0, "", "Item type"),
+        _ac5_row(10.0, "   ", "(unnamed)|Material"),
+        _ac5_row(10.0, "9999", "Item type"),      # not in the mapping
+        _ac5_row(10.0, "3110", "Item type"),      # mapped to an empty tuple
+        _ac5_row(10.0, "ABCD", "Item type"),
+        _ac5_row(10.0, None, "(unnamed)"),
+        _ac5_row(10.0, "9999", None),
+        _ac5_row(10.0, None, "   "),
+    ])
+    assert check_acce_ac5(df).tolist() == [
+        True, True, True, True, True, True, False, False, False,
+    ]
+
+
+# ----- quantity gate ---------------------------------------------------------
+
+def test_acce_ac5_passes_when_quantity_zero_regardless_of_design_detail(_ac5_key_map):
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(0.0, "3240", None),
+        _ac5_row(0, "3240", "Item type"),
+        _ac5_row(0.0, None, None),
     ])
     assert check_acce_ac5(df).tolist() == [True, True, True]
 
 
-def test_acce_ac5_fails_when_quantity_present_but_value_missing():
-    """A positive quantity with a named parameter but no value FAILs.
-    Null / empty / whitespace-only ``DESIGN_VALUE`` all count as
-    missing (same ``_is_filled`` semantics DQ-ACCE-1 / DQ-ACCE-2 use)."""
+def test_acce_ac5_passes_when_quantity_null_regardless_of_design_detail(_ac5_key_map):
     from src.custom_dqr_engine import check_acce_ac5
     df = _make_ac5_df([
-        _ac5_row(10.0, None),
-        _ac5_row(5.0, ""),
-        _ac5_row(2.0, "   "),
+        _ac5_row(None, "3240", None),
+        _ac5_row(None, None, "Material"),
     ])
-    assert check_acce_ac5(df).tolist() == [False, False, False]
+    assert check_acce_ac5(df).tolist() == [True, True]
 
 
-def test_acce_ac5_fails_when_value_present_but_property_missing():
-    """The new PROPERTY requirement: a value with no named parameter
-    (the "120 m of what?" case) is not a usable design detail, so a
-    positive-quantity row with a blank ``DESIGN_PROPERTY`` FAILs."""
+def test_acce_ac5_negative_quantity_counts_as_no_quantity(_ac5_key_map):
+    """ACCE keeps its strictly positive gate (``KEY_QTY > 0 OR OTHER_QTY >
+    0``): a negative aggregate is 'no quantity' and the row passes even
+    without a key design detail (DQ-ADR-5 differs here - it uses ``<> 0``)."""
     from src.custom_dqr_engine import check_acce_ac5
     df = _make_ac5_df([
-        _ac5_row(10.0, "120", prop=None),
-        _ac5_row(5.0, "120", prop=""),
-        _ac5_row(2.0, "120", prop="   "),
-    ])
-    assert check_acce_ac5(df).tolist() == [False, False, False]
-
-
-def test_acce_ac5_passes_when_quantity_zero_regardless_of_design_detail():
-    """Zero quantity in both slots is treated as 'no quantity'; rule is
-    not applicable and the row passes - even when the design detail is
-    also missing."""
-    from src.custom_dqr_engine import check_acce_ac5
-    df = _make_ac5_df([
-        _ac5_row(0.0, None, prop=None),
-        _ac5_row(0.0, ""),
-        _ac5_row(0.0, "ABC"),
+        _ac5_row(-3.0, "3240", None),
+        _ac5_row(-3.0, "3240", "Item type"),
+        _ac5_row(-3.0, None, None, slot="other"),
     ])
     assert check_acce_ac5(df).tolist() == [True, True, True]
 
 
-def test_acce_ac5_passes_when_quantity_null_regardless_of_design_detail():
-    """A null aggregated quantity in both slots is treated as 'no
-    quantity', the rule is not applicable and the row passes."""
+def test_acce_ac5_quantity_may_sit_in_either_slot(_ac5_key_map):
     from src.custom_dqr_engine import check_acce_ac5
     df = _make_ac5_df([
-        _ac5_row(None, None, prop=None),
-        _ac5_row(None, "SS-316"),
+        _ac5_row(3.0, "3240", None, slot="other"),
+        _ac5_row(3.0, "3240", "Pump type", slot="other"),
+        {"QTY_KEY_QTY": 1.0, "QTY_OTHER_QTY": 2.0, "COA": "3240",
+         "DESIGN_KEY_PARAMETER_NAMES": "Item type"},
     ])
-    assert check_acce_ac5(df).tolist() == [True, True]
+    assert check_acce_ac5(df).tolist() == [False, True, False]
 
 
-def test_acce_ac5_negative_quantity_counts_as_no_quantity():
-    """Population uses ``KEY_QTY > 0 OR OTHER_QTY > 0`` strictly, so a
-    negative aggregated quantity counts as 'no quantity' → the rule is
-    not applicable and the row PASSES even with no design detail."""
+def test_acce_ac5_decision_matrix_covers_all_states(_ac5_key_map):
+    """End-to-end coverage of the decision matrix in a single batch."""
     from src.custom_dqr_engine import check_acce_ac5
     df = _make_ac5_df([
-        _ac5_row(-3.0, None, prop=None),
-        _ac5_row(-3.0, "Carbon Steel"),
+        # no quantity → PASS whatever the design side looks like
+        _ac5_row(0.0, "3240", None),
+        _ac5_row(0.0, None, "Any"),
+        # mapped COA, key present → PASS
+        _ac5_row(12.0, "3240", "Item type|Pump type"),
+        # mapped COA, key missing (other names / nothing populated) → FAIL
+        _ac5_row(12.0, "3240", "Item type"),
+        _ac5_row(12.0, "3240", None),
+        # unmapped COA, any named populated → PASS; unnamed / none → FAIL
+        _ac5_row(12.0, None, "Any"),
+        _ac5_row(12.0, "9999", "(unnamed)"),
+        _ac5_row(12.0, None, None),
     ])
-    assert check_acce_ac5(df).tolist() == [True, True]
+    assert check_acce_ac5(df).tolist() == [
+        True, True, True, False, False, True, False, False,
+    ]
 
 
-def test_acce_ac5_decision_matrix_covers_all_four_states():
-    """End-to-end coverage of the four-state decision matrix in a
-    single batch."""
-    from src.custom_dqr_engine import check_acce_ac5
-    df = _make_ac5_df([
-        # HAS_QUANTITY=0, HAS_DESIGN_DETAIL=0 → PASS
-        _ac5_row(0.0, None, prop=None),
-        # HAS_QUANTITY=0, HAS_DESIGN_DETAIL=1 → PASS
-        _ac5_row(0.0, "ASME"),
-        # HAS_QUANTITY=1, HAS_DESIGN_DETAIL=0 → FAIL
-        _ac5_row(12.0, "", prop=None),
-        # HAS_QUANTITY=1, HAS_DESIGN_DETAIL=1 → PASS
-        _ac5_row(12.0, "API-650"),
-    ])
-    assert check_acce_ac5(df).tolist() == [True, True, False, True]
-
-
-def test_acce_ac5_handles_object_dtyped_numeric_quantities():
+def test_acce_ac5_handles_object_dtyped_numeric_quantities(_ac5_key_map):
     """A heterogeneous source (e.g. mixed numeric strings and floats)
     must not crash the rule - ``pd.to_numeric`` coerces unrecognised
     values to NaN which the rule treats as 'no quantity'."""
@@ -3012,48 +3159,77 @@ def test_acce_ac5_handles_object_dtyped_numeric_quantities():
     df = pd.DataFrame({
         "QTY_KEY_QTY": ["10", "0", None, "abc"],
         "QTY_OTHER_QTY": [None, None, None, None],
-        "DESIGN_PROPERTY": [None, None, None, None],
-        "DESIGN_VALUE": [None, None, None, None],
+        "COA": ["3240"] * 4,
+        "DESIGN_KEY_PARAMETER_NAMES": [None] * 4,
     })
-    # Row 0: "10" → 10 > 0, no detail → FAIL.
+    # Row 0: "10" → 10 > 0, no key detail → FAIL.
     # Rows 1, 2, 3: 0 / NaN / NaN → "no quantity" → PASS.
     assert check_acce_ac5(df).tolist() == [False, True, True, True]
 
 
-def test_acce_ac5_fails_for_all_rows_when_required_column_missing():
-    """Schema-level structural incompleteness fails every row, for any
-    of the four required columns."""
-    from src.custom_dqr_engine import ACCE_AC5_REQUIRED_COLUMNS, check_acce_ac5
-    base = pd.DataFrame({
-        "QTY_KEY_QTY": [10.0, 10.0],
-        "QTY_OTHER_QTY": [None, None],
-        "DESIGN_PROPERTY": ["DIAMETER", "DIAMETER"],
-        "DESIGN_VALUE": ["SCH 40", "ASME"],
-    })
-    for missing in ACCE_AC5_REQUIRED_COLUMNS.values():
-        df = base.drop(columns=missing)
-        assert check_acce_ac5(df).tolist() == [False, False], (
-            f"missing {missing} should fail every row"
-        )
+def test_acce_ac5_handles_a_non_unique_index(_ac5_key_map):
+    """The explode-and-regroup match works on a positional index, so a
+    data product whose index carries duplicates (e.g. after a concat)
+    still gets one verdict per row, aligned to the original index."""
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(1.0, "3240", "Pump type"),         # PASS
+        _ac5_row(1.0, "3240", "Item type"),         # FAIL
+        _ac5_row(1.0, None, "Item type"),           # PASS (fallback)
+    ])
+    df.index = [0, 0, 1]
+    result = check_acce_ac5(df)
+    assert list(result.index) == [0, 0, 1]
+    assert result.tolist() == [True, False, True]
+
+
+# ----- structural failures ---------------------------------------------------
+
+@pytest.mark.parametrize("missing", _AC5_COLS)
+def test_acce_ac5_fails_for_all_rows_when_required_column_missing(missing):
+    """Schema-level structural incompleteness fails every row, same
+    convention as the other custom rules."""
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(10.0, "3240", "Pump type"),
+        _ac5_row(0.0, "3240", "Pump type"),
+    ]).drop(columns=[missing])
+    assert check_acce_ac5(df).tolist() == [False, False]
 
 
 def test_acce_ac5_empty_dataframe_returns_empty_pass_series():
-    """An empty DataFrame produces an empty Boolean Series, the rule
-    short-circuits before any column logic runs."""
     from src.custom_dqr_engine import check_acce_ac5
-    df = pd.DataFrame({c: [] for c in _ac5_required_cols()})
-    result = check_acce_ac5(df)
+    result = check_acce_ac5(pd.DataFrame({c: [] for c in _AC5_COLS}))
     assert result.tolist() == []
     assert result.dtype == bool
 
 
-def test_evaluate_custom_rules_dispatches_to_ac5():
+def test_acce_ac5_mock_data_product_exercises_both_branches():
+    """Mock mode must expose ``DESIGN_KEY_PARAMETER_NAMES`` on the ACCE data
+    product (derived from the 1:N design table, several bare-named
+    properties per design, ``(unnamed)`` entries) so DQ-ACCE-5 can be
+    unlocked in the CDE grid, with both PASS and FAIL rows present."""
+    import os
+    os.environ["DATA_SOURCE"] = "mock"
+    from src.custom_dqr_engine import check_acce_ac5
+    from src.data_product_builder import build_data_product
+    df = build_data_product("ACCE").df
+    assert "DESIGN_KEY_PARAMETER_NAMES" in df.columns
+    names = df["DESIGN_KEY_PARAMETER_NAMES"].dropna()
+    assert names.str.contains("|", regex=False).any()      # several properties per design
+    assert names.str.contains("(unnamed)", regex=False).any()
+    assert not names.str.contains(r"(?:^|\|)\d{3}\.\d-", regex=True).any()  # bare names
+    result = check_acce_ac5(df)
+    assert result.any() and (~result).any()
+
+
+def test_evaluate_custom_rules_dispatches_to_ac5(_ac5_key_map):
     """End-to-end: dispatcher routes an DQ-ACCE-5 assignment through
     check_acce_ac5 for the ACCE data product."""
     df = _make_ac5_df([
-        _ac5_row(10.0, "ASME"),
-        _ac5_row(7.0, None),                 # positive qty, no value → FAIL
-        _ac5_row(0.0, None, prop=None),
+        _ac5_row(10.0, "3240", "Pump type"),
+        _ac5_row(7.0, "3240", "Item type"),        # key property missing → FAIL
+        _ac5_row(0.0, "3240", None),
     ])
     assignments = [CustomDQRAssignment(rule_id="DQ-ACCE-5", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ACCE")
@@ -3067,7 +3243,6 @@ def test_acce_ac5_does_not_add_reference_dataset_to_prefetch():
     is unchanged."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
     }
 
@@ -3282,7 +3457,6 @@ def test_acce_ac6_does_not_add_reference_dataset_to_prefetch():
     is unchanged."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
     }
 
@@ -3354,9 +3528,12 @@ def test_acce_has_custom_rule_ac7_available():
     rule with the documented physical column mapping (raw
     ``DESCRIPTION`` + effective UOM segment, split qty, ``COST_MH``,
     IQR-multiplier selectbox, and a project-type segmentation toggle)."""
-    rules = get_available_custom_dqr_rules("ACCE")
+    rules = ACCE_RETIRED_RULES                        # retired 2026-10-05 (mirrors DQ-ADR-7)
     by_id = {r.id: r for r in rules}
     assert "DQ-ACCE-7" in by_id
+    assert "DQ-ACCE-7" not in {
+        r.id for r in get_available_custom_dqr_rules("ACCE", include_inactive=True)
+    }
     rule = by_id["DQ-ACCE-7"]
     assert rule.type == "Statistical Outlier"
     assert rule.required_columns == {
@@ -3379,7 +3556,7 @@ def test_acce_has_custom_rule_ac7_available():
 def test_acce_ac7_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ACCE_AC7_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ACCE") if r.id == "DQ-ACCE-7"
+        r for r in ACCE_RETIRED_RULES if r.id == "DQ-ACCE-7"
     )
     assert rule.required_columns == ACCE_AC7_REQUIRED_COLUMNS
 
@@ -3646,21 +3823,23 @@ def test_evaluate_custom_rules_dispatches_to_ac7():
     )
     assignments = [CustomDQRAssignment(rule_id="DQ-ACCE-7", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ACCE")
-    assert "DQ-ACCE-7" in out.columns
-    assert out["DQ-ACCE-7"].iloc[:-1].all()
-    assert out["DQ-ACCE-7"].iloc[-1] is False or bool(out["DQ-ACCE-7"].iloc[-1]) is False
+    # Retired rule: skipped silently by the dispatcher; the check itself
+    # still works directly.
+    assert "DQ-ACCE-7" not in out.columns
     assert not_evaluated == {}
+    result = check_acce_ac7(df)
+    assert result.iloc[:-1].all()
+    assert bool(result.iloc[-1]) is False
 
 
 def test_acce_ac7_does_not_add_reference_dataset_to_prefetch():
     """DQ-ACCE-7 declares no static reference (the Planview lookup only
     fires when the segment-by-project-type toggle is on), so the
-    ACCE prefetch list is unchanged. DQ-ACCE-2 already brings in
-    ``VWS_GP_STANDARD_SHARE`` for ACCE, so the segmented branch has
-    a cached reference when it runs."""
+    ACCE prefetch list is unchanged. With DQ-ACCE-2 retired nothing
+    prefetches ``VWS_GP_STANDARD_SHARE`` for ACCE any more; the segmented
+    branch (retired as well) would load it lazily through the registry."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
     }
 
@@ -3717,7 +3896,7 @@ def test_acce_ac7_segment_param_constants_match_catalog():
     rule declares ``PLANVIEW_ID`` as a required-when-enabled column."""
     from src.custom_dqr_engine import ACCE_AC7_SEGMENT_BY_PROJECT_TYPE_PARAM
     rule = next(
-        r for r in get_available_custom_dqr_rules("ACCE") if r.id == "DQ-ACCE-7"
+        r for r in ACCE_RETIRED_RULES if r.id == "DQ-ACCE-7"
     )
     by_key = {opt.key: opt for opt in (rule.options or ())}
     assert ACCE_AC7_SEGMENT_BY_PROJECT_TYPE_PARAM in by_key
@@ -3999,9 +4178,12 @@ def test_acce_has_custom_rule_ac8_available():
     rule with the documented physical column mapping (DESCRIPTION +
     COMPONENT_SOURCE + split qty/unit slots, IQR-multiplier selectbox,
     and a project-type segmentation toggle)."""
-    rules = get_available_custom_dqr_rules("ACCE")
+    rules = ACCE_RETIRED_RULES                        # retired 2026-10-05 (mirrors DQ-ADR-8)
     by_id = {r.id: r for r in rules}
     assert "DQ-ACCE-8" in by_id
+    assert "DQ-ACCE-8" not in {
+        r.id for r in get_available_custom_dqr_rules("ACCE", include_inactive=True)
+    }
     rule = by_id["DQ-ACCE-8"]
     assert rule.type == "Statistical Outlier"
     assert rule.required_columns == {
@@ -4024,7 +4206,7 @@ def test_acce_has_custom_rule_ac8_available():
 def test_acce_ac8_required_columns_constant_matches_catalog():
     from src.custom_dqr_engine import ACCE_AC8_REQUIRED_COLUMNS
     rule = next(
-        r for r in get_available_custom_dqr_rules("ACCE") if r.id == "DQ-ACCE-8"
+        r for r in ACCE_RETIRED_RULES if r.id == "DQ-ACCE-8"
     )
     assert rule.required_columns == ACCE_AC8_REQUIRED_COLUMNS
 
@@ -4346,22 +4528,24 @@ def test_evaluate_custom_rules_dispatches_to_ac8():
     df, outlier_project = _ac8_steel_concrete_population(outlier_concrete=5.0)
     assignments = [CustomDQRAssignment(rule_id="DQ-ACCE-8", weight=100.0)]
     out, not_evaluated = evaluate_custom_rules(df, assignments, "ACCE")
-    assert "DQ-ACCE-8" in out.columns
-    is_outlier = df["COMPONENT_SOURCE"] == outlier_project
-    assert (~out["DQ-ACCE-8"][is_outlier]).all()
-    assert out["DQ-ACCE-8"][~is_outlier].all()
+    # Retired rule: skipped silently by the dispatcher; the check itself
+    # still works directly.
+    assert "DQ-ACCE-8" not in out.columns
     assert not_evaluated == {}
+    result = check_acce_ac8(df)
+    is_outlier = df["COMPONENT_SOURCE"] == outlier_project
+    assert (~result[is_outlier]).all()
+    assert result[~is_outlier].all()
 
 
 def test_acce_ac8_does_not_add_reference_dataset_to_prefetch():
     """DQ-ACCE-8 declares no static reference (the Planview lookup only
     fires when the segment-by-project-type toggle is on), so the
-    ACCE prefetch list is unchanged. DQ-ACCE-2 already brings in
-    ``VWS_GP_STANDARD_SHARE`` for ACCE, so the segmented branch has
-    a cached reference when it runs."""
+    ACCE prefetch list is unchanged. With DQ-ACCE-2 retired nothing
+    prefetches ``VWS_GP_STANDARD_SHARE`` for ACCE any more; the segmented
+    branch (retired as well) would load it lazily through the registry."""
     from src.reference_data import required_reference_datasets_for_systems
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
     }
 
@@ -4412,7 +4596,7 @@ def test_acce_ac8_segment_param_constants_match_catalog():
     rule declares ``PLANVIEW_ID`` as a required-when-enabled column."""
     from src.custom_dqr_engine import ACCE_AC8_SEGMENT_BY_PROJECT_TYPE_PARAM
     rule = next(
-        r for r in get_available_custom_dqr_rules("ACCE") if r.id == "DQ-ACCE-8"
+        r for r in ACCE_RETIRED_RULES if r.id == "DQ-ACCE-8"
     )
     by_key = {opt.key: opt for opt in (rule.options or ())}
     assert ACCE_AC8_SEGMENT_BY_PROJECT_TYPE_PARAM in by_key
@@ -8776,9 +8960,10 @@ def test_get_reference_dataset_returns_none_for_unknown_name():
 def test_required_reference_datasets_collects_unique_names():
     """Step 2 uses this to know what to prefetch for the selected systems."""
     from src.reference_data import required_reference_datasets_for_systems
-    # EPT has DQ-EPT-2/DQ-EPT-7 with VWS_GP_STANDARD_SHARE; ADR has DQ-ADR-1 (ACCE_COA_MASTER)
-    # plus DQ-ADR-2 (VWS_GP_STANDARD_SHARE); ACCE has DQ-ACCE-1 (ACCE_COA_MASTER) plus
-    # DQ-ACCE-2 (VWS_GP_STANDARD_SHARE).
+    # EPT has DQ-EPT-2/DQ-EPT-7 with VWS_GP_STANDARD_SHARE; ADR has DQ-ADR-1
+    # (ACCE_COA_MASTER) plus DQ-ADR-9 (MFC + VWS_GP_STANDARD_SHARE as an extra
+    # reference); ACCE needs only DQ-ACCE-1's COA master (DQ-ACCE-2 retired,
+    # no MFC counterpart).
     assert required_reference_datasets_for_systems(["EPT"]) == ["VWS_GP_STANDARD_SHARE"]
     assert set(required_reference_datasets_for_systems(["ADR"])) == {
         "VWS_GP_STANDARD_SHARE",
@@ -8786,7 +8971,6 @@ def test_required_reference_datasets_collects_unique_names():
         "MFC",
     }
     assert set(required_reference_datasets_for_systems(["ACCE"])) == {
-        "VWS_GP_STANDARD_SHARE",
         "ACCE_COA_MASTER",
     }
     # No duplicates across systems that share a reference.
@@ -9576,8 +9760,9 @@ def _a9_references(monkeypatch):
 
 def test_adr_has_custom_rule_a9_available():
     from src.custom_dqr_engine import (
-        ADR_A9_PERIOD_POLICY_PARAM, ADR_A9_TOLERANCE_PARAM,
         ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
+        ADR_A9_PERIOD_POLICY_PARAM,
+        ADR_A9_TOLERANCE_PARAM,
     )
     by_id = {r.id: r for r in get_available_custom_dqr_rules("ADR")}
     assert "DQ-ADR-9" in by_id
@@ -9944,3 +10129,50 @@ def test_dispatcher_reports_inactive_rule_and_skips_retired_ones():
     assert list(out.columns) == []
     assert set(not_evaluated) == {"DQ-ADR-3"}
     assert "inactive" in not_evaluated["DQ-ADR-3"]
+
+
+
+# =============================================================================
+# ACCE rule lifecycle: mirrors ADR (DQ-ACCE-3 inactive, DQ-ACCE-2/7/8 retired)
+# =============================================================================
+
+def test_acce_lifecycle_mirrors_adr():
+    """Active / inactive / retired ids line up number by number with ADR,
+    except DQ-ADR-9: ACCE_ESTIMATECOSTRESULTS carries no material factor
+    codes, so the MFC-vs-EMMA rule has no ACCE counterpart."""
+    from config.custom_dqr_catalog import RETIRED_CUSTOM_DQR_RULES
+    active = [r.id for r in get_available_custom_dqr_rules("ACCE")]
+    assert active == ["DQ-ACCE-1", "DQ-ACCE-4", "DQ-ACCE-5", "DQ-ACCE-6"]
+    listed = [r.id for r in get_available_custom_dqr_rules("ACCE", include_inactive=True)]
+    assert listed == ["DQ-ACCE-1", "DQ-ACCE-3", "DQ-ACCE-4", "DQ-ACCE-5", "DQ-ACCE-6"]
+    assert [r.id for r in ACCE_RETIRED_RULES] == ["DQ-ACCE-2", "DQ-ACCE-7", "DQ-ACCE-8"]
+    assert RETIRED_CUSTOM_DQR_RULES["ACCE"] is ACCE_RETIRED_RULES
+    numbers = lambda rules: [r.id.rsplit("-", 1)[1] for r in rules]  # noqa: E731
+    adr_active = [n for n in numbers(get_available_custom_dqr_rules("ADR")) if n != "9"]
+    assert adr_active == [i.rsplit("-", 1)[1] for i in active]
+    assert numbers(ADR_RETIRED_RULES) == numbers(ACCE_RETIRED_RULES)
+    assert "DQ-ACCE-9" not in {r.id for r in ACCE_RETIRED_RULES}
+
+
+def test_required_reference_datasets_for_acce_is_coa_master_only():
+    """DQ-ACCE-2 (Planview) is retired and ACCE has no MFC rule, so the
+    ACCE prefetch collapses to DQ-ACCE-1's COA master. ADR still brings
+    Planview and MFC when both systems are selected."""
+    from src.reference_data import required_reference_datasets_for_systems
+    assert required_reference_datasets_for_systems(["ACCE"]) == ["ACCE_COA_MASTER"]
+    assert set(required_reference_datasets_for_systems(["ADR", "ACCE"])) == {
+        "ACCE_COA_MASTER", "MFC", "VWS_GP_STANDARD_SHARE",
+    }
+
+
+def test_dispatcher_reports_inactive_acce_rule_and_skips_retired_ones():
+    df = pd.DataFrame({"COA": ["3131"], "PLANVIEW_ID": ["P1"]})
+    assignments = [
+        CustomDQRAssignment(rule_id="DQ-ACCE-3", weight=40.0),
+        CustomDQRAssignment(rule_id="DQ-ACCE-7", weight=30.0),
+        CustomDQRAssignment(rule_id="DQ-ACCE-8", weight=30.0),
+    ]
+    out, not_evaluated = evaluate_custom_rules(df, assignments, "ACCE")
+    assert list(out.columns) == []
+    assert set(not_evaluated) == {"DQ-ACCE-3"}
+    assert "inactive" in not_evaluated["DQ-ACCE-3"]

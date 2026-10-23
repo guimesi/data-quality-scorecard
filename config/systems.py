@@ -58,8 +58,9 @@ class TableDef:
     # ``DataFrame.groupby(...).agg`` accepts (a string or a callable that
     # receives the per-group Series). Used when a child table carries
     # several rows per parent and the consumer needs all of them, e.g.
-    # ADR's design parameters joined into one pipe-separated list so DQ-ADR-5
-    # can ask "does *any* parameter carry the expected COA prefix?".
+    # the ADR / ACCE design parameters joined into one pipe-separated list
+    # so DQ-ADR-5 / DQ-ACCE-5 can ask "does *any* parameter carry the
+    # expected COA prefix?".
     column_aggregations: Optional[Dict[str, Any]] = None
 
 
@@ -83,45 +84,73 @@ class SystemDef:
         return [t.name for t in self.tables]
 
 
+# Derived design column shared by ADR and ACCE: the pipe-separated list
+# of design parameter names whose value is populated, one list per item
+# (the input DQ-ADR-5 / DQ-ACCE-5 read).
+DESIGN_KEY_PARAMETER_NAMES = "DESIGN_KEY_PARAMETER_NAMES"
 # Placeholder used in ``DESIGN_KEY_PARAMETER_NAMES`` for a design row whose
 # value is populated but whose name is null / blank. Keeps the "any
 # populated parameter" fallback truthful without ever matching a COA prefix.
-ADR_UNNAMED_DESIGN_PARAMETER = "(unnamed)"
-# Separator of the per-item parameter-name list produced by
-# ``_adr_design_derive`` + ``join_unique``.
-ADR_DESIGN_NAME_SEPARATOR = "|"
+UNNAMED_DESIGN_PARAMETER = "(unnamed)"
+# Separator of the per-item parameter-name list produced by the design
+# derive hooks + ``join_unique``.
+DESIGN_NAME_SEPARATOR = "|"
+# Historical names (ADR was the first system to derive the column).
+ADR_UNNAMED_DESIGN_PARAMETER = UNNAMED_DESIGN_PARAMETER
+ADR_DESIGN_NAME_SEPARATOR = DESIGN_NAME_SEPARATOR
 
 
-def _adr_design_derive(df: "pd.DataFrame") -> "pd.DataFrame":
-    """Per-row prep for ``ADR_DIM_ESTIMATEDESIGNDETAILS`` (1:N on ROW_ID).
+def _make_design_key_names_derive(
+    name_col: str, value_col: str
+) -> Callable[["pd.DataFrame"], "pd.DataFrame"]:
+    """Build the per-row prep hook for a 1:N design-details table.
 
-    Adds ``DESIGN_KEY_PARAMETER_NAMES``: the design parameter *name* when
-    its *value* is populated (non-null, non-blank), ``(unnamed)`` when the
-    value is populated but the name is not, and null otherwise. The
-    builder then joins the per-item values with :func:`join_unique`
-    (see ``column_aggregations``) so the data product carries, per
-    ``ROW_ID``, a pipe-separated list of every parameter that actually
-    has a value - the input ADR DQ-ADR-5 reads.
+    The returned hook adds ``DESIGN_KEY_PARAMETER_NAMES``: the design
+    parameter *name* (``name_col``) when its *value* (``value_col``) is
+    populated (non-null, non-blank), ``(unnamed)`` when the value is
+    populated but the name is not, and null otherwise. The builder then
+    joins the per-item values with :func:`join_unique` (see
+    ``column_aggregations``) so the data product carries, per item, a
+    pipe-separated list of every parameter that actually has a value.
 
     The pairing name ↔ value must happen here, row by row: once the
     builder collapses the 1:N rows (``first`` for text columns) the link
-    between a name and its value is lost.
+    between a name and its value is lost. The hook is a no-op when either
+    source column is absent, so a renamed extract surfaces downstream as
+    a missing required column rather than a silent pass.
+
+    ADR and ACCE name the two source columns differently
+    (``DESIGN_PARAMETER_NAME`` / ``DESIGN_PARAMETER_VALUE`` vs
+    ``DESIGN_PROPERTY`` / ``DESIGN_VALUE`` after the ``DESIGN_`` prefix),
+    hence the factory.
     """
-    name_col, value_col = "DESIGN_PARAMETER_NAME", "DESIGN_PARAMETER_VALUE"
-    if name_col not in df.columns or value_col not in df.columns:
+    def _derive(df: "pd.DataFrame") -> "pd.DataFrame":
+        if name_col not in df.columns or value_col not in df.columns:
+            return df
+        value = df[value_col]
+        value_filled = value.notna() & value.astype(str).str.strip().ne("")
+        name = df[name_col].astype(object)
+        name_filled = name.notna() & name.astype(str).str.strip().ne("")
+        key = name.astype(str).str.strip().where(name_filled, UNNAMED_DESIGN_PARAMETER)
+        df[DESIGN_KEY_PARAMETER_NAMES] = key.where(value_filled, None)
         return df
-    value = df[value_col]
-    value_filled = value.notna() & value.astype(str).str.strip().ne("")
-    name = df[name_col].astype(object)
-    name_filled = name.notna() & name.astype(str).str.strip().ne("")
-    key = name.astype(str).str.strip().where(name_filled, ADR_UNNAMED_DESIGN_PARAMETER)
-    df["DESIGN_KEY_PARAMETER_NAMES"] = key.where(value_filled, None)
-    return df
+
+    return _derive
+
+
+# ``ADR_DIM_ESTIMATEDESIGNDETAILS`` (1:N on ROW_ID): PARAMETER_NAME / VALUE.
+_adr_design_derive = _make_design_key_names_derive(
+    "DESIGN_PARAMETER_NAME", "DESIGN_PARAMETER_VALUE"
+)
+# ``ACCE_ESTIMATEDESIGNDETAILS`` (1:N on DESIGN_ID): PROPERTY / VALUE.
+_acce_design_derive = _make_design_key_names_derive(
+    "DESIGN_PROPERTY", "DESIGN_VALUE"
+)
 
 
 def join_unique(values: "pd.Series") -> Optional[str]:
     """Group aggregator: distinct non-null values, first-seen order, joined
-    with :data:`ADR_DESIGN_NAME_SEPARATOR`. ``None`` when nothing remains
+    with :data:`DESIGN_NAME_SEPARATOR`. ``None`` when nothing remains
     so a downstream completeness check still reads it as missing."""
     seen: Dict[str, None] = {}
     for v in values:
@@ -130,7 +159,7 @@ def join_unique(values: "pd.Series") -> Optional[str]:
         text = str(v).strip()
         if text:
             seen.setdefault(text, None)
-    return ADR_DESIGN_NAME_SEPARATOR.join(seen) if seen else None
+    return DESIGN_NAME_SEPARATOR.join(seen) if seen else None
 
 
 def _acce_qty_derive(df: "pd.DataFrame") -> "pd.DataFrame":
@@ -211,7 +240,7 @@ SYSTEMS: Dict[str, SystemDef] = {
                 join_key="ROW_ID",
                 column_prefix="DESIGN",
                 derive_columns=_adr_design_derive,
-                column_aggregations={"DESIGN_KEY_PARAMETER_NAMES": join_unique},
+                column_aggregations={DESIGN_KEY_PARAMETER_NAMES: join_unique},
             ),
         ],
     ),
@@ -239,7 +268,11 @@ SYSTEMS: Dict[str, SystemDef] = {
             TableDef(
                 name="ACCE_ESTIMATECOSTRESULTS",
                 description=(
-                    "Cost results breakdown per estimate item. 1:N on ROW_ID."
+                    "Cost results breakdown per estimate item. 1:N on ROW_ID. "
+                    "Production columns (2026-10-16): ROW_INDEX, ROW_ID, "
+                    "ACCE_ID, MH, LABOR_COST, UNIT_MATL_COST, MATL_COST, "
+                    "TOTAL_COST, ACCE_VERSION - no material factor codes, so "
+                    "DQ-ADR-9 (MFC vs EMMA) has no ACCE counterpart."
                 ),
                 join_key="ROW_ID",
                 column_prefix="COST",
@@ -262,10 +295,20 @@ SYSTEMS: Dict[str, SystemDef] = {
                 description=(
                     "Equipment design attributes (dimensions, properties, "
                     "specifications). Joined to the item record on DESIGN_ID "
-                    "(many items can reference the same design)."
+                    "(many items can reference the same design). 1:N on "
+                    "DESIGN_ID - one row per (PROPERTY, VALUE) pair, about "
+                    "21 per design in production (62,827 rows / 3,035 "
+                    "designs, 2026-10-16); property names are bare ('Item "
+                    "type', 'Source of quote', 'Total weight' ...). The "
+                    "builder keeps the first value of every text column and "
+                    "adds DESIGN_KEY_PARAMETER_NAMES, the pipe-separated list "
+                    "of property names that carry a populated value "
+                    "(DQ-ACCE-5)."
                 ),
                 join_key="DESIGN_ID",
                 column_prefix="DESIGN",
+                derive_columns=_acce_design_derive,
+                column_aggregations={DESIGN_KEY_PARAMETER_NAMES: join_unique},
             ),
         ],
     ),

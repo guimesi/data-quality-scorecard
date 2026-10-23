@@ -869,49 +869,62 @@ def _mock_acce_estimateqtyresults() -> pd.DataFrame:
     })
     return df
 
-
 def _mock_acce_estimatedesigndetails() -> pd.DataFrame:
-    """Equipment design attributes, one row per DESIGN_ID. Joined to the
-    ACCE primary on DESIGN_ID (many items can share a single design).
+    """Equipment design attributes, **1:N on DESIGN_ID** (one row per
+    property, like the production table - about 21 per design there).
+    Joined to the ACCE primary on DESIGN_ID (many items can share a single
+    design).
 
-    ``PROPERTY`` / ``VALUE`` are the design-parameter name / value
-    columns on the real ``ACCE_ESTIMATEDESIGNDETAILS`` table; after the
-    builder applies the ``DESIGN_`` prefix they surface on the data
-    product as ``DESIGN_PROPERTY`` / ``DESIGN_VALUE``. DQ-ACCE-5 requires
-    BOTH populated to count an item as having a usable design detail,
-    so the mock injects independent null/blank gaps into each so DQ-ACCE-5
-    sees the "value with no named parameter" and "named parameter with
-    no value" FAIL paths in mock mode.
+    ``PROPERTY`` / ``VALUE`` are the design-parameter name / value columns
+    on the real ``ACCE_ESTIMATEDESIGNDETAILS`` table. Property names are
+    bare, as in production (``Item type``, ``Source of quote``,
+    ``Total weight`` …) - no COA prefix. After the builder applies the
+    ``DESIGN_`` prefix the first row per design surfaces as
+    ``DESIGN_PROPERTY`` / ``DESIGN_VALUE`` and the row-level derivation
+    produces ``DESIGN_KEY_PARAMETER_NAMES`` (pipe-separated names whose
+    value is populated) - the input DQ-ACCE-5 reads.
+
+    Gaps: ~8% null + ~3% blank ``VALUE`` and ~5% null ``PROPERTY`` (value
+    present, parameter un-named → ``(unnamed)``), plus ~6% of designs with
+    every value blank so DQ-ACCE-5 has items with a quantity and no usable
+    design detail. Items whose ``DESIGN_ID`` is null (~6%) have no design
+    row at all.
     """
-    n = _N_DESIGNS
     materials = ["CS", "SS-304", "SS-316", "DUPLEX", "INCONEL", "UNK"]
     services = ["GAS", "OIL", "WATER", "STEAM", "MIXED"]
     design_codes = ["ASME-B31.3", "ASME-B31.4", "ASME-B31.8", "API-650", "BAD-CODE"]
-    property_names = [
-        "DESIGN PRESSURE", "DESIGN TEMPERATURE", "DIAMETER",
-        "WALL THICKNESS", "MATERIAL", "CORROSION ALLOWANCE",
+    property_pool = [
+        "Item type", "Source of quote", "Total weight", "Design pressure",
+        "Design temperature", "Diameter", "Wall thickness", "Material",
+        "Corrosion allowance", "Design code", "Capacity", "Power rating",
     ]
-    parameter_names = list(RNG.choice(property_names, size=n))
-    parameter_values = [
-        f"PARAM-{int(RNG.integers(1, 999)):03d}" for _ in range(n)
-    ]
-    df = pd.DataFrame({
-        "DESIGN_ID": _DESIGN_ID_POOL,
-        "DESIGN_PRESSURE_BAR": RNG.uniform(1, 250, size=n).round(2),
-        "DESIGN_TEMPERATURE_C": RNG.uniform(-50, 600, size=n).round(1),
-        "MATERIAL_SPEC": RNG.choice(materials, size=n, p=[0.35, 0.2, 0.2, 0.1, 0.1, 0.05]),
-        "SERVICE_TYPE": RNG.choice(services, size=n),
-        "DIAMETER_MM": RNG.choice([50, 100, 150, 200, 300, 500, 800, 1200], size=n),
-        "WALL_THICKNESS_MM": RNG.uniform(3, 50, size=n).round(2),
-        "CORROSION_ALLOWANCE_MM": RNG.uniform(0, 6, size=n).round(2),
-        "DESIGN_CODE": RNG.choice(design_codes, size=n, p=[0.4, 0.2, 0.2, 0.15, 0.05]),
-        "PROPERTY": parameter_names,
-        "VALUE": parameter_values,
-    })
+    rows: List[Dict[str, object]] = []
+    for design_id in _DESIGN_ID_POOL:
+        base = {
+            "DESIGN_ID": design_id,
+            "DESIGN_PRESSURE_BAR": round(float(RNG.uniform(1, 250)), 2),
+            "DESIGN_TEMPERATURE_C": round(float(RNG.uniform(-50, 600)), 1),
+            "MATERIAL_SPEC": str(RNG.choice(materials, p=[0.35, 0.2, 0.2, 0.1, 0.1, 0.05])),
+            "SERVICE_TYPE": str(RNG.choice(services)),
+            "DIAMETER_MM": int(RNG.choice([50, 100, 150, 200, 300, 500, 800, 1200])),
+            "WALL_THICKNESS_MM": round(float(RNG.uniform(3, 50)), 2),
+            "CORROSION_ALLOWANCE_MM": round(float(RNG.uniform(0, 6)), 2),
+            "DESIGN_CODE": str(RNG.choice(design_codes, p=[0.4, 0.2, 0.2, 0.15, 0.05])),
+        }
+        n_props = int(RNG.integers(4, 9))
+        for prop in RNG.choice(property_pool, size=n_props, replace=False):
+            rows.append({
+                **base,
+                "PROPERTY": str(prop),
+                "VALUE": f"PARAM-{int(RNG.integers(1, 999)):03d}",
+            })
+    df = pd.DataFrame(rows)
+    n = len(df)
     null_mat_idx = RNG.choice(n, size=max(1, int(0.04 * n)), replace=False)
     df.loc[null_mat_idx, "MATERIAL_SPEC"] = None
     null_pres_idx = RNG.choice(n, size=max(1, int(0.03 * n)), replace=False)
     df.loc[null_pres_idx, "DESIGN_PRESSURE_BAR"] = np.nan
+    # ~8% null + ~3% blank VALUE: a property without a value does not count.
     null_param_idx = RNG.choice(n, size=max(1, int(0.08 * n)), replace=False)
     df.loc[null_param_idx, "VALUE"] = None
     blank_pool = [i for i in range(n) if i not in set(null_param_idx)]
@@ -919,11 +932,18 @@ def _mock_acce_estimatedesigndetails() -> pd.DataFrame:
         blank_pool, size=max(1, int(0.03 * n)), replace=False
     )
     df.loc[blank_param_idx, "VALUE"] = "   "
-    # Independent gaps in PROPERTY so DQ-ACCE-5 sees items whose value is
-    # present but the parameter is un-named (the "120 m of what?" case).
+    # Independent gaps in PROPERTY so the derived list carries ``(unnamed)``
+    # entries (value present, parameter un-named - the "120 m of what?" case).
     null_prop_idx = RNG.choice(n, size=max(1, int(0.05 * n)), replace=False)
     df.loc[null_prop_idx, "PROPERTY"] = None
+    # ~6% of designs lose every value → no usable design detail at all, so
+    # their items FAIL DQ-ACCE-5 whenever they carry a quantity.
+    empty_designs = RNG.choice(
+        _DESIGN_ID_POOL, size=max(1, int(0.06 * _N_DESIGNS)), replace=False
+    )
+    df.loc[df["DESIGN_ID"].isin(empty_designs), "VALUE"] = None
     return df
+
 
 
 # =============================================================================

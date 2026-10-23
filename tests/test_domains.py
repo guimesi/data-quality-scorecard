@@ -140,10 +140,12 @@ def test_cost_estimate_domain_keeps_full_custom_rule_catalog(monkeypatch):
     adr_rules = get_available_custom_dqr_rules("ADR")
     acce_rules = get_available_custom_dqr_rules("ACCE")
     ept_rules = get_available_custom_dqr_rules("EPT")
-    # Active: 5 + 8 + 7 = 20 (ADR DQ-ADR-1/4/5/6/9, ACCE DQ-ACCE-1 … DQ-ACCE-8, EPT
-    # DQ-EPT-1 … DQ-EPT-7); DQ-ADR-3 is inactive, DQ-ADR-2/7/8 are retired.
-    assert len(adr_rules) + len(acce_rules) + len(ept_rules) == 20
+    # Active: 5 + 4 + 7 = 16 (ADR DQ-ADR-1/4/5/6/9, ACCE DQ-ACCE-1/4/5/6, EPT
+    # DQ-EPT-1 … DQ-EPT-7); DQ-ADR-3 / DQ-ACCE-3 are inactive, DQ-ADR-2/7/8 and
+    # DQ-ACCE-2/7/8 are retired; DQ-ADR-9 has no ACCE counterpart.
+    assert len(adr_rules) + len(acce_rules) + len(ept_rules) == 16
     assert len(get_available_custom_dqr_rules("ADR", include_inactive=True)) == 6
+    assert len(get_available_custom_dqr_rules("ACCE", include_inactive=True)) == 5
 
 
 def test_cost_estimate_data_product_builds_unchanged(monkeypatch):

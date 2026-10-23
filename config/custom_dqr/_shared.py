@@ -86,7 +86,8 @@ class CustomRuleDef:
     # cannot be selected, is skipped by One-click and Step 3 hints, and any
     # lingering assignment is reported as "Not evaluated" by the
     # dispatcher. Retired rules are removed from the catalog list instead
-    # (see ``config/custom_dqr/_adr_catalog.py::ADR_RETIRED_RULES``).
+    # (see ``ADR_RETIRED_RULES`` / ``ACCE_RETIRED_RULES`` in the per-system
+    # catalogs).
     active: bool = True
     # Per-rule toggleable options. Empty by default; Step 4.2 only renders
     # the option block for rules that declare at least one entry.

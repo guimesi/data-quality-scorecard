@@ -91,7 +91,7 @@ src/
     _validators.py             # validate_completeness_rule,
                                #   validate_referential_integrity_rule
     _ept_rules.py              # DQ-EPT-1 … DQ-EPT-7 checks + constants
-    _adr_rules.py              # DQ-ADR-1..8 checks + constants
+    _adr_rules.py              # DQ-ADR-1..9 checks + constants
     _acce_rules.py             # DQ-ACCE-1 … DQ-ACCE-8 checks + constants
     _sqs_rules.py              # dq-inspection-* checks + constants (Quality domain)
     _dispatcher.py             # evaluate_custom_rules(df, assignments, dp)
@@ -502,6 +502,25 @@ historical `CUSTOM_DQR_RULES` dict; other domains can supply their own).
   `_resolve_coa_master_lookups`, and `_A8_UOM_ALIASES` from
   [src/custom_dqr/_adr_rules.py](src/custom_dqr/_adr_rules.py). Don't
   remove these from ADR even if DQ-ADR-1/DQ-ADR-8 stop using them.
+
+- **ADR / ACCE lifecycle parity (2026-10)**: the ACCE catalog mirrors ADR
+  rule by rule for DQ-ACCE-1..8 - DQ-ACCE-3 inactive, DQ-ACCE-2/7/8 in
+  `ACCE_RETIRED_RULES` (registered under `RETIRED_CUSTOM_DQR_RULES["ACCE"]`)
+  and DQ-ACCE-5 reading the full 1:N property list. Both design tables share
+  the `_make_design_key_names_derive` factory in
+  [config/systems.py](config/systems.py) that produces
+  `DESIGN_KEY_PARAMETER_NAMES` (ADR from `DESIGN_PARAMETER_NAME` /
+  `DESIGN_PARAMETER_VALUE`, ACCE from `DESIGN_PROPERTY` / `DESIGN_VALUE`).
+  Production facts checked on 2026-10-16: `ACCE_ESTIMATEDESIGNDETAILS` holds
+  62,827 rows for 3,035 designs (~21 properties per design) and its
+  `PROPERTY` names are bare (`Item type`, `Source of quote`, `Total
+  weight` …), so DQ-ACCE-5's type-awareness is a `COA → property names`
+  mapping (`_AC5_KEY_DESIGN_PROPERTIES`, empty until the data owner
+  supplies it) rather than ADR's name-prefix match; and
+  `ACCE_ESTIMATECOSTRESULTS` has only ROW_INDEX, ROW_ID, ACCE_ID, MH,
+  LABOR_COST, UNIT_MATL_COST, MATL_COST, TOTAL_COST, ACCE_VERSION - no
+  material factor codes - so DQ-ADR-9 (MFC vs EMMA) has no ACCE counterpart
+  and ACCE prefetches only `ACCE_COA_MASTER`.
 
 - **Quality (SQS) catalog wiring**: SQS rules live in the Quality
   domain's `custom_rules` map (set up inside `_build_quality_domain` in

@@ -198,3 +198,33 @@ def test_adr_primary_has_row_count_close_to_n_items():
     A deliberate-dup row inflates it slightly so we allow a small delta."""
     df = mock_data.fetch_mock_table("ADR_DIM_ESTIMATEITEMRECORD")
     assert mock_data.N_ITEMS <= len(df) <= mock_data.N_ITEMS + 20
+
+
+
+def test_acce_estimatecostresults_has_no_material_factor_columns():
+    """The production ACCE cost results carry MH / cost totals only (no
+    MFC codes), so DQ-ADR-9 has no ACCE counterpart and the mock must not
+    pretend otherwise."""
+    df = mock_data.fetch_mock_table("ACCE_ESTIMATECOSTRESULTS")
+    for col in ("ROW_ID", "MH", "TOTAL_COST"):
+        assert col in df.columns, col
+    assert not any("MFC" in c for c in df.columns)
+
+
+def test_acce_estimatedesigndetails_is_one_to_many_on_design_id():
+    """One row per property, several per design (production: ~21), with
+    bare property names as in production (no ``NNN.N-`` COA prefix),
+    independent VALUE / PROPERTY gaps and a few designs with every value
+    blank so DQ-ACCE-5 has FAIL cases."""
+    df = mock_data.fetch_mock_table("ACCE_ESTIMATEDESIGNDETAILS")
+    assert len(df) > mock_data._N_DESIGNS
+    assert df["DESIGN_ID"].duplicated().any()
+    assert set(df["DESIGN_ID"]) == set(mock_data._DESIGN_ID_POOL)
+    props = df["PROPERTY"].dropna().astype(str)
+    assert "Item type" in set(props)
+    assert not props.str.match(r"^\d{3}\.\d-").any()
+    assert df["VALUE"].isna().any() and df["PROPERTY"].isna().any()
+    all_blank = df.groupby("DESIGN_ID")["VALUE"].apply(lambda s: s.isna().all())
+    assert all_blank.any() and not all_blank.all()
+    again = mock_data.fetch_mock_table("ACCE_ESTIMATEDESIGNDETAILS")
+    pd.testing.assert_frame_equal(df, again)

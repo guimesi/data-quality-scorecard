@@ -5,7 +5,14 @@
 
 The ACCE family mirrors ADR's structure (same families, different source
 columns and reference datasets) so most rules share the same group-verdict
-template adapted to ACCE column names.
+template adapted to ACCE column names. The rule lifecycle also mirrors
+ADR (Oct-2026): DQ-ACCE-2 / 7 / 8 are retired and DQ-ACCE-3 is inactive in
+the catalog; their check functions stay here so historical runs can be
+read and the rules can be reinstated (see
+``config/custom_dqr/_acce_catalog.py``). DQ-ADR-9 (MFC vs EMMA) has no
+ACCE counterpart: ``ACCE_ESTIMATECOSTRESULTS`` carries no material factor
+codes (production columns, 2026-10-16: ROW_INDEX, ROW_ID, ACCE_ID, MH,
+LABOR_COST, UNIT_MATL_COST, MATL_COST, TOTAL_COST, ACCE_VERSION).
 
 See the pragma rationale in ``src/custom_dqr/_adr_rules.py`` - the same
 reasoning applies here: pandas-stubs typing of ``df[col]`` as
@@ -15,10 +22,12 @@ locked down by ``tests/test_custom_dqr_engine.py``.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import pandas as pd
+
+from config.systems import UNNAMED_DESIGN_PARAMETER
 
 
 class ACCEAC3Params(TypedDict, total=False):
@@ -385,30 +394,63 @@ _AC4_CATEGORY_SPECS: Tuple[Tuple[str, object, frozenset], ...] = (
 )
 
 
-# DQ-ACCE-5: Design details present when quantity exists (ACCE).
+# DQ-ACCE-5: Key design details present when quantity exists (ACCE).
 #
-# Row-level Consistency rule: a row fails only when a positive
-# quantity exists *and* the item carries no usable design parameter.
-# Two flags drive the verdict:
+# Consistency rule mirroring DQ-ADR-5 against the ACCE schema.
+# ``ACCE_ESTIMATEDESIGNDETAILS`` is 1:N on ``DESIGN_ID`` (one row per
+# property; production 2026-10-16: 62,827 rows for 3,035 designs, about
+# 21 properties per design), so - exactly like ADR - the data product
+# builder derives ``DESIGN_KEY_PARAMETER_NAMES``: the pipe-separated list
+# of property names (``PROPERTY``) whose ``VALUE`` is populated,
+# ``(unnamed)`` when a value has no name, null when nothing is populated
+# (see ``config/systems.py::_acce_design_derive``). Reading the first
+# ``DESIGN_PROPERTY`` / ``DESIGN_VALUE`` pair - the builder's default
+# collapse and what the rule did before - saw one of those ~21
+# properties, chosen arbitrarily.
 #
-#   - ``HAS_QUANTITY`` - at least one split quantity slot is strictly
-#     positive (``QTY_KEY_QTY > 0`` OR ``QTY_OTHER_QTY > 0``). Each is
-#     the per-``ROW_ID`` SUM of ``KEY_QTY`` / ``OTHER_QTY`` from
-#     ``ACCE_ESTIMATEQTYRESULTS`` (applied by the builder).
-#   - ``HAS_DESIGN_DETAIL`` - the joined design row carries BOTH a
-#     ``DESIGN_PROPERTY`` (the parameter name) AND a ``DESIGN_VALUE``
-#     (the parameter value), each non-null and non-blank. Requiring the
-#     name alongside the value answers the "120 m of what?"
-#     interpretability question - a bare value with no named parameter
-#     is not a usable design detail. The two columns are ``PROPERTY`` /
-#     ``VALUE`` from ``ACCE_ESTIMATEDESIGNDETAILS`` (joined on
-#     ``DESIGN_ID``) after the builder applies the ``DESIGN_`` prefix.
+# Type-awareness: DQ-ADR-5 maps ``ITEM_TYPE`` to the COA prefix ADR's
+# parameter names carry (``324.0-Pump Type``). ACCE property names are
+# bare (``Item type``, ``Source of quote``, ``Total weight`` …, confirmed
+# in production), so the key property of a Code of Account cannot be read
+# off the data: it must be declared in ``_AC5_KEY_DESIGN_PROPERTIES``
+# (COA → expected property names). Flags per row:
+#
+#   - ``HAS_QUANTITY``     - at least one split quantity slot is strictly
+#     positive (``QTY_KEY_QTY > 0`` OR ``QTY_OTHER_QTY > 0``), the
+#     per-``ROW_ID`` SUMs of ``KEY_QTY`` / ``OTHER_QTY``. Null / zero /
+#     negative in both slots is "no quantity" (ACCE keeps its strictly
+#     positive gate; DQ-ADR-5 uses ``<> 0``).
+#   - ``KNOWN_COA``        - the item's ``COA`` (4-digit code, or its
+#     3-digit ICARUS group) has an entry in the mapping.
+#   - ``HAS_KEY_DESIGN``   - at least one entry of the list is one of the
+#     expected property names (case- and whitespace-insensitive).
+#   - ``HAS_NAMED_DESIGN`` - at least one entry is a *named* populated
+#     property (``(unnamed)`` does not count - the "120 m of what?"
+#     gate ACCE already applied).
+#
+# Pass when no quantity; otherwise ``(KNOWN_COA and HAS_KEY_DESIGN) or
+# (not KNOWN_COA and HAS_NAMED_DESIGN)``. While the mapping is empty every
+# item takes the second branch - already a real tightening over the old
+# rule, which read a single arbitrary property.
 ACCE_AC5_REQUIRED_COLUMNS = {
     "Key Quantity": "QTY_KEY_QTY",
     "Other Quantity": "QTY_OTHER_QTY",
-    "Design Parameter Name": "DESIGN_PROPERTY",
-    "Design Parameter Value": "DESIGN_VALUE",
+    "Code of Account": "COA",
+    "Key Parameter Names": "DESIGN_KEY_PARAMETER_NAMES",
 }
+ACCE_AC5_NAME_SEPARATOR = "|"
+# COA → expected key design property names (the ACCE analog of
+# ``_A5_KEY_DESIGN_PREFIX``). Keys are 4-digit ACCE COAs (``3240``) or
+# 3-digit ICARUS groups (``324``, every sub-account); the 4-digit entry
+# wins. Values are compared case-insensitively on the whitespace-normalised
+# property name (``"Pump type"`` matches ``"PUMP  TYPE"``).
+#
+# EMPTY until the data owner supplies the list - the question to ask is
+# "which design property must be populated for each Code of Account?"
+# (e.g. ``"3240": ("Pump type",)``). Items whose COA is not listed use the
+# any-named-property fallback, so filling the map only ever tightens the
+# rule.
+_AC5_KEY_DESIGN_PROPERTIES: Dict[str, Tuple[str, ...]] = {}
 
 
 # DQ-ACCE-6: Construction hours present when quantity exists (ACCE).
@@ -1166,44 +1208,84 @@ def check_acce_ac4(df: pd.DataFrame) -> pd.Series:
     return ~in_failing
 
 
+def _ac5_normalise_name(value: object) -> str:
+    """Whitespace-collapsed, lower-cased property name used on both sides
+    of the key-property match."""
+    return " ".join(str(value).split()).lower()
+
+
+def _ac5_mapping_keys(coa_text: str) -> Tuple[str, ...]:
+    """Mapping keys to try for a stripped COA string: the 4-digit code
+    then its 3-digit group; a 3-digit value is tried as a group; anything
+    else (null, blank, non-numeric) has no key. A numeric column's ``.0``
+    suffix is tolerated."""
+    text = coa_text[:-2] if coa_text.endswith(".0") else coa_text
+    if not text.isdigit():
+        return ()
+    if len(text) == 4:
+        return (text, text[:3])
+    if len(text) == 3:
+        return (text,)
+    return ()
+
+
+def _ac5_expected_properties(
+    coa: object, mapping: Optional[Dict[str, Tuple[str, ...]]] = None
+) -> Tuple[str, ...]:
+    """Normalised key property names expected for ``coa`` according to
+    ``mapping`` (default :data:`_AC5_KEY_DESIGN_PROPERTIES`), or ``()``
+    when the COA is unmapped / unparseable (the rule then falls back to the
+    any-named-property check). Scalar twin of the vectorised resolution
+    inside :func:`check_acce_ac5`, kept for tests and drill-down tooling."""
+    table = _AC5_KEY_DESIGN_PROPERTIES if mapping is None else mapping
+    if coa is None or coa != coa:
+        return ()
+    for key in _ac5_mapping_keys(str(coa).strip()):
+        props = table.get(key)
+        if props:
+            return tuple(_ac5_normalise_name(p) for p in props)
+    return ()
+
+
 def check_acce_ac5(df: pd.DataFrame) -> pd.Series:
-    """DQ-ACCE-5: Design details present when quantity exists (ACCE).
+    """DQ-ACCE-5: Key design details present when quantity exists (ACCE).
 
-    Row-level Consistency rule. For each estimate item (one row per
-    ``ROW_ID`` in the denormalized data product) the rule derives
-    two flags:
+    Consistency rule evaluated at the ``ROW_ID`` grain - mirrors
+    :func:`check_adr_a5` against the ACCE schema. For each estimate item
+    the rule derives:
 
-    - ``HAS_QUANTITY``     - at least one split quantity slot is
-      strictly positive (``QTY_KEY_QTY > 0`` OR ``QTY_OTHER_QTY > 0``).
-      Each is the per-``ROW_ID`` SUM of ``KEY_QTY`` / ``OTHER_QTY``
-      from ``ACCE_ESTIMATEQTYRESULTS`` (applied by the data-product
-      builder). A null / zero / negative quantity in both slots counts
-      as "no quantity".
-    - ``HAS_DESIGN_DETAIL`` - the item's design row carries BOTH a
-      populated ``DESIGN_PROPERTY`` (parameter name) AND a populated
-      ``DESIGN_VALUE`` (parameter value), each non-null and non-blank.
-      The source columns are ``PROPERTY`` / ``VALUE`` from
-      ``ACCE_ESTIMATEDESIGNDETAILS``, joined on ``DESIGN_ID``; the
-      builder applies the ``DESIGN_`` prefix.
+    - ``HAS_QUANTITY`` - at least one split quantity slot is strictly
+      positive (``QTY_KEY_QTY > 0`` OR ``QTY_OTHER_QTY > 0``); each is the
+      per-``ROW_ID`` SUM of ``KEY_QTY`` / ``OTHER_QTY`` from
+      ``ACCE_ESTIMATEQTYRESULTS``. Null / zero / negative in both slots
+      is "no quantity".
+    - ``KNOWN_COA`` - the item's ``COA`` (4-digit code, else its 3-digit
+      ICARUS group) is listed in :data:`_AC5_KEY_DESIGN_PROPERTIES`, the
+      ACCE analog of DQ-ADR-5's ``ITEM_TYPE → COA prefix`` mapping.
+    - ``HAS_KEY_DESIGN`` - at least one entry of the pipe-separated
+      ``DESIGN_KEY_PARAMETER_NAMES`` (property names whose value is
+      populated, derived by the builder from the 1:N
+      ``ACCE_ESTIMATEDESIGNDETAILS`` join on ``DESIGN_ID``) is one of the
+      expected property names, compared case- and whitespace-insensitively.
+    - ``HAS_NAMED_DESIGN`` - at least one entry is a named property
+      (``(unnamed)`` placeholders do not count: a bare value with no
+      parameter name is not a usable design detail).
 
-    A row fails only when a positive quantity exists but no usable
-    design detail (named parameter + value) is present, the gap that
-    prevents the quantity from being interpreted, normalized, or
-    compared.
+    Pass / fail matrix (rows with ``HAS_QUANTITY = 0`` always pass):
 
-    Pass / fail matrix:
+    +-----------+----------------+------------------+-------------+
+    | KNOWN_COA | HAS_KEY_DESIGN | HAS_NAMED_DESIGN | RULE_RESULT |
+    +===========+================+==================+=============+
+    |     1     |       1        |        -         |    PASS     |
+    |     1     |       0        |        -         |    FAIL     |
+    |     0     |       -        |        1         |    PASS     |
+    |     0     |       -        |        0         |    FAIL     |
+    +-----------+----------------+------------------+-------------+
 
-    +--------------+-------------------+-------------+
-    | HAS_QUANTITY | HAS_DESIGN_DETAIL | RULE_RESULT |
-    +==============+===================+=============+
-    |       0      |        0          |    PASS     |
-    |       0      |        1          |    PASS     |
-    |       1      |        0          |    FAIL     |
-    |       1      |        1          |    PASS     |
-    +--------------+-------------------+-------------+
-
-    Missing required column → all rows fail (structural
-    incompleteness, same convention as the other custom rules).
+    With an empty mapping every item is an unknown COA and the rule reduces
+    to "a named, populated design property exists" over the full property
+    list. Schema-level missing column → all rows fail (same convention as
+    the other custom rules).
     """
     required = list(ACCE_AC5_REQUIRED_COLUMNS.values())
     if any(col not in df.columns for col in required):
@@ -1214,10 +1296,63 @@ def check_acce_ac5(df: pd.DataFrame) -> pd.Series:
     key_qty = pd.to_numeric(df["QTY_KEY_QTY"], errors="coerce").fillna(0.0)
     other_qty = pd.to_numeric(df["QTY_OTHER_QTY"], errors="coerce").fillna(0.0)
     has_quantity = (key_qty > 0) | (other_qty > 0)
-    has_design_detail = (
-        _is_filled(df["DESIGN_PROPERTY"]) & _is_filled(df["DESIGN_VALUE"])
+    if not has_quantity.any():
+        return pd.Series(True, index=df.index)
+
+    names_col = df["DESIGN_KEY_PARAMETER_NAMES"]
+    has_any_design = _is_filled(names_col)
+    names = names_col.astype(object).astype(str).where(has_any_design, "")
+
+    # Explode the pipe-separated list on a positional index (the data
+    # product index may carry duplicates); every per-entry test below is
+    # regrouped to its row with ``groupby(level=0).any()``.
+    pos = pd.RangeIndex(len(df))
+    entries = pd.Series(names.to_numpy(), index=pos).str.split(
+        ACCE_AC5_NAME_SEPARATOR
+    ).explode()
+    entries = entries.astype(object).astype(str).str.strip()
+    named = entries.ne("") & entries.ne(UNNAMED_DESIGN_PARAMETER)
+    has_named_design = pd.Series(
+        named.groupby(level=0).any().reindex(pos, fill_value=False).to_numpy(),
+        index=df.index,
     )
-    return (~has_quantity) | has_design_detail
+
+    # Resolve each row's mapping key (4-digit COA first, then its 3-digit
+    # group) and match the normalised entries against the expected names
+    # with one merge - no per-row Python loop, no per-key regex.
+    mapping = {
+        k: tuple(_ac5_normalise_name(p) for p in props)
+        for k, props in _AC5_KEY_DESIGN_PROPERTIES.items() if props
+    }
+    known_coa = pd.Series(False, index=df.index)
+    has_key_design = pd.Series(False, index=df.index)
+    if mapping:
+        coa_text = (
+            df["COA"].astype(object).astype(str).str.strip()
+            .str.replace(r"\.0$", "", regex=True)
+        )
+        key4 = coa_text.where(coa_text.str.fullmatch(r"\d{4}"))
+        key3 = coa_text.str[:3].where(coa_text.str.fullmatch(r"\d{3,4}"))
+        key_used = key4.where(key4.isin(mapping), key3.where(key3.isin(mapping)))
+        known_coa = key_used.notna()
+        if known_coa.any():
+            pairs = pd.DataFrame(
+                [(k, p) for k, props in mapping.items() for p in props],
+                columns=["_key", "_name"],
+            )
+            ent = pd.DataFrame({
+                "_pos": entries.index.to_numpy(),
+                "_key": pd.Series(key_used.to_numpy(), index=pos)
+                .reindex(entries.index).to_numpy(),
+                "_name": entries.map(_ac5_normalise_name).to_numpy(),
+            })
+            hit_pos = ent.merge(pairs, on=["_key", "_name"], how="inner")["_pos"]
+            flags = np.zeros(len(df), dtype=bool)
+            flags[hit_pos.unique()] = True
+            has_key_design = pd.Series(flags, index=df.index)
+
+    design_ok = (known_coa & has_key_design) | (~known_coa & has_named_design)
+    return (~has_quantity) | design_ok
 
 
 def check_acce_ac6(df: pd.DataFrame) -> pd.Series:
@@ -1717,5 +1852,3 @@ def check_acce_ac8(
         .astype(bool)
     )
     return ~in_failing
-
-

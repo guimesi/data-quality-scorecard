@@ -69,19 +69,24 @@ automates the same pipeline end-to-end).
    - **Custom DQR Rules**: data-product-specific rules curated for that
      system. EPT currently ships seven rules (DQ-EPT-1–DQ-EPT-7) covering completeness,
      referential integrity, FEED/Engineering consistency and statistical
-     outliers; ADR ships eight rules (DQ-ADR-1 covering the ISO COR + SAB
-     lookup completeness, DQ-ADR-2 covering location + estimate date
-     completeness, DQ-ADR-3 covering statistical WBC-to-ISO mapping
-     aggregation, DQ-ADR-4 covering core-quantity completeness per project
-     scope, DQ-ADR-5 covering design-detail/quantity consistency, DQ-ADR-6 covering
-     construction-hours/quantity consistency, DQ-ADR-7 covering
-     within-discipline hours-per-quantity outlier detection, DQ-ADR-8 covering
-     cross-discipline quantity-ratio outlier detection at the project
-     level). ACCE ships the DQ-ACCE-1–DQ-ACCE-8 series that mirrors DQ-ADR-1..8 against
-     the ACCE schema, e.g. DQ-ACCE-1 is the ISO COR + SAB lookup,
-     joining the first three characters of the 4-character `ACCE.COA`
-     to the 3-character `ICARUS_COA` group in the master (the analog
-     of ADR's `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation). The
+     outliers; ADR ships nine rules, five of them active (DQ-ADR-1 covering
+     the ISO COR + SAB lookup completeness, DQ-ADR-4 covering core-quantity
+     completeness per project scope, DQ-ADR-5 covering key design-detail /
+     quantity consistency per item type, DQ-ADR-6 covering
+     construction-hours / quantity consistency, DQ-ADR-9 validating the
+     base material factor against EMMA), DQ-ADR-3 (statistical WBC-to-ISO
+     mapping aggregation) inactive and DQ-ADR-2 / 7 / 8 (location + estimate
+     date, within-discipline and cross-discipline outliers) retired since
+     2026-09. ACCE ships the DQ-ACCE-1–DQ-ACCE-8 series that mirrors
+     DQ-ADR-1..8 - lifecycle included - against the ACCE schema, e.g.
+     DQ-ACCE-1 is the ISO COR + SAB lookup, joining the first three
+     characters of the 4-character `ACCE.COA` to the 3-character
+     `ICARUS_COA` group in the master (the analog of ADR's
+     `SPLIT_PART(COMPLETE_WBC, '.', 1)` derivation), and DQ-ACCE-5 reads
+     every design property of the item's design through the same
+     builder-derived list ADR uses, with a `COA → key property` mapping
+     the data owner still has to fill. DQ-ADR-9 has no ACCE counterpart:
+     the ACCE cost results carry no material factor codes. The
      Quality domain (SQS) ships the Quality team's two curated rules:
      `dq-inspection-12` (Completeness - `TOTAL_CONSUMED_HOURS` must be
      recorded on Completed inspections) and `dq-inspection-13`
@@ -370,8 +375,8 @@ data_quality_app/
 │   └── custom_dqr/              # M6 split (per system)
 │       ├── _shared.py           # CustomRuleDef + option-builder helpers
 │       ├── _ept_catalog.py      # EPT_RULES list (DQ-EPT-1 … DQ-EPT-7)
-│       ├── _adr_catalog.py      # ADR_RULES list (DQ-ADR-1..8)
-│       ├── _acce_catalog.py     # ACCE_RULES list (DQ-ACCE-1 … DQ-ACCE-8)
+│       ├── _adr_catalog.py      # ADR_RULES list (DQ-ADR-1..9; 2/7/8 retired, 3 inactive)
+│       ├── _acce_catalog.py     # ACCE_RULES list (DQ-ACCE-1 … DQ-ACCE-8; 2/7/8 retired, 3 inactive)
 │       └── _sqs_catalog.py      # SQS_RULES list (Quality domain - dq-inspection-*)
 ├── src/
 │   ├── models.py                # Dataclasses (CDE, DQRAssignment, Scorecard)
@@ -394,8 +399,8 @@ data_quality_app/
 │       ├── _shared.py           # CustomRuleNotEvaluated + reusable helpers
 │       ├── _validators.py       # validate_completeness / referential_integrity
 │       ├── _ept_rules.py        # DQ-EPT-1 … DQ-EPT-7 checks + constants + EPTE3/E6Params
-│       ├── _adr_rules.py        # DQ-ADR-1..8 checks + constants + ADRA3/A7/A8Params
-│       ├── _acce_rules.py       # DQ-ACCE-1 … DQ-ACCE-8 checks + constants + ACCEAC3/DQ-ACCE-7/AC8Params
+│       ├── _adr_rules.py        # DQ-ADR-1..9 checks + constants + ADRA3/A7/A8/A9Params
+│       ├── _acce_rules.py       # DQ-ACCE-1 … DQ-ACCE-8 checks + constants + ACCEAC3/AC7/AC8Params
 │       ├── _sqs_rules.py        # dq-inspection-* checks + constants (Quality domain)
 │       └── _dispatcher.py       # evaluate_custom_rules(df, assignments, dp)
 ├── ui/
@@ -739,9 +744,11 @@ wiring" note). To add a rule for an existing Cost Estimate data product:
    selections auto-pin to 100%); Step 6 reports its pass rate (or
    "Not evaluated" status) in the "Custom Rules" tab.
 
-EPT seeds **seven** custom rules, ADR seeds **eight**, and ACCE seeds
-its parallel DQ-ACCE-1… catalog (mirroring DQ-ADR-1..8 against the ACCE schema)
-out of the box. Full per-rule documentation lives in
+EPT seeds **seven** custom rules, ADR seeds **nine** (five active, DQ-ADR-3
+inactive, DQ-ADR-2 / 7 / 8 retired) and ACCE seeds its parallel DQ-ACCE-1…8
+catalog (mirroring DQ-ADR-1..8 - lifecycle included - against the ACCE
+schema; DQ-ADR-9 has no ACCE counterpart) out of the box. Full per-rule
+documentation lives in
 [documents/CUSTOM_RULES.md](documents/CUSTOM_RULES.md); the headline list is:
 
 | Data Product | ID | Name | Type |
@@ -761,21 +768,26 @@ out of the box. Full per-rule documentation lives in
 | ADR | DQ-ADR-6 | Construction hours present when quantity exists       | Consistency          |
 | ADR | DQ-ADR-7 | Within-discipline quantity / hour ratio outlier *(retired 2026-09)*        | Statistical Outlier  |
 | ADR | DQ-ADR-8 | Cross-discipline quantity ratios *(retired 2026-09)*                       | Statistical Outlier  |
+| ADR | DQ-ADR-9 | Base material factor validation (MFC vs EMMA)          | Validity             |
 | ACCE | DQ-ACCE-1 | ISO Code of Account present (COR + SAB) - `COA[:3]` lookup    | Completeness |
-| ACCE | DQ-ACCE-2 | Location + estimate date present & valid (uses `JOB_NO`)   | Completeness & Validity |
-| ACCE | DQ-ACCE-3 | Statistical COA-to-ISO mapping ratio                       | Statistical Outlier |
+| ACCE | DQ-ACCE-2 | Location + estimate date present & valid (uses `JOB_NO`) *(retired 2026-10)*   | Completeness & Validity |
+| ACCE | DQ-ACCE-3 | Statistical COA-to-ISO mapping ratio *(inactive)*                       | Statistical Outlier |
 | ACCE | DQ-ACCE-4 | Core quantities populated & non-negative project totals (via `DESCRIPTION`) | Completeness & Validity |
-| ACCE | DQ-ACCE-5 | Design details present when quantity exists                | Consistency |
+| ACCE | DQ-ACCE-5 | Key design details present when quantity exists (every design property; `COA → key property` map pending) | Consistency |
 | ACCE | DQ-ACCE-6 | Construction hours present when quantity exists (`COST_MH`) | Consistency |
-| ACCE | DQ-ACCE-7 | Within-discipline quantity / hour ratio outlier (`DESCRIPTION`; optional project-type segmentation) | Statistical Outlier |
-| ACCE | DQ-ACCE-8 | Cross-discipline quantity ratios (`COMPONENT_SOURCE`; optional project-type segmentation) | Statistical Outlier |
+| ACCE | DQ-ACCE-7 | Within-discipline quantity / hour ratio outlier (`DESCRIPTION`; optional project-type segmentation) *(retired 2026-10)* | Statistical Outlier |
+| ACCE | DQ-ACCE-8 | Cross-discipline quantity ratios (`COMPONENT_SOURCE`; optional project-type segmentation) *(retired 2026-10)* | Statistical Outlier |
 | SQS | dq-inspection-12 | Mandatory on Completion (`STATUS = 'Completed'` → `TOTAL_CONSUMED_HOURS` not NULL) | Completeness |
 | SQS | dq-inspection-13 | Mandatory Approved Hours (`ALLOTED_HOURS` not NULL)     | Completeness        |
 
-DQ-EPT-2 / DQ-EPT-7 / DQ-ADR-2 / DQ-ACCE-2 depend on the `VWS_GP_STANDARD_SHARE` reference
+DQ-EPT-2 / DQ-EPT-7 (and the retired DQ-ADR-2 / DQ-ACCE-2) depend on the
+`VWS_GP_STANDARD_SHARE` reference
 table (loaded from the same Unity Catalog namespace as the
 primary table in Databricks mode, or from the deterministic project
-pool in mock mode); DQ-EPT-6, DQ-ADR-7, DQ-ADR-8, DQ-ACCE-7, and DQ-ACCE-8 optionally depend on
+pool in mock mode); DQ-ADR-9 resolves the project location through the
+same table (declared as an extra reference) and validates the material
+factor codes against the EMMA `MFC` table (ACCE has no MFC counterpart);
+DQ-EPT-6, DQ-ADR-7, DQ-ADR-8, DQ-ACCE-7, and DQ-ACCE-8 optionally depend on
 the same table when their `segment_by_project_type` toggle is on
 (lookup `E05_DEPARTMENT` + `BUSINESS` to derive the project archetype
 the IQR is computed within); DQ-ADR-1, DQ-ADR-3, DQ-ACCE-1, and DQ-ACCE-3 depend on

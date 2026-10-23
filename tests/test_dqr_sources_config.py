@@ -119,7 +119,9 @@ def test_adr_retired_rules_keep_their_definitions_outside_the_catalog():
     from config.custom_dqr._adr_catalog import ADR_RETIRED_RULES
     from config.custom_dqr_catalog import RETIRED_CUSTOM_DQR_RULES
     from src.custom_dqr_engine import (
-        ADR_A2_REQUIRED_COLUMNS, ADR_A7_REQUIRED_COLUMNS, ADR_A8_REQUIRED_COLUMNS,
+        ADR_A2_REQUIRED_COLUMNS,
+        ADR_A7_REQUIRED_COLUMNS,
+        ADR_A8_REQUIRED_COLUMNS,
     )
     assert RETIRED_CUSTOM_DQR_RULES["ADR"] is ADR_RETIRED_RULES
     retired = {r.id: r for r in ADR_RETIRED_RULES}
@@ -149,6 +151,60 @@ def test_acce_exposes_ac1():
     assert ac1.reference["reference_dataset"] == "ACCE_COA_MASTER"
     assert ac1.reference["source_column"] == "COA"
     assert ac1.reference["reference_column"] == "ICARUS_COA"
+
+
+def test_acce_catalog_active_and_inactive_rules():
+    """ACCE mirrors the ADR lifecycle (2026-10-05): DQ-ACCE-1 (Completeness),
+    DQ-ACCE-4 (Completeness & Validity) and DQ-ACCE-5 / DQ-ACCE-6
+    (Consistency) are *active*; DQ-ACCE-3 (Statistical Outlier) stays in the
+    catalog as *inactive*. DQ-ACCE-2 / DQ-ACCE-7 / DQ-ACCE-8 are retired (see
+    the dedicated test). DQ-ADR-9 (MFC vs EMMA) has no ACCE counterpart: the
+    ACCE cost results carry no material factor codes."""
+    rules = get_available_custom_dqr_rules("ACCE")
+    assert [r.id for r in rules] == [
+        "DQ-ACCE-1", "DQ-ACCE-4", "DQ-ACCE-5", "DQ-ACCE-6"
+    ]
+    assert all(r.active for r in rules)
+    rules = get_available_custom_dqr_rules("ACCE", include_inactive=True)
+    assert [r.id for r in rules] == [
+        "DQ-ACCE-1", "DQ-ACCE-3", "DQ-ACCE-4", "DQ-ACCE-5", "DQ-ACCE-6"
+    ]
+    assert "DQ-ACCE-9" not in {r.id for r in rules}
+    by_id = {r.id: r for r in rules}
+    assert by_id["DQ-ACCE-3"].active is False
+
+    ac5 = by_id["DQ-ACCE-5"]
+    assert ac5.type == "Consistency"
+    assert ac5.required_columns == {
+        "Key Quantity": "QTY_KEY_QTY",
+        "Other Quantity": "QTY_OTHER_QTY",
+        "Code of Account": "COA",
+        "Key Parameter Names": "DESIGN_KEY_PARAMETER_NAMES",
+    }
+    assert ac5.reference is None
+
+
+def test_acce_retired_rules_keep_their_definitions_outside_the_catalog():
+    """DQ-ACCE-2 / 7 / 8 were retired on 2026-10-05 (mirroring DQ-ADR-2 / 7 /
+    8): gone from every catalog view, but their definitions (and check
+    functions) stay in ``ACCE_RETIRED_RULES`` so historical runs can still
+    be read."""
+    from config.custom_dqr._acce_catalog import ACCE_RETIRED_RULES
+    from config.custom_dqr_catalog import RETIRED_CUSTOM_DQR_RULES
+    from src.custom_dqr_engine import (
+        ACCE_AC2_REQUIRED_COLUMNS,
+        ACCE_AC7_REQUIRED_COLUMNS,
+        ACCE_AC8_REQUIRED_COLUMNS,
+    )
+    assert RETIRED_CUSTOM_DQR_RULES["ACCE"] is ACCE_RETIRED_RULES
+    retired = {r.id: r for r in ACCE_RETIRED_RULES}
+    assert list(retired) == ["DQ-ACCE-2", "DQ-ACCE-7", "DQ-ACCE-8"]
+    assert retired["DQ-ACCE-2"].required_columns == ACCE_AC2_REQUIRED_COLUMNS
+    assert retired["DQ-ACCE-2"].reference["reference_dataset"] == "VWS_GP_STANDARD_SHARE"
+    assert retired["DQ-ACCE-7"].required_columns == ACCE_AC7_REQUIRED_COLUMNS
+    assert retired["DQ-ACCE-8"].required_columns == ACCE_AC8_REQUIRED_COLUMNS
+    listed = {r.id for r in get_available_custom_dqr_rules("ACCE", include_inactive=True)}
+    assert not listed & set(retired)
 
 
 def test_unknown_data_product_returns_empty_list():
