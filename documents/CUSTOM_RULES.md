@@ -220,8 +220,8 @@ id out of `ACCE_RETIRED_RULE_IDS`.
 | **DQ-ACCE-2** *(retired 2026-10)* | Location + estimate date present & valid | Completeness & Validity | `JOB_NO`, `PLANVIEW_ID` | `VWS_GP_STANDARD_SHARE` (lookup `COUNTRY`) | - |
 | **DQ-ACCE-3** *(inactive)* | Statistical COA-to-ISO mapping ratio | Statistical Outlier | `PLANVIEW_ID`, `COA`, `COST_MH`, `COST_TOTAL_COST` | `ACCE_COA_MASTER` (`COA[:3] → ICARUS_COA`; lookup `ISO_COR` + `SAB`) | `threshold_percentile` (select, default P90), `detect_uniform_mapping` (bool - 80 % portfolio gate) |
 | **DQ-ACCE-4** | Core quantities populated & non-negative project totals | Completeness & Validity | `PLANVIEW_ID`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` | - | - |
-| **DQ-ACCE-5** | Key design details present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COA`, `DESIGN_KEY_PARAMETER_NAMES` (derived by the builder) | - | - |
-| **DQ-ACCE-6** | Construction hours present when quantity exists | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COST_MH` | - | - |
+| **DQ-ACCE-5** | Key design details present when quantity exists (equipment lines) | Consistency | `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COA`, `DESIGN_KEY_PARAMETER_NAMES` (derived by the builder) | - | - |
+| **DQ-ACCE-6** | Construction hours present when quantity exists (labor-costed lines) | Consistency | `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COST_MH`, `COST_LABOR_COST` | - | - |
 | **DQ-ACCE-7** *(retired 2026-10)* | Within-discipline quantity / hour ratio outlier | Statistical Outlier | `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS`, `COST_MH` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 | **DQ-ACCE-8** *(retired 2026-10)* | Cross-discipline quantity ratios | Statistical Outlier | `COMPONENT_SOURCE`, `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `QTY_KEY_UNITS`, `QTY_OTHER_UNITS` (+ `PLANVIEW_ID` when `segment_by_project_type` is on) | `VWS_GP_STANDARD_SHARE` (only when `segment_by_project_type` is on - lookup `E05_DEPARTMENT` + `BUSINESS`) | `threshold_iqr_multiplier` (select, default 1.5×), `segment_by_project_type` (bool) |
 
@@ -2352,9 +2352,9 @@ an exact list.
 | Core type | Scope detection (`DESCRIPTION`) | Population detection (`DESCRIPTION` + UOM + qty) |
 |---|---|---|
 | `PIPING_LF` | `DESCRIPTION` ∈ piping list (`PIPING`, `CS PIPE ERECTION`, `FIREWATER PIPING`, …) | scope match AND UOM ∈ { `FEET`, `FT`, `M`, `METERS`, `LF` } |
-| `CONCRETE_CY` | `DESCRIPTION` ∈ concrete list (`CONCRETE`, `CONCRETE POUR AND FINISH`, `FOUNDATION ACCESSORIES`, `OTHER EQUIP. CONCRETE`) | scope match AND UOM ∈ volume { `CY`, `M3`, `YD3`, `YDS`, `M³` } ∪ weight { `TONS`, `TONNE`, `TON`, `T` } ∪ area { `FT2`, `FT²`, `SF`, `M2`, `M²`, `YD2`, `YD²`, `SY` } |
-| `STEEL_TONS` | `DESCRIPTION` ∈ steel list (`STEEL`, `STEEL STRUCTURES`, `PIPERACK STEEL`, …) | scope match AND UOM ∈ weight { `TONS`, `TONNE`, `TON`, `T` } ∪ length { `FEET`, `FT`, `M`, `METERS`, `LF` } ∪ area { `FT2`, `FT²`, `SF`, `M2`, `M²`, `YD2`, `YD²`, `SY` } |
-| `CABLE_LENGTH` | `DESCRIPTION` ∈ cable / electrical list (`ELECTRICAL`, `WIRE/CABLE - LV`, `CONDUIT`, `CABLE TRAYS`, …) | scope match AND UOM ∈ { `FEET`, `FT`, `M`, `METERS`, `LF` } |
+| `CONCRETE_CY` | `DESCRIPTION` ∈ concrete list (`CONCRETE`, `CONCRETE POUR AND FINISH`, `FOUNDATION ACCESSORIES`, `OTHER EQUIP. CONCRETE`) | scope match AND UOM ∈ volume { `CY`, `M3`, `YD3`, `YDS`, `M³` } ∪ weight { `TONS`, `TONNE`, `TON`, `T`, `LBS`, `LB`, `KG` } ∪ area { `FT2`, `FT²`, `SF`, `M2`, `M²`, `YD2`, `YD²`, `SY` } |
+| `STEEL_TONS` | `DESCRIPTION` ∈ steel list (`STEEL`, `STEEL STRUCTURES`, `PIPERACK STEEL`, …) | scope match AND UOM ∈ weight { `TONS`, `TONNE`, `TON`, `T`, `LBS`, `LB`, `KG` } ∪ length { `FEET`, `FT`, `M`, `METERS`, `LF` } ∪ area { `FT2`, `FT²`, `SF`, `M2`, `M²`, `YD2`, `YD²`, `SY` } |
+| `CABLE_LENGTH` | `DESCRIPTION` ∈ cable / electrical list (`ELECTRICAL`, `WIRE/CABLE - LV`, `CONDUIT`, `CABLE TRAYS`, `INSTRUMENT SIGNAL WIRING`, …) | scope match AND UOM ∈ { `FEET`, `FT`, `M`, `METERS`, `LF` } |
 | `TRANSMITTER_COUNT` | `DESCRIPTION` ∈ instrument list (`INSTRUMENTATION`, `FLOW INSTRUMENTS`, `PRESSURE INSTRUMENTS`, …) | scope match AND UOM ∈ { `EACH`, `EA`, `ITEM(S)`, `ITEM`, `ITEMS` } |
 | `EQUIPMENT_COUNT` | `DESCRIPTION` ∈ equipment list (`CENTRIFUGAL PUMPS`, `S&T EXCHANGER`, `HORZ. VESSELS`, `GAS TURBINES`, …) | scope match AND UOM ∈ { `EACH`, `EA`, `ITEM(S)`, `ITEM`, `ITEMS` } |
 | `MODULE_COUNT` | `DESCRIPTION` contains `MODULE` or `MODULAR` (substring) | scope match AND UOM ∈ { `EACH`, `EA`, `ITEM(S)`, `ITEM`, `ITEMS` } |
@@ -2442,9 +2442,12 @@ code.
   `_AC5_KEY_DESIGN_PROPERTIES` for the `COA → key property` resolution).
   Mirrors `check_adr_a5` against the ACCE data product.
 
-DQ-ACCE-5 is the ACCE twin of DQ-ADR-5. A row passes when one of the
-following holds:
+DQ-ACCE-5 is the ACCE twin of DQ-ADR-5, applied to **equipment lines**.
+A row passes when one of the following holds:
 
+0. The estimate line is **not an equipment line** - `UPPER(TRIM(DESCRIPTION))`
+   is not in the DQ-ACCE-4 equipment list (`_AC4_EQUIPMENT_DESCRIPTIONS`,
+   88 production labels). Out of scope, PASS - see *Scope* below.
 1. The estimate item has **no positive quantity** (out-of-scope, treated
    as PASS).
 2. The item's `COA` is listed in `_AC5_KEY_DESIGN_PROPERTIES` *and* at
@@ -2458,6 +2461,25 @@ that explains it is missing: for a mapped COA that means the *key*
 property (expected name, populated value); otherwise any named populated
 property.
 
+### Scope: equipment lines only (production review, 2026-10-30)
+
+`ACCE_ESTIMATEDESIGNDETAILS` is Aspen's **equipment design report**: every
+`EQUIP_CATEGORY` in production is an equipment family (Pumps 1,027 designs,
+Vessels 650, Exchangers 317, Cost Known Component 280, Separation 255,
+Compressors 119, Towers 82, Agitators, Drivers, Solids Conveying, Utility
+Service, Dryers, Vacuum …). Items generated by an equipment component
+inherit its `DESIGN_ID` and resolve; plant / area bulk components
+(`Project / Area - UT HDR`, `- AREA`, `- UT STN`, `- MODULE`, `- GRADE`,
+`- PAD` …) never have a design row - 9,409 of the 12,444 `DESIGN_ID`s the
+items reference (76%) are such bulks, spread over every estimate. The
+row-grain "any item with a quantity needs a design detail" check therefore
+failed 41% of the items (first production run: 59.1% pass) for a reason
+that is not an estimate defect. Restricted to equipment lines the same
+check passes 4,406 of 4,594 lines (95.9%); the ~190 remaining fails are
+equipment items whose design carries no populated property - the defect
+the rule is meant to catch. Widen the scope once the ingestion team
+exports design details for bulk component types.
+
 ### Where the inputs come from
 
 DQ-ACCE-5 operates on the **denormalized ACCE data product** built by
@@ -2465,6 +2487,7 @@ DQ-ACCE-5 operates on the **denormalized ACCE data product** built by
 
 | Source table | Source column | Denormalized column | Notes |
 |---|---|---|---|
+| `ACCE_ESTIMATEITEMRECORD` (primary) | `DESCRIPTION` | `DESCRIPTION` | Pass-through; the Aspen estimate-line label. Scope gate: in the equipment list → evaluated, otherwise PASS. |
 | `ACCE_ESTIMATEITEMRECORD` (primary) | `COA` | `COA` | Pass-through; the 4-character Code of Account (`3240`) = 3-character ICARUS group (`324`) + sub-account digit. Looked up in the mapping (4-digit entry first, then the group). |
 | `ACCE_ESTIMATEQTYRESULTS` (1:N) | `KEY_QTY` / `OTHER_QTY` | `QTY_KEY_QTY` / `QTY_OTHER_QTY` | `SUM` per item; the row has a quantity when either slot is `> 0`. |
 | `ACCE_ESTIMATEDESIGNDETAILS` (1:N on `DESIGN_ID`) | `PROPERTY` + `VALUE` | `DESIGN_KEY_PARAMETER_NAMES` | **Derived.** One design row per property - **62,827 rows for 3,035 designs in production (2026-10-16), about 21 per design**. Row by row, `_acce_design_derive` keeps the property *name* when its *value* is populated (`(unnamed)` when the value is populated but the name is blank). The builder then joins the per-design names with `\|` via `join_unique` (`TableDef.column_aggregations`), e.g. `Item type\|Source of quote\|Total weight`. Null when no property of the design carries a value. Many items can share one `DESIGN_ID`; each receives the same list. |
@@ -2477,7 +2500,7 @@ arbitrary property out of ~21.
 
 ### Pass / fail matrix
 
-Rows with `HAS_QUANTITY = 0` always pass. For the rest:
+Rows with `IS_EQUIPMENT = 0` or `HAS_QUANTITY = 0` always pass. For the rest:
 
 | `KNOWN_COA` | `HAS_KEY_DESIGN` | `HAS_NAMED_DESIGN` | Result |
 |---:|---:|---:|---|
@@ -2488,6 +2511,8 @@ Rows with `HAS_QUANTITY = 0` always pass. For the rest:
 
 Where:
 
+- `IS_EQUIPMENT = UPPER(TRIM(DESCRIPTION)) ∈ _AC4_EQUIPMENT_DESCRIPTIONS`
+  (one closed list shared with DQ-ACCE-4's `EQUIPMENT_COUNT`).
 - `HAS_QUANTITY = (QTY_KEY_QTY > 0) OR (QTY_OTHER_QTY > 0)`. Null, zero
   and **negative** aggregates in both slots are "no quantity" (ACCE keeps
   its strictly positive gate; DQ-ADR-5 uses `<> 0`).
@@ -2530,14 +2555,14 @@ way DQ-ADR-5 does: a pump with a populated *driver* property but no
 
 ### Failure modes
 
-- Missing `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COA` or
+- Missing `DESCRIPTION`, `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COA` or
   `DESIGN_KEY_PARAMETER_NAMES` → all rows fail (structural
   incompleteness). The derived column is absent when the design extract
   lacks `PROPERTY` / `VALUE`, so a renamed source column surfaces as a
   missing CDE rather than a silent pass.
-- Items without a `DESIGN_ID`, or whose `DESIGN_ID` has no matching rows
-  in the design table, have no design detail and fail when they carry a
-  quantity.
+- Equipment items without a `DESIGN_ID`, or whose `DESIGN_ID` has no
+  matching rows in the design table, have no design detail and fail when
+  they carry a quantity. Non-equipment items are out of scope.
 
 ### Notes
 
@@ -2553,6 +2578,7 @@ way DQ-ADR-5 does: a pump with a populated *driver* property but no
 
 | Alias | Physical column |
 |---|---|
+| Item Description | `DESCRIPTION` |
 | Key Quantity | `QTY_KEY_QTY` |
 | Other Quantity | `QTY_OTHER_QTY` |
 | Code of Account | `COA` |
@@ -2567,13 +2593,34 @@ way DQ-ADR-5 does: a pump with a populated *driver* property but no
 
 A row passes when one of the following holds:
 
+0. The estimate line carries **no labor cost** (`COST_LABOR_COST` null /
+   zero / negative) - a material or subcontract line, out of scope, PASS.
+   See *Scope* below.
 1. The estimate item has **no positive quantity** (out-of-scope,
    treated as PASS, same one-directional framing as DQ-ACCE-5).
 2. The estimate item has a **positive quantity** *and* the
    construction-hours aggregate is strictly greater than zero.
 
-A row fails when a positive quantity exists *but* `COST_MH` is
-zero / null / negative for the same item.
+A row fails when a positive quantity and a positive labor cost exist
+*but* `COST_MH` is zero / null / negative for the same item.
+
+### Scope: labor-costed lines only (production review, 2026-10-30)
+
+Aspen splits one component into several estimate lines. The piping of a
+pump, for example, becomes `CS PIPE ERECTION` (which carries the
+man-hours) plus `CS REMOTE SHOP FAB`, `CS REMOTE SHOP MATERIAL`,
+`CS VALVES:FLANGED`, `PIPE HANGERS, SHOES ETC.` and `PIPE INSULATION`,
+each with a quantity and - by construction - zero hours. In ADR every
+row is a whole component, so "quantity ⇒ hours" holds row by row; in
+ACCE the plain check failed 344,631 lines (41%, first production run
+58.7% pass), and only **18** of them carried any labor cost. Hours are
+therefore required only where labor is costed: `COST_LABOR_COST > 0`
+(`LABOR_COST` on `ACCE_ESTIMATECOSTRESULTS`). Material and subcontract
+lines pass; a labor-costed line with zero hours is the genuine defect.
+The component-grain alternative (group by `ACCE_ID` + `COMPONENT_SOURCE`,
+148 failing lines) was rejected because plant bulks such as
+`Project / Area - UT HDR` span 28k lines and one erection line with
+hours would mask every other.
 
 ### Where the inputs come from
 
@@ -2586,8 +2633,11 @@ record:
 | `ACCE_ESTIMATEQTYRESULTS` (1:N) | `KEY_QTY` | `QTY_KEY_QTY` | `SUM(KEY_QTY)` per item, same split inputs DQ-ACCE-5 uses. |
 | `ACCE_ESTIMATEQTYRESULTS` (1:N) | `OTHER_QTY` | `QTY_OTHER_QTY` | `SUM(OTHER_QTY)` per item. |
 | `ACCE_ESTIMATECOSTRESULTS` (1:N) | `MH` | `COST_MH` | Sum of man-hours across cost rows. **Note:** ADR's analog is `COST_TOTAL_HOURS` (sourced from `TOTAL_HOURS`); ACCE's source column is `MH`, prefixed by the builder to `COST_MH`. |
+| `ACCE_ESTIMATECOSTRESULTS` (1:N) | `LABOR_COST` | `COST_LABOR_COST` | Sum of labor cost across cost rows. Scope gate: `> 0` → the line is expected to carry hours. |
 
 ### Pass / fail matrix
+
+Rows with `HAS_LABOR_COST = 0` always pass. For the rest:
 
 | `HAS_QUANTITY` | `HAS_CONSTRUCTION_HOURS` | Result |
 |---|---|---|
@@ -2597,6 +2647,9 @@ record:
 | 1 | 1 | PASS |
 
 Where:
+
+- `HAS_LABOR_COST = (COST_LABOR_COST > 0)`. Null inputs are coerced to
+  zero; a material / subcontract line has none.
 
 - `HAS_QUANTITY = (QTY_KEY_QTY > 0) OR (QTY_OTHER_QTY > 0)`. Same
   definition as DQ-ACCE-5 - null, zero, and **negative** aggregates in both
@@ -2630,9 +2683,9 @@ are consumed downstream.
 
 ### Failure modes
 
-- Missing any of `QTY_KEY_QTY`, `QTY_OTHER_QTY`, or `COST_MH` column
-  → all rows fail (structural incompleteness; same convention as the
-  other custom rules).
+- Missing any of `QTY_KEY_QTY`, `QTY_OTHER_QTY`, `COST_MH` or
+  `COST_LABOR_COST` → all rows fail (structural incompleteness; same
+  convention as the other custom rules).
 
 ### Notes
 
@@ -2652,6 +2705,7 @@ are consumed downstream.
 | Key Quantity | `QTY_KEY_QTY` |
 | Other Quantity | `QTY_OTHER_QTY` |
 | Construction Hours | `COST_MH` |
+| Labor Cost | `COST_LABOR_COST` |
 
 ---
 

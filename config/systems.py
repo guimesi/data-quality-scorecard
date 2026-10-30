@@ -260,7 +260,16 @@ SYSTEMS: Dict[str, SystemDef] = {
                 description=(
                     "Item record / fact master. One row per estimate item. "
                     "Contains ROW_ID (PK), PLANVIEW_ID (project), and "
-                    "DESIGN_ID (FK → ACCE_ESTIMATEDESIGNDETAILS)."
+                    "DESIGN_ID (FK → ACCE_ESTIMATEDESIGNDETAILS). Production "
+                    "columns (2026-10-28): ROW_INDEX, ROW_ID, ACCE_ID, "
+                    "DESIGN_ID, REF_ID, PLANVIEW_ID, PROJECT_TITLE, "
+                    "PROJECT_NAME, SCENARIO_NAME, EXECUTION_SPLIT, SNAPSHOT, "
+                    "PROJECT_LOCATION, CURRENCY, REPORT_GROUP, AREA, AREA_NO, "
+                    "CONTRACT, COMPONENT_SOURCE, TAG_NO, ACCT, LOCATION, "
+                    "AG_UG, COA, DESCRIPTION, MATL_CODE, ITEM_DESCRIPTION, "
+                    "ACCE_VERSION, JOB_NO. ACCE_ID is the estimate / scenario "
+                    "id (21 values for 17 projects), COMPONENT_SOURCE the "
+                    "Aspen component that generated the line."
                 ),
                 join_key="ROW_ID",
                 is_primary=True,

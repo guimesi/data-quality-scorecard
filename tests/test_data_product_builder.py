@@ -358,9 +358,10 @@ def test_join_unique_aggregator_semantics():
 # ---------------------------------------------------------------------------
 
 def _acce_fetcher(design_rows):
-    """Minimal ACCE fetcher: three items (two pumps sharing COA 3240, one
-    item without a COA), a 1:N design table from ``design_rows`` (list of
-    dicts with DESIGN_ID / PROPERTY / VALUE)."""
+    """Minimal ACCE fetcher: three equipment items (two pumps sharing
+    COA 3240, one item without a COA - all with an equipment
+    ``DESCRIPTION`` so DQ-ACCE-5 keeps them in scope), a 1:N design table
+    from ``design_rows`` (list of dicts with DESIGN_ID / PROPERTY / VALUE)."""
     import pandas as pd
 
     frames = {
@@ -369,6 +370,7 @@ def _acce_fetcher(design_rows):
             "PLANVIEW_ID": ["P1", "P1", "P1"],
             "DESIGN_ID": ["d1", "d2", "d3"],
             "COA": ["3240", "3240", None],
+            "DESCRIPTION": ["CENTRIFUGAL PUMPS", "CENTRIFUGAL PUMPS", "MIXERS"],
         }),
         "ACCE_ESTIMATECOSTRESULTS": pd.DataFrame({
             "ROW_ID": ["r1"], "MH": [1.0], "TOTAL_COST": [1.0],

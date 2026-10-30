@@ -775,6 +775,10 @@ def _mock_acce_estimatecostresults() -> pd.DataFrame:
         "MH": RNG.lognormal(mean=3.5, sigma=1.0, size=n).round(2),
         "TOTAL_COST": RNG.lognormal(mean=11.0, sigma=1.2, size=n).round(2),
     })
+    # ``LABOR_COST`` (prefixed ``COST_LABOR_COST``) gates DQ-ACCE-6: hours
+    # are only expected on lines that cost labor. Roughly a labor rate
+    # times the hours; the material-only / zero-hour rows below carry none.
+    df["LABOR_COST"] = (df["MH"] * RNG.uniform(60.0, 120.0, size=n)).round(2)
     null_idx = RNG.choice(n, size=int(0.03 * n), replace=False)
     df.loc[null_idx, "COST_AMOUNT"] = np.nan
     # Zero-out hours + cost on ~6% of rows so a chunk of (ISO_COR, SAB)
@@ -782,6 +786,25 @@ def _mock_acce_estimatecostresults() -> pd.DataFrame:
     zero_idx = RNG.choice(n, size=max(1, int(0.06 * n)), replace=False)
     df.loc[zero_idx, "MH"] = 0.0
     df.loc[zero_idx, "TOTAL_COST"] = 0.0
+    df.loc[zero_idx, "LABOR_COST"] = 0.0
+    # Material-style items (~12% of parents): quantity, no hours, no labor
+    # cost on every cost row of the item - out of DQ-ACCE-6's scope, as in
+    # production. A small slice (~2% of parents) keeps labor cost with zero
+    # hours on every cost row: the genuine DQ-ACCE-6 defect. Both are
+    # applied per parent ROW_ID because the builder SUMs the cost rows.
+    parents = np.array(parent_ids)
+    picked = RNG.choice(len(parents), size=max(2, int(0.14 * len(parents))), replace=False)
+    n_defect = max(1, int(0.02 * len(parents)))
+    defect_parents = set(parents[picked[:n_defect]].tolist())
+    material_parents = set(parents[picked[n_defect:]].tolist())
+    material_mask = df["ROW_ID"].isin(material_parents)
+    df.loc[material_mask, "MH"] = 0.0
+    df.loc[material_mask, "LABOR_COST"] = 0.0
+    defect_mask = df["ROW_ID"].isin(defect_parents)
+    df.loc[defect_mask, "MH"] = 0.0
+    df.loc[defect_mask, "LABOR_COST"] = RNG.uniform(
+        500.0, 5_000.0, size=int(defect_mask.sum())
+    ).round(2)
     return df
 
 

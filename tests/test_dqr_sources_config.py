@@ -176,6 +176,7 @@ def test_acce_catalog_active_and_inactive_rules():
     ac5 = by_id["DQ-ACCE-5"]
     assert ac5.type == "Consistency"
     assert ac5.required_columns == {
+        "Item Description": "DESCRIPTION",
         "Key Quantity": "QTY_KEY_QTY",
         "Other Quantity": "QTY_OTHER_QTY",
         "Code of Account": "COA",

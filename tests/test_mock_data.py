@@ -206,7 +206,7 @@ def test_acce_estimatecostresults_has_no_material_factor_columns():
     MFC codes), so DQ-ADR-9 has no ACCE counterpart and the mock must not
     pretend otherwise."""
     df = mock_data.fetch_mock_table("ACCE_ESTIMATECOSTRESULTS")
-    for col in ("ROW_ID", "MH", "TOTAL_COST"):
+    for col in ("ROW_ID", "MH", "LABOR_COST", "TOTAL_COST"):
         assert col in df.columns, col
     assert not any("MFC" in c for c in df.columns)
 

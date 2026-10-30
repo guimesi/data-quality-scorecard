@@ -2534,6 +2534,9 @@ def test_ac4_quantity_classifier_returns_correct_category_per_pattern():
         ("CONCRETE",          "YD3",   "CONCRETE_CY"),
         ("CONCRETE",          "CY",    "CONCRETE_CY"),
         ("FOUNDATION ACCESSORIES", "M3", "CONCRETE_CY"),
+        # weight in pounds / kilograms (production OTHER_UNITS, 2026-10-28)
+        ("FOUNDATION ACCESSORIES", "KG", "CONCRETE_CY"),
+        ("FOUNDATION ACCESSORIES", "LBS", "CONCRETE_CY"),
         # CONCRETE_CY also accepts weight and area (unit-system-neutral)
         ("CONCRETE",          "T",     "CONCRETE_CY"),
         ("CONCRETE",          "M2",    "CONCRETE_CY"),
@@ -2546,9 +2549,15 @@ def test_ac4_quantity_classifier_returns_correct_category_per_pattern():
         ("STEEL",             "FT",    "STEEL_TONS"),
         ("STEEL STRUCTURES",  "M",     "STEEL_TONS"),
         ("STEEL",             "FT2",   "STEEL_TONS"),
+        ("STEEL STRUCTURES",  "LBS",   "STEEL_TONS"),
+        ("STEEL STRUCTURES",  "KG",    "STEEL_TONS"),
         # CABLE_LENGTH
         ("ELECTRICAL",        "FT",    "CABLE_LENGTH"),
         ("CABLE TRAYS",       "M",     "CABLE_LENGTH"),
+        # instrument wiring in length counts as cable (production labels)
+        ("INSTRUMENT SIGNAL WIRING", "M", "CABLE_LENGTH"),
+        ("MULTI-COND. INSTR. WIRE", "FEET", "CABLE_LENGTH"),
+        ("CABLE/DATA HIGHWAYS", "FT", "CABLE_LENGTH"),
         # TRANSMITTER_COUNT
         ("INSTRUMENTATION",   "EACH",  "TRANSMITTER_COUNT"),
         ("FLOW INSTRUMENTS",  "ITEMS", "TRANSMITTER_COUNT"),
@@ -2556,6 +2565,13 @@ def test_ac4_quantity_classifier_returns_correct_category_per_pattern():
         ("CENTRIFUGAL PUMPS", "EACH",  "EQUIPMENT_COUNT"),
         ("S&T EXCHANGER",     "EA",    "EQUIPMENT_COUNT"),
         ("HORZ. VESSELS",     "ITEM",  "EQUIPMENT_COUNT"),
+        # production labels added 2026-10-28 (COA groups 1 and 2)
+        ("PCKED TWRS & PCKG", "EACH",  "EQUIPMENT_COUNT"),
+        ("ELEC MOTOR - OPEN DRIP P", "EACH", "EQUIPMENT_COUNT"),
+        ("STEAM TURBINE GENERATORS", "EACH", "EQUIPMENT_COUNT"),
+        ("BAG HOUSES",        "EA",    "EQUIPMENT_COUNT"),
+        ("TRAY TOWERS & TRAY", "EACH", "EQUIPMENT_COUNT"),
+        ("EQUIPMENT AND SETTING", "EACH", "EQUIPMENT_COUNT"),
         # MODULE_COUNT - DESCRIPTION substring (MODULE / MODULAR) + count UOM.
         ("PROCESS MODULE",    "EACH",  "MODULE_COUNT"),
     ]
@@ -2875,7 +2891,9 @@ def test_acce_ac4_does_not_add_reference_dataset_to_prefetch():
 # DQ-ACCE-5: Key design details present when quantity exists (ACCE; mirrors ADR DQ-ADR-5)
 # =============================================================================
 
-_AC5_COLS = ["QTY_KEY_QTY", "QTY_OTHER_QTY", "COA", "DESIGN_KEY_PARAMETER_NAMES"]
+_AC5_COLS = [
+    "DESCRIPTION", "QTY_KEY_QTY", "QTY_OTHER_QTY", "COA", "DESIGN_KEY_PARAMETER_NAMES",
+]
 
 
 def _make_ac5_df(rows):
@@ -2885,12 +2903,14 @@ def _make_ac5_df(rows):
     return pd.DataFrame(completed, columns=_AC5_COLS)
 
 
-def _ac5_row(qty=None, coa="3240", names=None, *, slot="key"):
+def _ac5_row(qty=None, coa="3240", names=None, *, slot="key",
+             description="CENTRIFUGAL PUMPS"):
     """One DQ-ACCE-5 row: a single populated qty slot (KEY by default), the
-    item's 4-digit ``COA`` (default ``3240``, a pump) and ``names``, the
+    item's 4-digit ``COA`` (default ``3240``, a pump), ``names``, the
     builder-derived pipe-separated list of property names whose value is
-    populated (``DESIGN_KEY_PARAMETER_NAMES``)."""
-    row = {"COA": coa, "DESIGN_KEY_PARAMETER_NAMES": names}
+    populated (``DESIGN_KEY_PARAMETER_NAMES``), and its ``DESCRIPTION``
+    (an equipment label by default, so the row is in scope)."""
+    row = {"DESCRIPTION": description, "COA": coa, "DESIGN_KEY_PARAMETER_NAMES": names}
     if slot == "other":
         row["QTY_OTHER_QTY"] = qty
     else:
@@ -2924,6 +2944,7 @@ def test_acce_has_custom_rule_ac5_available():
     assert rule.name == "Key design details present when quantity exists"
     assert rule.type == "Consistency"
     assert rule.required_columns == {
+        "Item Description": "DESCRIPTION",
         "Key Quantity": "QTY_KEY_QTY",
         "Other Quantity": "QTY_OTHER_QTY",
         "Code of Account": "COA",
@@ -3053,6 +3074,7 @@ def test_acce_ac5_coa_is_matched_after_strip_and_numeric_coercion(_ac5_key_map):
 def test_acce_ac5_numeric_coa_column_dtype_is_supported(_ac5_key_map):
     from src.custom_dqr_engine import check_acce_ac5
     df = pd.DataFrame({
+        "DESCRIPTION": ["CENTRIFUGAL PUMPS"] * 3,
         "QTY_KEY_QTY": [1.0, 1.0, 1.0],
         "QTY_OTHER_QTY": [None, None, None],
         "COA": [3240.0, 3240.0, None],
@@ -3123,7 +3145,8 @@ def test_acce_ac5_quantity_may_sit_in_either_slot(_ac5_key_map):
     df = _make_ac5_df([
         _ac5_row(3.0, "3240", None, slot="other"),
         _ac5_row(3.0, "3240", "Pump type", slot="other"),
-        {"QTY_KEY_QTY": 1.0, "QTY_OTHER_QTY": 2.0, "COA": "3240",
+        {"DESCRIPTION": "CENTRIFUGAL PUMPS", "QTY_KEY_QTY": 1.0,
+         "QTY_OTHER_QTY": 2.0, "COA": "3240",
          "DESIGN_KEY_PARAMETER_NAMES": "Item type"},
     ])
     assert check_acce_ac5(df).tolist() == [False, True, False]
@@ -3157,6 +3180,7 @@ def test_acce_ac5_handles_object_dtyped_numeric_quantities(_ac5_key_map):
     values to NaN which the rule treats as 'no quantity'."""
     from src.custom_dqr_engine import check_acce_ac5
     df = pd.DataFrame({
+        "DESCRIPTION": ["CENTRIFUGAL PUMPS"] * 4,
         "QTY_KEY_QTY": ["10", "0", None, "abc"],
         "QTY_OTHER_QTY": [None, None, None, None],
         "COA": ["3240"] * 4,
@@ -3181,6 +3205,42 @@ def test_acce_ac5_handles_a_non_unique_index(_ac5_key_map):
     result = check_acce_ac5(df)
     assert list(result.index) == [0, 0, 1]
     assert result.tolist() == [True, False, True]
+
+
+# ----- equipment scope -------------------------------------------------------
+
+def test_acce_ac5_non_equipment_lines_are_out_of_scope(_ac5_key_map):
+    """Only equipment lines are evaluated: ACCE_ESTIMATEDESIGNDETAILS is
+    Aspen's equipment design report, so a bulk line (piping material,
+    insulation, concrete …) with a quantity and no design row PASSES."""
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(120.0, "3110", None, description="CS REMOTE SHOP MATERIAL"),
+        _ac5_row(120.0, "3110", None, description="PIPE INSULATION"),
+        _ac5_row(40.0, "4110", None, description="CONCRETE"),
+        _ac5_row(3.0, "9999", None, description=None),
+        _ac5_row(3.0, "3240", None, description="CENTRIFUGAL PUMPS"),   # equipment → FAIL
+    ])
+    assert check_acce_ac5(df).tolist() == [True, True, True, True, False]
+
+
+def test_acce_ac5_equipment_scope_matches_case_and_whitespace_insensitively(_ac5_key_map):
+    """``UPPER(TRIM(DESCRIPTION))`` drives the scope, same convention as
+    DQ-ACCE-4's classifier."""
+    from src.custom_dqr_engine import check_acce_ac5
+    df = _make_ac5_df([
+        _ac5_row(3.0, "3240", None, description="  centrifugal pumps "),
+        _ac5_row(3.0, "3240", "Pump type", description="  centrifugal pumps "),
+    ])
+    assert check_acce_ac5(df).tolist() == [False, True]
+
+
+def test_acce_ac5_equipment_scope_reuses_the_ac4_equipment_list():
+    """One closed equipment list for both rules - adding a production
+    label to DQ-ACCE-4 widens DQ-ACCE-5's scope with it."""
+    import src.custom_dqr._acce_rules as acce
+    assert acce._AC5_EQUIPMENT_DESCRIPTIONS is acce._AC4_EQUIPMENT_DESCRIPTIONS
+    assert "TRAY TOWERS & TRAY" in acce._AC5_EQUIPMENT_DESCRIPTIONS
 
 
 # ----- structural failures ---------------------------------------------------
@@ -3252,7 +3312,7 @@ def test_acce_ac5_does_not_add_reference_dataset_to_prefetch():
 # =============================================================================
 
 def _ac6_required_cols():
-    return ["QTY_KEY_QTY", "QTY_OTHER_QTY", "COST_MH"]
+    return ["QTY_KEY_QTY", "QTY_OTHER_QTY", "COST_MH", "COST_LABOR_COST"]
 
 
 def _make_ac6_df(rows):
@@ -3267,10 +3327,12 @@ def _make_ac6_df(rows):
     return pd.DataFrame(completed, columns=cols)
 
 
-def _ac6_row(qty=None, mh=None, *, slot="key"):
-    """One DQ-ACCE-6 row: a single populated qty slot (KEY by default) and a
-    construction-hours value (``COST_MH``)."""
-    row = {"COST_MH": mh}
+def _ac6_row(qty=None, mh=None, *, slot="key", labor=1_000.0):
+    """One DQ-ACCE-6 row: a single populated qty slot (KEY by default), a
+    construction-hours value (``COST_MH``) and the labor cost that puts
+    the line in scope (``COST_LABOR_COST``, positive by default - pass
+    ``labor=0`` / ``None`` for a material-only line)."""
+    row = {"COST_MH": mh, "COST_LABOR_COST": labor}
     if slot == "other":
         row["QTY_OTHER_QTY"] = qty
     else:
@@ -3291,6 +3353,7 @@ def test_acce_has_custom_rule_ac6_available():
         "Key Quantity": "QTY_KEY_QTY",
         "Other Quantity": "QTY_OTHER_QTY",
         "Construction Hours": "COST_MH",
+        "Labor Cost": "COST_LABOR_COST",
     }
     # DQ-ACCE-6 does not consult an external reference dataset.
     assert rule.reference is None
@@ -3379,7 +3442,7 @@ def test_acce_ac6_negative_quantity_counts_as_no_quantity():
 
 def test_acce_ac6_decision_matrix_covers_all_four_states():
     """End-to-end coverage of the four-state decision matrix in a
-    single batch."""
+    single batch (all rows carry labor cost, so they are in scope)."""
     from src.custom_dqr_engine import check_acce_ac6
     df = _make_ac6_df([
         # HAS_QUANTITY=0, HAS_HOURS=0 → PASS
@@ -3394,6 +3457,44 @@ def test_acce_ac6_decision_matrix_covers_all_four_states():
     assert check_acce_ac6(df).tolist() == [True, True, False, True]
 
 
+def test_acce_ac6_material_lines_without_labor_cost_are_out_of_scope():
+    """Aspen splits a component into material / shop-fab / erection lines
+    and only the erection line carries hours. A line with a quantity but
+    no labor cost (material, subcontract) PASSES even with zero / null
+    hours; the same line with labor cost FAILS."""
+    from src.custom_dqr_engine import check_acce_ac6
+    df = _make_ac6_df([
+        _ac6_row(120.0, 0.0, labor=0.0),      # CS REMOTE SHOP MATERIAL
+        _ac6_row(120.0, None, labor=None),    # PIPE INSULATION (subcontract)
+        _ac6_row(120.0, 0.0, labor=-5.0),     # negative labor = no labor
+        _ac6_row(120.0, 0.0, labor="0"),      # string zero
+        _ac6_row(120.0, 0.0, labor=850.0),    # labor costed, no hours → FAIL
+        _ac6_row(120.0, 85.0, labor=850.0),   # erection line → PASS
+    ])
+    assert check_acce_ac6(df).tolist() == [True, True, True, True, False, True]
+
+
+def test_acce_ac6_mock_data_product_exercises_both_branches():
+    """Mock mode carries ``COST_LABOR_COST`` on the ACCE data product, with
+    material-style lines (quantity, no hours, no labor cost → PASS) and a
+    slice of labor-costed zero-hour lines (→ FAIL)."""
+    import os
+    os.environ["DATA_SOURCE"] = "mock"
+    from src.custom_dqr_engine import check_acce_ac6
+    from src.data_product_builder import build_data_product
+    df = build_data_product("ACCE").df
+    assert "COST_LABOR_COST" in df.columns
+    result = check_acce_ac6(df)
+    assert result.any() and (~result).any()
+    qty = (
+        pd.to_numeric(df["QTY_KEY_QTY"], errors="coerce").fillna(0) > 0
+    ) | (pd.to_numeric(df["QTY_OTHER_QTY"], errors="coerce").fillna(0) > 0)
+    no_hours = pd.to_numeric(df["COST_MH"], errors="coerce").fillna(0) <= 0
+    no_labor = pd.to_numeric(df["COST_LABOR_COST"], errors="coerce").fillna(0) <= 0
+    material = qty & no_hours & no_labor
+    assert material.any() and result[material].all()
+
+
 def test_acce_ac6_handles_object_dtyped_numeric_inputs():
     """Heterogeneous source (mixed numeric strings and floats) must
     not crash - ``pd.to_numeric`` coerces unrecognised values to NaN
@@ -3403,6 +3504,7 @@ def test_acce_ac6_handles_object_dtyped_numeric_inputs():
         "QTY_KEY_QTY": ["10", "0", None, "abc"],
         "QTY_OTHER_QTY": [None, None, None, None],
         "COST_MH": [None, None, "50", "100"],
+        "COST_LABOR_COST": ["900", "900", "900", "900"],
     })
     # Row 0: 10 / NaN(0) → quantity, no hours → FAIL.
     # Row 1: 0 / NaN(0) → no quantity → PASS.
@@ -3419,6 +3521,7 @@ def test_acce_ac6_fails_for_all_rows_when_required_column_missing():
         "QTY_KEY_QTY": [10.0, 10.0],
         "QTY_OTHER_QTY": [None, None],
         "COST_MH": [50.0, 0.0],
+        "COST_LABOR_COST": [900.0, 900.0],
     })
     for missing in ACCE_AC6_REQUIRED_COLUMNS.values():
         df = base.drop(columns=missing)

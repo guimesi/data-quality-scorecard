@@ -773,8 +773,8 @@ documentation lives in
 | ACCE | DQ-ACCE-2 | Location + estimate date present & valid (uses `JOB_NO`) *(retired 2026-10)*   | Completeness & Validity |
 | ACCE | DQ-ACCE-3 | Statistical COA-to-ISO mapping ratio *(inactive)*                       | Statistical Outlier |
 | ACCE | DQ-ACCE-4 | Core quantities populated & non-negative project totals (via `DESCRIPTION`) | Completeness & Validity |
-| ACCE | DQ-ACCE-5 | Key design details present when quantity exists (every design property; `COA → key property` map pending) | Consistency |
-| ACCE | DQ-ACCE-6 | Construction hours present when quantity exists (`COST_MH`) | Consistency |
+| ACCE | DQ-ACCE-5 | Key design details present when quantity exists (equipment lines only; every design property; `COA → key property` map pending) | Consistency |
+| ACCE | DQ-ACCE-6 | Construction hours present when quantity exists (`COST_MH`, on labor-costed lines only) | Consistency |
 | ACCE | DQ-ACCE-7 | Within-discipline quantity / hour ratio outlier (`DESCRIPTION`; optional project-type segmentation) *(retired 2026-10)* | Statistical Outlier |
 | ACCE | DQ-ACCE-8 | Cross-discipline quantity ratios (`COMPONENT_SOURCE`; optional project-type segmentation) *(retired 2026-10)* | Statistical Outlier |
 | SQS | dq-inspection-12 | Mandatory on Completion (`STATUS = 'Completed'` → `TOTAL_CONSUMED_HOURS` not NULL) | Completeness |

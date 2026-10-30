@@ -258,9 +258,9 @@ _ACCE_RULE_DEFS = [
             "the FAIL. Schema-level missing column → all rows fail. "
             "Rows lacking ``PLANVIEW_ID`` pass - they can't be "
             "attached to a project group. Steel accepts weight "
-            "(TONS, TONNE, TON, T), length (FEET, FT, M, METERS, LF), "
+            "(TONS, TONNE, TON, T, LBS, LB, KG), length (FEET, FT, M, METERS, LF), "
             "and area (FT2, SF, M2, YD2, SY) UOMs. Concrete accepts "
-            "volume (CY, M3, YD3, YDS), weight (TONS, TONNE, TON, T), "
+            "volume (CY, M3, YD3, YDS), weight (TONS, TONNE, TON, T, LBS, LB, KG), "
             "and area (FT2, SF, M2, YD2, SY) UOMs."
         ),
         required_columns=dict(ACCE_AC4_REQUIRED_COLUMNS),
@@ -271,7 +271,8 @@ _ACCE_RULE_DEFS = [
         name="Key design details present when quantity exists",
         type="Consistency",
         description=(
-            "When an ACCE estimate item has a positive quantity, a "
+            "When an ACCE *equipment* line (``DESCRIPTION`` in the "
+            "DQ-ACCE-4 equipment list) has a positive quantity, a "
             "design property that explains it must be populated. "
             "Mirrors DQ-ADR-5: the rule reads *every* design property "
             "of the item's design (``ACCE_ESTIMATEDESIGNDETAILS`` is 1:N "
@@ -296,6 +297,12 @@ _ACCE_RULE_DEFS = [
             "is populated, ``(unnamed)`` when a value has no name, null "
             "when nothing is populated; the previous version of the "
             "rule read only the first property of each design. "
+            "Scope (production review 2026-10-30): "
+            "``ACCE_ESTIMATEDESIGNDETAILS`` is Aspen's equipment design "
+            "report (``EQUIP_CATEGORY`` = Pumps, Vessels, Exchangers, "
+            "Compressors, Towers …); plant / area bulk components "
+            "(``Project / Area - …``) never have a design row, so "
+            "non-equipment lines are out of scope and pass. "
             "Type-awareness: ADR maps ``ITEM_TYPE`` to the COA prefix "
             "its parameter names carry (``324.0-Pump Type``); ACCE "
             "property names are bare (``Item type``, ``Source of "
@@ -322,7 +329,8 @@ _ACCE_RULE_DEFS = [
         type="Consistency",
         description=(
             "Each ACCE estimate item with a positive aggregated "
-            "quantity (``QTY_KEY_QTY`` or ``QTY_OTHER_QTY`` > 0) "
+            "quantity (``QTY_KEY_QTY`` or ``QTY_OTHER_QTY`` > 0) and "
+            "labor cost (``COST_LABOR_COST`` > 0) "
             "must also have strictly positive construction hours "
             "(``COST_MH``) so productivity (hours / unit) and EMMA "
             "normalization can be derived. One-directional: "
@@ -337,8 +345,14 @@ _ACCE_RULE_DEFS = [
             "The construction-hours column is ``COST_MH`` (sourced "
             "from ``MH`` on ``ACCE_ESTIMATECOSTRESULTS``); ACCE has "
             "no separate Design-Build hours column, so the check "
-            "uses only ``COST_MH``. The hours comparison is strictly "
-            "``> 0`` - null is coerced to zero and negative "
+            "uses only ``COST_MH``. Scope (production review "
+            "2026-10-30): Aspen splits a component into material / "
+            "shop-fab / erection lines and only the erection line "
+            "carries hours, so hours are required only on lines with "
+            "``COST_LABOR_COST > 0`` (``LABOR_COST`` on "
+            "``ACCE_ESTIMATECOSTRESULTS``); material and subcontract "
+            "lines are out of scope and pass. The hours comparison is "
+            "strictly ``> 0`` - null is coerced to zero and negative "
             "aggregates do not count as hours present. Missing "
             "required column → all rows fail."
         ),
