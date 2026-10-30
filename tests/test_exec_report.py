@@ -35,6 +35,7 @@ import pytest
 import ui.step_06._exec_report as er
 from config.settings import Settings
 from src import report_store
+from src.formatting import fmt_pct, fmt_score
 from src.models import (
     CustomDQRAssignment,
     DataProduct,
@@ -340,7 +341,7 @@ def test_report_scores_match_engine_values():
     dp, cfg, result = _fixture()
     html = _build(dp, cfg, result)
     for rid in ("DQ-EPT-1", "DQ-EPT-4"):
-        assert f"{result.custom_rule_pass_rates[rid]:.1f}%" in html
+        assert fmt_pct(result.custom_rule_pass_rates[rid]) in html
     data = report_data(html)
     assert data["green"] == 90.0 and data["yellow"] == 70.0
     dp_data = data["dps"]["EPT"]
@@ -825,7 +826,7 @@ def test_pdf_cover_and_summary_numbers():
     pdf = _build_pdf(dp, cfg, result)
     cover = pdf_pages(pdf)[0][1]
     assert '<p class="cv-domain">Cost Estimate</p>' in cover
-    assert f'<div class="cv-score c-{"green" if result.overall_score >= 90 else "yellow" if result.overall_score >= 70 else "red"}">{result.overall_score:.1f}</div>' in cover
+    assert f'<div class="cv-score c-{"green" if result.overall_score >= 90 else "yellow" if result.overall_score >= 70 else "red"}">{fmt_score(result.overall_score)}</div>' in cover
     assert "<dt>Generated (UTC)</dt><dd>2026-09-03T21:18:42Z</dd>" in cover
     assert "<dt>Data Products</dt><dd>EPT</dd>" in cover
     assert "PV-10422 · PV-99999" in cover
@@ -838,9 +839,9 @@ def test_pdf_cover_and_summary_numbers():
     assert '<span class="v">2 / 2</span>' in summary
     assert '<span class="k">Score drops ≥ 5 pp</span><span class="v">0</span>' in summary
     assert "<b>EPT Cost Data</b>" in summary
-    assert f'<td class="num big">{result.overall_score:.1f}</td>' in summary
+    assert f'<td class="num big">{fmt_score(result.overall_score)}</td>' in summary
     for rid in ("DQ-EPT-1", "DQ-EPT-4"):
-        assert f"{result.custom_rule_pass_rates[rid]:.1f}%" in summary
+        assert f"{fmt_score(result.custom_rule_pass_rates[rid])}%" in summary
 
 
 def test_pdf_dp_pages_carry_heatmap_tables_and_config():

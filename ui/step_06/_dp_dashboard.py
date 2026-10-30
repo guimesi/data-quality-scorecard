@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.formatting import PCT_COLUMN_FORMAT, floor_pct, fmt_score
 from src.persistence import log_event
 from ui.step_06._breakdown import (
     _render_custom_rules_table,
@@ -187,7 +188,7 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     "Status": r["status"],
                     "Pass rate (%)": (
                         float("nan") if r["pass_rate"] is None
-                        else round(r["pass_rate"], 2)
+                        else floor_pct(r["pass_rate"])
                     ),
                 }
                 for r in standard_rule_rows(cfg, result)
@@ -202,7 +203,8 @@ def _render_dashboard_for_dp(code: str, dp, result) -> None:
                     hide_index=True,
                     column_config={
                         "Pass rate (%)": st.column_config.ProgressColumn(
-                            "Pass rate (%)", min_value=0, max_value=100, format="%.1f%%",
+                            "Pass rate (%)", min_value=0, max_value=100,
+                            format=PCT_COLUMN_FORMAT,
                         ),
                         "Weight (%)": st.column_config.NumberColumn(format="%.2f%%"),
                     },
@@ -282,7 +284,7 @@ def _render_overview_cards(scorecards) -> None:
                         <span class="sys-code">{html.escape(code)}</span>
                     </div>
                     <div class="score-val" style="color: {color};">
-                        {result.overall_score:.1f}
+                        {fmt_score(result.overall_score)}
                         <span class="score-suffix">/ 100</span>
                     </div>
                     <div class="status-label dp-status-pill {cls}"

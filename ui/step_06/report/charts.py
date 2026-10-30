@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from src.formatting import fmt_score
 from ui.step_06.report.html import esc
 from utils.helpers import score_bucket
 
@@ -61,13 +62,13 @@ def gauge_svg(score: float, green: float, yellow: float) -> str:
         )
     return (
         f'<svg class="gauge" viewBox="0 0 140 84" role="img" '
-        f'aria-label="Overall score {score:.1f} of 100">'
+        f'aria-label="Overall score {fmt_score(score)} of 100">'
         f'<g stroke="#e5e7eb"><path class="track" '
         f'd="M{x0:.1f} {y0:.1f} A{_G_R:.0f} {_G_R:.0f} 0 0 1 '
         f'{x1:.1f} {y1:.1f}" fill="none" stroke-width="12" '
         'stroke-linecap="butt"/></g>'
         + fill + "".join(ticks)
-        + f'<text x="70" y="66" text-anchor="middle" class="g-num">{score:.1f}</text>'
+        + f'<text x="70" y="66" text-anchor="middle" class="g-num">{fmt_score(score)}</text>'
         '<text x="70" y="80" text-anchor="middle" class="g-sub">/ 100</text>'
         '<text x="10" y="82" class="g-sub">0</text>'
         '<text x="130" y="82" text-anchor="end" class="g-sub">100</text></svg>'
@@ -208,7 +209,7 @@ def pdf_gauge_svg(score: float, green: float, yellow: float,
         )
     return (
         f'<svg width="{size}" viewBox="0 0 140 84" role="img" '
-        f'aria-label="Score {score:.1f}">'
+        f'aria-label="Score {fmt_score(score)}">'
         f'<path d="M{x0:.1f} {y0:.1f} A{_G_R:.0f} {_G_R:.0f} 0 0 1 '
         f'{x1:.1f} {y1:.1f}" fill="none" stroke="#e5e7eb" stroke-width="12"/>'
         f'<path d="M{x0:.1f} {y0:.1f} A{_G_R:.0f} {_G_R:.0f} 0 0 1 '

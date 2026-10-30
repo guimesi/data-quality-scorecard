@@ -61,6 +61,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from src.formatting import floor_pct
+
 # =============================================================================
 # Optional scikit-learn detection
 # =============================================================================
@@ -465,7 +467,7 @@ def compute_rule_impact(config, result) -> pd.DataFrame:
                 "rule_id": _rule_id(a),
                 "label": label_fn(a),
                 "weight_pct": round(float(a.weight), 2),
-                "pass_rate_pct": round(current_pr, 2),
+                "pass_rate_pct": floor_pct(current_pr),
                 "baseline_source_score": round(baseline, 2),
                 "loo_source_score": round(loo, 2),
                 "delta_vs_baseline": round(loo - baseline, 2),

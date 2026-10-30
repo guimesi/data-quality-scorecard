@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Optional
 
+from src.formatting import floor_pct, fmt_pct, fmt_score
 from ui.step_06._rule_rows import STATUS_EVALUATED
 from ui.step_06.report.charts import score_bar
 from ui.step_06.report.collect import dqr_label
@@ -93,7 +94,7 @@ def _tied_rule_li(rule: Dict) -> str:
     if rule["status"] != STATUS_EVALUATED:
         return head + f'<span class="pill p-warn">{esc(rule["status"])}</span></li>'
     fails = rule["fail_count"] if rule["fail_count"] is not None else 0
-    return (head + f"<b>{rule['pass_rate']:.1f}%</b> pass · "
+    return (head + f"<b>{fmt_pct(rule['pass_rate'])}</b> pass · "
             f"{fmt_int(fails)} failing</li>")
 
 
@@ -157,11 +158,11 @@ def group_list(view: Dict, items: List[Dict], kind: str) -> str:
                 "Not evaluated</span></span>"
             )
         else:
-            score_attr = f"{score:.2f}"
+            score_attr = f"{floor_pct(score):.2f}"
             below = "1" if item["bucket"] != "green" else "0"
             cells = (
                 f'<span class="c-bar">{score_bar(score, g, y)}</span>'
-                f'<span class="c-num num">{score:.1f}</span>'
+                f'<span class="c-num num">{fmt_score(score)}</span>'
                 f'<span class="c-badge">{badge(item["bucket"])}</span>'
             )
         rows.append(
@@ -208,7 +209,7 @@ def dqr_list(view: Dict) -> str:
     for r in _sorted_for_display(view["dqrs"]):
         evaluated = r["status"] == STATUS_EVALUATED
         rule = r["rule"]
-        score_attr = f"{r['pass_rate']:.2f}" if evaluated else "-1"
+        score_attr = f"{floor_pct(r['pass_rate']):.2f}" if evaluated else "-1"
         status_attr = "evaluated" if evaluated else "not-evaluated"
         below = "1" if evaluated and r["pass_rate"] < g else "0"
         src_cols = r.get("source_columns") or {}
@@ -218,12 +219,12 @@ def dqr_list(view: Dict) -> str:
 
         if evaluated:
             bar = f'<span class="c-bar">{score_bar(r["pass_rate"], g, y)}</span>'
-            tail = (f'<span class="num">{r["pass_rate"]:.1f}%</span>'
+            tail = (f'<span class="num">{fmt_pct(r["pass_rate"])}</span>'
                     f'<span class="num">{fmt_int(r["fail_count"] or 0)}</span>')
             kv_tail = (
                 f"<dt>Pass / fail</dt><dd>{fmt_int(r['pass_count'] or 0)} / "
                 f"{fmt_int(r['fail_count'] or 0)} rows "
-                f"({r['pass_rate']:.1f}% pass)</dd>"
+                f"({fmt_pct(r['pass_rate'])} pass)</dd>"
             )
             callout = ""
             drill = _drill_or_note(

@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from config.dqr_sources import SOURCE_LABELS
+from src.formatting import PCT_COLUMN_FORMAT, floor_pct, fmt_score
 from ui.step_06._drilldown import _render_custom_rule_drilldown
 from ui.step_06._rule_rows import custom_rule_rows
 from ui.step_06._shared import (
@@ -51,7 +52,7 @@ def _render_source_breakdown(result) -> None:
         return
     cols = st.columns(len(sub_cols))
     for col, (label, value) in zip(cols, sub_cols):
-        col.metric(label, f"{value:.1f}")
+        col.metric(label, fmt_score(value))
 
 
 def _render_custom_rules_table(code: str, result) -> None:
@@ -65,7 +66,7 @@ def _render_custom_rules_table(code: str, result) -> None:
             "Weight (%)": round(r["weight"], 2),
             "Pass rate (%)": (
                 float("nan") if r["pass_rate"] is None
-                else round(r["pass_rate"], 2)
+                else floor_pct(r["pass_rate"])
             ),
         }
         for r in custom_rule_rows(code, cfg, result)
@@ -80,7 +81,8 @@ def _render_custom_rules_table(code: str, result) -> None:
         hide_index=True,
         column_config={
             "Pass rate (%)": st.column_config.ProgressColumn(
-                "Pass rate (%)", min_value=0, max_value=100, format="%.1f%%",
+                "Pass rate (%)", min_value=0, max_value=100,
+                format=PCT_COLUMN_FORMAT,
             ),
             "Weight (%)": st.column_config.NumberColumn(format="%.2f%%"),
         },

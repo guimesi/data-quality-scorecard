@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from src.formatting import fmt_score
 from ui.step_06._rule_rows import STATUS_EVALUATED
 from ui.step_06._shared import _DEFAULT_ACCENT, _SYSTEM_ACCENTS
 from ui.step_06.report import collect
@@ -64,7 +65,14 @@ _PDF_CSS_EXTRA = (
 # ------------------------------------------------------------- primitives
 
 def _f1(x: float) -> str:
+    """One-decimal text for differences (score deltas in pp)."""
     return f"{float(x):.1f}"
+
+
+def _fs(x: float) -> str:
+    """Score / pass-rate text: floored to two decimals (see src.formatting),
+    so ``100.00`` only ever appears when nothing failed."""
+    return fmt_score(x)
 
 
 def _pct(part: int, total: int) -> str:
@@ -184,7 +192,7 @@ def _cover(model: ReportModel) -> str:
         chips.append(
             f'<div class="cv-dp"><div class="cv-code">{esc(v["code"])}</div>'
             f'<div class="cv-name">{esc(v["name"])}</div>'
-            f'<div class="cv-score c-{v["bucket"]}">{_f1(score)}</div>'
+            f'<div class="cv-score c-{v["bucket"]}">{_fs(score)}</div>'
             f'<div class="cv-sub">{_LABEL[v["bucket"]]}{esc(delta)}</div>'
             + spark_svg(v["history"]["runs"], g, y, 120, 30) + "</div>"
         )
@@ -234,7 +242,7 @@ def _summary_page(model: ReportModel) -> str:
         rows.append(
             f'<tr><td><b>{esc(v["name"])}</b><br><span class="muted mono">'
             f'{esc(v["code"])}</span></td>'
-            f'<td class="num big">{_f1(r.overall_score)}</td>'
+            f'<td class="num big">{_fs(r.overall_score)}</td>'
             f"<td>{_bucket_badge(v['bucket'])}</td>"
             f'<td class="num">{fmt_int(r.total_rows)}</td>'
             f"<td>{stack_svg(r.rows_green, r.rows_yellow, r.rows_red, 200, 10)}"
@@ -279,7 +287,7 @@ def _summary_page(model: ReportModel) -> str:
         r = v["result"]
         attention.append(
             f"<li>{_bucket_badge(v['bucket'])} <b>{esc(v['code'])}</b> scores "
-            f"<b>{_f1(r.overall_score)}</b>; {fmt_int(r.rows_red)} rows "
+            f"<b>{_fs(r.overall_score)}</b>; {fmt_int(r.rows_red)} rows "
             f"({_pct(r.rows_red, r.total_rows)}) are Red.</li>"
         )
     for v in drops:
@@ -306,7 +314,7 @@ def _summary_page(model: ReportModel) -> str:
         key=lambda pair: pair[0]["score"],
     )[:6]
     cde_html = "".join(
-        f'<li><span class="w num">{_f1(item["score"])}</span>'
+        f'<li><span class="w num">{_fs(item["score"])}</span>'
         f"{_bucket_badge(item['bucket'])}"
         f'<span class="mono nw">{esc(v["code"])} {esc(item["name"])}</span></li>'
         for item, v in cdes
@@ -316,7 +324,7 @@ def _summary_page(model: ReportModel) -> str:
         key=lambda pair: pair[0]["pass_rate"],
     )[:6]
     rule_html = "".join(
-        f'<li><span class="w num">{_f1(r["pass_rate"])}%</span>'
+        f'<li><span class="w num">{_fs(r["pass_rate"])}%</span>'
         f'<span class="mono">{esc(v["code"])} {esc(r["rule_id"])}</span>'
         f'<span title="{esc(r["name"])}">{esc(r["name"])}</span></li>'
         for r, v in rules
@@ -355,7 +363,7 @@ def _heatmap(view: Dict) -> str:
             return (f'<td class="hm na" title="{esc(rule["rule_id"])} not '
                     'evaluated">n/e</td>')
         pr = rule["pass_rate"]
-        return f'<td class="hm hm-{score_bucket(pr, g, y)}">{_f1(pr)}</td>'
+        return f'<td class="hm hm-{score_bucket(pr, g, y)}">{_fs(pr)}</td>'
 
     head = "".join(
         f'<th class="hm-h"><div><span>{esc(r_["rule_id"])}</span></div></th>'
@@ -370,11 +378,11 @@ def _heatmap(view: Dict) -> str:
             tail = '<td class="hm-s na">n/e</td>'
         else:
             tail = (f'<td class="hm-s hm-{item["bucket"]}"><b>'
-                    f"{_f1(item['score'])}</b></td>")
+                    f"{_fs(item['score'])}</b></td>")
         body.append(f'<tr><th class="hm-r">{esc(item["name"])}</th>{cells}{tail}</tr>')
     foot = "".join(
         (f'<td class="hm-s hm-{score_bucket(r_["pass_rate"], g, y)}"><b>'
-         f"{_f1(r_['pass_rate'])}</b></td>")
+         f"{_fs(r_['pass_rate'])}</b></td>")
         if r_["status"] == STATUS_EVALUATED else '<td class="hm-s na">n/e</td>'
         for r_ in rules
     )
@@ -405,7 +413,7 @@ def _run_log(view: Dict, caps: ReportCaps) -> str:
         pill = '<span class="pill p-warn">config</span>' if r_["changed"] else ""
         rows.append(
             f"<tr><td>{esc(r_['date'])}</td><td class=\"muted\">{esc(r_['user'])}"
-            f'</td><td class="num"><b>{_f1(r_["score"])}</b></td>{delta}'
+            f'</td><td class="num"><b>{_fs(r_["score"])}</b></td>{delta}'
             f"<td>{pill}</td></tr>"
         )
     cap = (f'<p class="cap">Last {len(shown)} of {len(runs)} runs.</p>'
@@ -426,8 +434,8 @@ def _alerts(view: Dict, ctx: ReportContext) -> str:
                   if drop["config_changed"] else "")
         parts.append(
             f'<div class="callout err"><b>Score dropped {_f1(abs(drop["delta"]))} '
-            f"pp</b> vs the previous run ({_f1(drop['prev_score'])} → "
-            f"{_f1(drop['curr_score'])}, {esc(str(drop['prev_ts'])[:10])})."
+            f"pp</b> vs the previous run ({_fs(drop['prev_score'])} → "
+            f"{_fs(drop['curr_score'])}, {esc(str(drop['prev_ts'])[:10])})."
             f"{config}</div>"
         )
     if view["not_run"]:
@@ -498,7 +506,7 @@ def _breakdown_pages(view: Dict, ctx: ReportContext) -> List[str]:
             return (f"<td>{_dash()}</td><td class=\"num\"><b>n/e</b></td>"
                     '<td><span class="pill p-warn">Not evaluated</span></td>')
         return (f"<td>{_bar(item['score'], g, y)}</td>"
-                f'<td class="num"><b>{_f1(item["score"])}</b></td>'
+                f'<td class="num"><b>{_fs(item["score"])}</b></td>'
                 f"<td>{_bucket_badge(item['bucket'])}</td>")
 
     cde_rows = [
@@ -559,8 +567,8 @@ def _breakdown_pages(view: Dict, ctx: ReportContext) -> List[str]:
                 return f'<h4>{label}</h4><p class="muted">none</p>'
             body = "".join(
                 f"<tr><td>{esc(t['name'])}</td>"
-                f'<td class="num muted nw">{_f1(t["previous"])} →</td>'
-                f'<td class="num nw"><b>{_f1(t["current"])}</b></td>'
+                f'<td class="num muted nw">{_fs(t["previous"])} →</td>'
+                f'<td class="num nw"><b>{_fs(t["current"])}</b></td>'
                 f'<td class="num {"neg" if t["delta"] < 0 else "pos"}">'
                 f"{_signed(t['delta'])}</td></tr>"
                 for t in rows
@@ -632,7 +640,7 @@ def _dqr_table_page(view: Dict, ctx: ReportContext) -> str:
         reason = ("" if ok else
                   f'<div class="reason">Not evaluated — {esc(rule["reason"] or "")}</div>')
         bar = _bar(rule["pass_rate"], g, y) if ok else _dash()
-        rate = (f"{_f1(rule['pass_rate'])}%" if ok
+        rate = (f"{_fs(rule['pass_rate'])}%" if ok
                 else '<span class="pill p-warn">n/e</span>')
         fails = fmt_int(rule["fail_count"] or 0) if ok else "—"
         rows.append(
@@ -667,7 +675,7 @@ def _card(view: Dict, rule: Dict, ctx: ReportContext) -> str:
     rule_def = rule["rule"]
     status = (
         f'<span class="badge b-{score_bucket(rule["pass_rate"], g, y)}"><i></i>'
-        f'{_f1(rule["pass_rate"])}% pass</span>' if ok else
+        f'{_fs(rule["pass_rate"])}% pass</span>' if ok else
         '<span class="pill p-warn">Not evaluated</span>'
     )
     reason = ("" if ok else

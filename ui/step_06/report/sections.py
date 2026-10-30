@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from src.formatting import fmt_pct, fmt_score
 from ui.step_06._rule_rows import STATUS_EVALUATED
 from ui.step_06._shared import _DEFAULT_ACCENT, _SYSTEM_ACCENTS
 from ui.step_06.report import tables
@@ -109,7 +110,7 @@ def _summary_row(view: Dict) -> str:
     return (
         f'<tr><td><a href="#{esc(code)}"><b>{esc(view["name"])}</b></a></td>'
         f"<td><code>{esc(code)}</code></td>"
-        f'<td class="num big">{result.overall_score:.1f}</td>'
+        f'<td class="num big">{fmt_score(result.overall_score)}</td>'
         f'<td class="c-bar">'
         f'{score_bar(result.overall_score, result.threshold_green, result.threshold_yellow)}'
         "</td>"
@@ -130,7 +131,7 @@ def _needs_attention(views: List[Dict], ctx: ReportContext) -> str:
             items.append(
                 f"<li>{tables.badge(v['bucket'])} "
                 f'<a href="#{esc(v["code"])}"><b>{esc(v["code"])}</b></a> '
-                f"scores <b>{r.overall_score:.1f}</b> - "
+                f"scores <b>{fmt_score(r.overall_score)}</b> - "
                 f"{fmt_int(r.rows_red)} rows "
                 f"({_pct(r.rows_red, r.total_rows):.1f}%) are Red.</li>"
             )
@@ -166,7 +167,7 @@ def _lowest_cdes(views: List[Dict]) -> str:
     ]
     flat.sort(key=lambda pair: pair[0]["score"])
     items = [
-        f'<li><span class="num w">{item["score"]:.1f}</span> '
+        f'<li><span class="num w">{fmt_score(item["score"])}</span> '
         f"{tables.badge(item['bucket'])} "
         f'<a href="#{esc(v["code"])}-cdes"><code>{esc(v["code"])}</code> '
         f"{esc(item['name'])}</a></li>"
@@ -185,7 +186,7 @@ def _lowest_dqrs(views: List[Dict]) -> str:
     ]
     flat.sort(key=lambda t: t[0])
     items = [
-        f'<li><span class="num w">{rate:.1f}%</span> '
+        f'<li><span class="num w">{fmt_pct(rate)}</span> '
         f'<a href="#{esc(v["code"])}-dqrs"><code>{esc(v["code"])}</code> '
         f'{esc(label)}</a> <span class="muted">w={weight:.1f}%</span></li>'
         for rate, label, weight, v in flat[:5]

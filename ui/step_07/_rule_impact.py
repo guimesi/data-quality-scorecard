@@ -10,6 +10,7 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.formatting import PCT_COLUMN_FORMAT
 from src.ml_lab import (
     compute_rule_impact,
 )
@@ -55,7 +56,8 @@ def _render_tab_rule_impact(code: str, dp, config, result) -> None:
         column_config={
             "weight_pct": st.column_config.NumberColumn(format="%.2f%%"),
             "pass_rate_pct": st.column_config.ProgressColumn(
-                "pass_rate_pct", min_value=0, max_value=100, format="%.1f%%",
+                "pass_rate_pct", min_value=0, max_value=100,
+                format=PCT_COLUMN_FORMAT,
             ),
             "baseline_source_score": st.column_config.NumberColumn(format="%.2f"),
             "loo_source_score": st.column_config.NumberColumn(format="%.2f"),

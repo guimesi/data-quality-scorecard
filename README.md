@@ -318,6 +318,11 @@ what the publishers consume:
 - **Rule score history**: every recorded run appends one row per rule to
   `DQS_RULE_SCORES` (`deploy/databricks/05_rule_scores_table.sql`) - see
   `src/rule_scores.py`.
+- **Score display**: scores and pass rates are shown with two decimals and
+  **floored**, never rounded (`src/formatting.py`), in the dashboard, the
+  HTML / PDF report and the config JSON. A rule failing 179 of 835,280 rows
+  reads `99.97%`, not `100.0%`; `100.00` is reserved for a rule or Data
+  Product with no failing row. Stored values keep their own precision.
 
 `python scripts/build_sample_report.py` generates both editions from
 mock data (`output/dq_report/`).
@@ -392,6 +397,7 @@ data_quality_app/
 │   ├── projects.py              # Saved projects: versioned config capture + audit changelog
 │   ├── telemetry.py             # Adoption/audit metrics for the 📊 Adoption admin page
 │   ├── scorecard.py             # Score computation (standard + custom combined)
+│   ├── formatting.py            # Floored 2-decimal score / pass-rate text (100.00 = nothing failed)
 │   ├── one_click.py             # ⚡ One-click automation service (custom-only, equal weights)
 │   ├── ml_lab.py                # 🧪 ML Lab algorithms (Step 7, beta) - read-only
 │   ├── custom_dqr_engine.py     # SLIM re-export of src/custom_dqr/*

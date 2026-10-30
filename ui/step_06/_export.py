@@ -12,6 +12,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from src.formatting import floor_pct
 from utils.helpers import score_bucket
 
 # Spreadsheet applications (Excel, Google Sheets, LibreOffice) treat any cell
@@ -247,12 +248,12 @@ def _build_config_json(dp, result, config) -> bytes:
                 "dimension": a.dimension,
                 "weight_pct": round(a.weight, 4),
                 "params": a.params,
-                "pass_rate_pct": round(result.rule_pass_rates.get(a.rule_id, 0.0), 2),
+                "pass_rate_pct": floor_pct(result.rule_pass_rates.get(a.rule_id, 0.0)),
             }
             for a in config.assignments
         ],
         "summary": {
-            "overall_score": round(result.overall_score, 2),
+            "overall_score": floor_pct(result.overall_score),
             "rows_green": result.rows_green,
             "rows_yellow": result.rows_yellow,
             "rows_red": result.rows_red,
