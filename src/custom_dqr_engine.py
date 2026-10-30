@@ -71,6 +71,8 @@ from src.custom_dqr._acce_rules import (
     _classify_ac4_quantity_acce,
     _classify_ac4_scope_acce,
     _classify_ac8_category_acce,
+    acce_ac5_applicable,
+    acce_ac6_applicable,
     check_acce_ac1,
     check_acce_ac2,
     check_acce_ac3,
@@ -117,8 +119,8 @@ from src.custom_dqr._adr_rules import (
     ADR_A8_SEGMENT_REQUIRED_COLUMNS,
     ADR_A8_THRESHOLD_CHOICES,
     ADR_A8_THRESHOLD_PARAM,
-    ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
     ADR_A9_FACTOR_FIELDS,
+    ADR_A9_FAIL_WITHOUT_REFERENCE_PARAM,
     ADR_A9_LOCATION_REFERENCE,
     ADR_A9_MFC_COLUMNS,
     ADR_A9_PERIOD_POLICY,
@@ -149,7 +151,11 @@ from src.custom_dqr._adr_rules import (
     check_adr_a8,
     check_adr_a9,
 )
-from src.custom_dqr._dispatcher import evaluate_custom_rules
+from src.custom_dqr._dispatcher import (
+    CustomRuleEvaluation,
+    evaluate_custom_rules,
+    evaluate_custom_rules_scoped,
+)
 from src.custom_dqr._ept_rules import (
     EPT_E1_REQUIRED_COLUMNS,
     EPT_E2_REFERENCE,
@@ -208,7 +214,9 @@ __all__ = [
     "CustomRuleNotEvaluated",
     "validate_completeness_rule",
     "validate_referential_integrity_rule",
+    "CustomRuleEvaluation",
     "evaluate_custom_rules",
+    "evaluate_custom_rules_scoped",
     # TypedDict for assignment.params per parametric rule. ``total=False``
     # so any missing key falls back to the module-level default.
     "EPTE3Params",
@@ -350,6 +358,8 @@ __all__ = [
     "check_acce_ac2",
     "check_acce_ac3",
     "check_acce_ac4",
+    "acce_ac5_applicable",
+    "acce_ac6_applicable",
     "check_acce_ac5",
     "check_acce_ac6",
     "check_acce_ac7",

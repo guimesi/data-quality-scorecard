@@ -189,12 +189,18 @@ def build_dp_view(code: str, dp, result, cfg, ctx) -> Dict:
         rule = r["rule"]
         rid = r["rule_id"]
         fail = int((~flags[rid]).sum()) if rid in flags.columns else None
+        # Scope-aware counts: ``pass_count`` is "rows in scope - failing",
+        # ``na_count`` the rows the rule does not apply to (they pass but
+        # are outside the pass-rate denominator).
+        in_scope = r.get("rows_in_scope")
+        in_scope = total if in_scope is None else int(in_scope)
         dqrs.append(dict(
             r,
             source_columns=(effective_required_columns(rule, r["params"])
                             if rule is not None else {}),
             fail_count=fail,
-            pass_count=(total - fail) if fail is not None else None,
+            pass_count=(in_scope - fail) if fail is not None else None,
+            na_count=max(0, total - in_scope) if fail is not None else None,
             drill_total=(drill_total([rid])
                          if r["status"] == STATUS_EVALUATED else None),
         ))

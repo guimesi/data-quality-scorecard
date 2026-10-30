@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
 import pandas as pd
@@ -15,12 +16,46 @@ from src.models import CustomDQRAssignment
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class CustomRuleEvaluation:
+    """Outcome of :func:`evaluate_custom_rules_scoped`.
+
+    ``results`` - one Boolean column per *evaluated* rule_id (True = pass).
+    Rows outside a rule's scope are forced to True.
+    ``applicable`` - same columns; True where the rule applies. All True for
+    rules without a ``CustomRuleDef.applicable`` callable.
+    ``not_evaluated`` - ``rule_id`` → reason, as for
+    :func:`evaluate_custom_rules`.
+    """
+    results: pd.DataFrame
+    applicable: pd.DataFrame
+    not_evaluated: Dict[str, str] = field(default_factory=dict)
+
+    def applicable_counts(self) -> Dict[str, int]:
+        """``rule_id`` → number of rows the rule applies to."""
+        return {c: int(self.applicable[c].sum()) for c in self.applicable.columns}
+
+
 def evaluate_custom_rules(
     df: pd.DataFrame,
     assignments: List[CustomDQRAssignment],
     data_product: str,
 ) -> Tuple[pd.DataFrame, Dict[str, str]]:
-    """Return ``(results_df, not_evaluated)``.
+    """Return ``(results_df, not_evaluated)`` - see
+    :func:`evaluate_custom_rules_scoped` for the scope-aware variant; this
+    wrapper keeps the historical two-tuple for the failed-rows export, the
+    drill-downs and the ML Lab, which only need the per-row pass flags."""
+    ev = evaluate_custom_rules_scoped(df, assignments, data_product)
+    return ev.results, ev.not_evaluated
+
+
+def evaluate_custom_rules_scoped(
+    df: pd.DataFrame,
+    assignments: List[CustomDQRAssignment],
+    data_product: str,
+) -> CustomRuleEvaluation:
+    """Evaluate the assigned custom rules and return a
+    :class:`CustomRuleEvaluation`.
 
     - ``results_df``: one Boolean column per *evaluated* rule_id.
     - ``not_evaluated``: ``rule_id`` → human-readable reason, populated when
@@ -42,9 +77,10 @@ def evaluate_custom_rules(
     from config.custom_dqr_catalog import get_available_custom_dqr_rules
 
     out = pd.DataFrame(index=df.index)
+    scope = pd.DataFrame(index=df.index)
     not_evaluated: Dict[str, str] = {}
     if not assignments:
-        return out, not_evaluated
+        return CustomRuleEvaluation(out, scope, not_evaluated)
     catalog = {
         r.id: r
         for r in get_available_custom_dqr_rules(data_product, include_inactive=True)
@@ -66,6 +102,16 @@ def evaluate_custom_rules(
             else:
                 raw = rule.check(df)
             result = raw.fillna(False).astype(bool)
+            if rule.applicable is not None:
+                applicable = (
+                    pd.Series(rule.applicable(df)).reindex(df.index)
+                    .fillna(False).astype(bool)
+                )
+                # Not-applicable rows pass: the rule has nothing to say
+                # about them, and the row score must not be penalised.
+                result = result | ~applicable
+            else:
+                applicable = pd.Series(True, index=df.index)
         except CustomRuleNotEvaluated as exc:
             not_evaluated[a.rule_id] = str(exc)
             continue
@@ -84,4 +130,5 @@ def evaluate_custom_rules(
             )
             continue
         out[a.rule_id] = result
-    return out, not_evaluated
+        scope[a.rule_id] = applicable
+    return CustomRuleEvaluation(out, scope, not_evaluated)

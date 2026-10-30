@@ -323,6 +323,13 @@ what the publishers consume:
   HTML / PDF report and the config JSON. A rule failing 179 of 835,280 rows
   reads `99.97%`, not `100.0%`; `100.00` is reserved for a rule or Data
   Product with no failing row. Stored values keep their own precision.
+- **Scope-aware pass rates**: a custom rule may declare the rows it applies
+  to (`CustomRuleDef.applicable`). Not-applicable rows pass - row scores,
+  the overall score and the buckets are untouched - but are left out of
+  the rule's pass-rate denominator, shown as *Rows in scope* in Step 6 and
+  `· N not applicable` in the report. DQ-ACCE-5 (equipment lines with a
+  quantity) and DQ-ACCE-6 (labor-costed lines with a quantity) use it: 179
+  failing equipment lines read 96.1%, not 99.97% of all 835,280 lines.
 
 `python scripts/build_sample_report.py` generates both editions from
 mock data (`output/dq_report/`).

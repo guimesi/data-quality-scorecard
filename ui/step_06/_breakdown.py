@@ -68,6 +68,10 @@ def _render_custom_rules_table(code: str, result) -> None:
                 float("nan") if r["pass_rate"] is None
                 else floor_pct(r["pass_rate"])
             ),
+            "Rows in scope": (
+                float("nan") if r.get("rows_in_scope") is None
+                else int(r["rows_in_scope"])
+            ),
         }
         for r in custom_rule_rows(code, cfg, result)
     ]
@@ -85,6 +89,11 @@ def _render_custom_rules_table(code: str, result) -> None:
                 format=PCT_COLUMN_FORMAT,
             ),
             "Weight (%)": st.column_config.NumberColumn(format="%.2f%%"),
+            "Rows in scope": st.column_config.NumberColumn(
+                "Rows in scope", format="%d",
+                help="Rows the rule applies to - the pass-rate denominator. "
+                     "Rows outside the scope pass and are not counted.",
+            ),
         },
         on_select="rerun",
         selection_mode="single-row",

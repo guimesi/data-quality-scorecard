@@ -221,10 +221,13 @@ def dqr_list(view: Dict) -> str:
             bar = f'<span class="c-bar">{score_bar(r["pass_rate"], g, y)}</span>'
             tail = (f'<span class="num">{fmt_pct(r["pass_rate"])}</span>'
                     f'<span class="num">{fmt_int(r["fail_count"] or 0)}</span>')
+            na = r.get("na_count") or 0
             kv_tail = (
                 f"<dt>Pass / fail</dt><dd>{fmt_int(r['pass_count'] or 0)} / "
                 f"{fmt_int(r['fail_count'] or 0)} rows "
-                f"({fmt_pct(r['pass_rate'])} pass)</dd>"
+                f"({fmt_pct(r['pass_rate'])} pass)"
+                + (f" · {fmt_int(na)} not applicable" if na else "")
+                + "</dd>"
             )
             callout = ""
             drill = _drill_or_note(

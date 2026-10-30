@@ -123,6 +123,17 @@ class ScorecardResult:
     custom_score: Optional[float] = None         # 0-100 or None when Custom not selected
     source_weights: Dict[str, float] = field(default_factory=dict)
     custom_rule_pass_rates: Dict[str, float] = field(default_factory=dict)  # rule_id -> %
+    # Scope-aware companions of ``custom_rule_pass_rates`` (2026-10-30).
+    # ``custom_rule_pass_rates`` is "rows passing / rows the rule applies
+    # to" - for a rule with a ``CustomRuleDef.applicable`` scope (DQ-ACCE-5
+    # / DQ-ACCE-6) the denominator is the rows in scope, for every other
+    # rule it is every row. ``custom_rule_applicable_rows`` carries that
+    # denominator per evaluated rule; ``custom_rule_row_pass_rates`` is the
+    # all-rows rate (not-applicable rows count as pass), the quantity that
+    # is linear with the row scores and therefore what the ML Lab's
+    # what-if tools must use.
+    custom_rule_applicable_rows: Dict[str, int] = field(default_factory=dict)
+    custom_rule_row_pass_rates: Dict[str, float] = field(default_factory=dict)
     # Custom rules whose dependencies (e.g. a reference dataset) were missing
     # at evaluation time. Maps rule_id -> human-readable reason. Surfaced in
     # Step 6 so the user sees the failure explicitly instead of a silent pass.

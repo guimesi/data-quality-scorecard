@@ -97,6 +97,15 @@ class CustomRuleDef:
     # the user picks one value from a small, curated list. Defaults to
     # empty so non-outlier rules don't render a selectbox they don't need.
     select_options: List[CustomRuleSelectOption] = field(default_factory=list)
+    # Optional scope: ``df -> Boolean Series`` marking the rows the rule
+    # applies to. Rows outside the scope are *not applicable*: the
+    # dispatcher forces them to PASS (row scores and colours are unaffected)
+    # and the scorecard leaves them out of the rule's pass-rate denominator,
+    # so the rate is "failing rows / rows in scope" instead of "/ all rows".
+    # ``None`` (the default) means every row is in scope. Introduced for
+    # DQ-ACCE-5 / DQ-ACCE-6 (2026-10-30), whose scope is a small slice of
+    # the ACCE lines (equipment lines / labor-costed lines with a quantity).
+    applicable: Optional[Callable[[pd.DataFrame], pd.Series]] = None
 
 
 _PERCENTILE_OPTION_DESCRIPTION = (

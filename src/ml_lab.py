@@ -483,7 +483,11 @@ def compute_rule_impact(config, result) -> pd.DataFrame:
     )
     _section(
         config.custom_assignments,
-        result.custom_rule_pass_rates,
+        # The all-rows rate is the one that is linear with the row scores
+        # (scope-aware rates would make the leave-one-out baseline drift
+        # from the real Custom sub-score).
+        getattr(result, "custom_rule_row_pass_rates", None)
+        or result.custom_rule_pass_rates,
         "Custom",
         lambda a: a.rule_id,
     )

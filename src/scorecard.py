@@ -25,6 +25,7 @@ existing fixtures and tests still produce identical scores.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -32,7 +33,7 @@ import pandas as pd
 
 from config.dqr_sources import SOURCE_CUSTOM, SOURCE_STANDARD
 from config.settings import SETTINGS
-from src.custom_dqr_engine import evaluate_custom_rules
+from src.custom_dqr_engine import evaluate_custom_rules_scoped
 from src.dqr_engine import evaluate_all_safe
 from src.models import (
     CustomDQRAssignment,
@@ -108,10 +109,18 @@ def _compute_standard_row_scores(
     return row_scores, rule_pass_rates, not_computed
 
 
-def _compute_custom_row_scores(
-    dp: DataProduct, config: DataProductConfig
-) -> Tuple[pd.Series, Dict[str, float], Dict[str, str]]:
-    """Return ``(row_scores 0-100, custom_rule_pass_rates, not_evaluated)``.
+@dataclass
+class CustomScoring:
+    """Everything the Custom source contributes to a scorecard."""
+    row_scores: pd.Series                     # 0-100 per row
+    pass_rates: Dict[str, float]              # rule_id -> % of rows *in scope* passing
+    not_evaluated: Dict[str, str]
+    applicable_rows: Dict[str, int]           # rule_id -> rows in scope
+    row_pass_rates: Dict[str, float]          # rule_id -> % of ALL rows passing
+
+
+def _compute_custom_scoring(dp: DataProduct, config: DataProductConfig) -> CustomScoring:
+    """Score the Custom source of one Data Product.
 
     When the user selected the Custom source but picked zero rules, score is
     0 (not vacuously 100) so an empty selection doesn't inflate the overall
@@ -121,31 +130,52 @@ def _compute_custom_row_scores(
     in ``not_evaluated`` and then *dropped* from the score: weights are
     renormalized over only the rules that evaluated, so a not-evaluated rule's
     weight is absorbed by the survivors rather than scored as 0. They are not
-    silently passed either - the dashboard shows the ``not_evaluated`` list."""
+    silently passed either - the dashboard shows the ``not_evaluated`` list.
+
+    Pass rates are scope-aware: a rule with a ``CustomRuleDef.applicable``
+    scope is rated over the rows it applies to (DQ-ACCE-5: 179 failing of
+    4,594 equipment lines → 96.1%, not 99.97% of all 835,280 lines). The
+    not-applicable rows still pass for the *row* score, so the overall score,
+    the sub-scores and the Green / Yellow / Red buckets do not move; only
+    the per-rule rate - and ``DQS_RULE_SCORES`` - read the honest figure.
+    A rule with zero rows in scope has nothing to fail and rates 100."""
+    zero = pd.Series(0.0, index=dp.df.index, name="custom_row_score")
     if not config.custom_assignments:
-        return (
-            pd.Series(0.0, index=dp.df.index, name="custom_row_score"),
-            {},
-            {},
-        )
-    rule_results, not_evaluated = evaluate_custom_rules(
-        dp.df, config.custom_assignments, dp.system_code
-    )
+        return CustomScoring(zero, {}, {}, {}, {})
+    ev = evaluate_custom_rules_scoped(dp.df, config.custom_assignments, dp.system_code)
+    rule_results = ev.results
     if rule_results.shape[1] == 0:
-        return (
-            pd.Series(0.0, index=dp.df.index, name="custom_row_score"),
-            {},
-            not_evaluated,
-        )
+        return CustomScoring(zero, {}, ev.not_evaluated, {}, {})
     weights = _normalize_custom_weights(
         [a for a in config.custom_assignments if a.rule_id in rule_results.columns]
     )
     row_scores = (rule_results.to_numpy(dtype=float) * weights).sum(axis=1) * 100
     row_scores = pd.Series(row_scores, index=dp.df.index, name="custom_row_score")
-    pass_rates = {
+    row_pass_rates = {
         col: float(rule_results[col].mean() * 100.0) for col in rule_results.columns
     }
-    return row_scores, pass_rates, not_evaluated
+    applicable_rows = ev.applicable_counts()
+    pass_rates: Dict[str, float] = {}
+    for col in rule_results.columns:
+        in_scope = ev.applicable[col].to_numpy(dtype=bool)
+        n_scope = int(in_scope.sum())
+        if n_scope == 0:
+            pass_rates[col] = 100.0
+        else:
+            passed = rule_results[col].to_numpy(dtype=bool)[in_scope]
+            pass_rates[col] = float(passed.mean() * 100.0)
+    return CustomScoring(
+        row_scores, pass_rates, ev.not_evaluated, applicable_rows, row_pass_rates
+    )
+
+
+def _compute_custom_row_scores(
+    dp: DataProduct, config: DataProductConfig
+) -> Tuple[pd.Series, Dict[str, float], Dict[str, str]]:
+    """``(row_scores 0-100, custom_rule_pass_rates, not_evaluated)`` - the
+    historical three-tuple view of :func:`_compute_custom_scoring`."""
+    scoring = _compute_custom_scoring(dp, config)
+    return scoring.row_scores, scoring.pass_rates, scoring.not_evaluated
 
 
 # =============================================================================
@@ -228,10 +258,15 @@ def compute_scorecard(
     else:
         standard_row_scores = pd.Series(0.0, index=dp.df.index, name="standard_row_score")
 
+    custom_rule_applicable_rows: Dict[str, int] = {}
+    custom_rule_row_pass_rates: Dict[str, float] = {}
     if SOURCE_CUSTOM in sources:
-        custom_row_scores, custom_rule_pass_rates, not_evaluated_custom_rules = (
-            _compute_custom_row_scores(dp, config)
-        )
+        custom_scoring = _compute_custom_scoring(dp, config)
+        custom_row_scores = custom_scoring.row_scores
+        custom_rule_pass_rates = custom_scoring.pass_rates
+        not_evaluated_custom_rules = custom_scoring.not_evaluated
+        custom_rule_applicable_rows = custom_scoring.applicable_rows
+        custom_rule_row_pass_rates = custom_scoring.row_pass_rates
         custom_score = float(custom_row_scores.mean()) if len(custom_row_scores) else 0.0
     else:
         custom_row_scores = pd.Series(0.0, index=dp.df.index, name="custom_row_score")
@@ -338,6 +373,8 @@ def compute_scorecard(
         custom_score=custom_score,
         source_weights=source_weights,
         custom_rule_pass_rates=custom_rule_pass_rates,
+        custom_rule_applicable_rows=custom_rule_applicable_rows,
+        custom_rule_row_pass_rates=custom_rule_row_pass_rates,
         not_evaluated_custom_rules=not_evaluated_custom_rules,
         not_computed_standard_rules=not_computed_standard_rules,
     )

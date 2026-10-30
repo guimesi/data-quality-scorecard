@@ -56,6 +56,7 @@ from ui.step_06.report import (
     render_interactive,
     render_pdf_html,
 )
+from ui.step_06.report.collect import build_dp_view
 
 # ================================================================ helpers
 
@@ -842,6 +843,23 @@ def test_pdf_cover_and_summary_numbers():
     assert f'<td class="num big">{fmt_score(result.overall_score)}</td>' in summary
     for rid in ("DQ-EPT-1", "DQ-EPT-4"):
         assert f"{fmt_score(result.custom_rule_pass_rates[rid])}%" in summary
+
+
+def test_report_shows_not_applicable_rows_for_scoped_rules():
+    """A rule with a scope (``custom_rule_applicable_rows``) reports
+    "pass / fail rows (rate) · N not applicable" with pass = in scope - fail,
+    in both the HTML drill-down and the PDF rule card."""
+    dp, cfg, result = _fixture()
+    total = result.total_rows
+    result.custom_rule_applicable_rows = {"DQ-EPT-1": total - 1, "DQ-EPT-4": total}
+    html = _build(dp, cfg, result)
+    assert "1 not applicable" in html
+    view = build_dp_view("EPT", dp, result, cfg, _CTX)
+    by_id = {r["rule_id"]: r for r in view["dqrs"]}
+    assert by_id["DQ-EPT-1"]["na_count"] == 1
+    assert by_id["DQ-EPT-1"]["pass_count"] == (total - 1) - by_id["DQ-EPT-1"]["fail_count"]
+    assert by_id["DQ-EPT-4"]["na_count"] == 0
+    assert "not applicable" not in _build(dp, cfg, _fixture()[2])
 
 
 def test_pdf_dp_pages_carry_heatmap_tables_and_config():

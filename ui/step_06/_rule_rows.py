@@ -67,5 +67,17 @@ def custom_rule_rows(system_code: str, cfg, result) -> List[Dict]:
             "reason": reason,
             "pass_rate": None if reason is not None
                          else float(result.custom_rule_pass_rates.get(a.rule_id, 0.0)),
+            # Rows the rule applies to - the pass-rate denominator. None
+            # when the rule was not evaluated or the result predates the
+            # scope-aware engine (then every row was in scope).
+            "rows_in_scope": None if reason is not None
+                             else _rows_in_scope(result, a.rule_id),
         })
     return rows
+
+
+def _rows_in_scope(result, rule_id: str) -> Optional[int]:
+    counts = getattr(result, "custom_rule_applicable_rows", None) or {}
+    if rule_id in counts:
+        return int(counts[rule_id])
+    return int(result.total_rows)

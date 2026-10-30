@@ -699,9 +699,12 @@ def _card(view: Dict, rule: Dict, ctx: ReportContext) -> str:
         f'{esc(ref.get("reference_column", "—"))}</dd></dl>'
         if ref else '<p class="muted">none</p>'
     )
+    na = rule.get("na_count") or 0
     passfail = (
         f'<h4>Pass / fail</h4><p class="m0">{fmt_int(rule["pass_count"] or 0)} / '
-        f'{fmt_int(rule["fail_count"] or 0)} rows</p>' if ok else ""
+        f'{fmt_int(rule["fail_count"] or 0)} rows'
+        + (f' · {fmt_int(na)} not applicable' if na else "")
+        + '</p>' if ok else ""
     )
     return (
         f'<div class="card{"" if ok else " card-ne"}"><div class="card-h">'

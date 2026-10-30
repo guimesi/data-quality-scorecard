@@ -46,6 +46,8 @@ from src.custom_dqr_engine import (
     ACCE_AC8_SEGMENT_REQUIRED_COLUMNS,
     ACCE_AC8_THRESHOLD_CHOICES,
     ACCE_AC8_THRESHOLD_PARAM,
+    acce_ac5_applicable,
+    acce_ac6_applicable,
     check_acce_ac1,
     check_acce_ac2,
     check_acce_ac3,
@@ -302,7 +304,10 @@ _ACCE_RULE_DEFS = [
             "report (``EQUIP_CATEGORY`` = Pumps, Vessels, Exchangers, "
             "Compressors, Towers …); plant / area bulk components "
             "(``Project / Area - …``) never have a design row, so "
-            "non-equipment lines are out of scope and pass. "
+            "non-equipment lines are out of scope and pass. The pass "
+            "rate is computed over the rows in scope (equipment lines "
+            "with a quantity): 179 failing of 4,594 reads 96.1%, not "
+            "99.97% of all 835,280 lines. "
             "Type-awareness: ADR maps ``ITEM_TYPE`` to the COA prefix "
             "its parameter names carry (``324.0-Pump Type``); ACCE "
             "property names are bare (``Item type``, ``Source of "
@@ -322,6 +327,7 @@ _ACCE_RULE_DEFS = [
         ),
         required_columns=dict(ACCE_AC5_REQUIRED_COLUMNS),
         check=check_acce_ac5,
+        applicable=acce_ac5_applicable,
     ),
     CustomRuleDef(
         id="DQ-ACCE-6",
@@ -351,13 +357,16 @@ _ACCE_RULE_DEFS = [
             "carries hours, so hours are required only on lines with "
             "``COST_LABOR_COST > 0`` (``LABOR_COST`` on "
             "``ACCE_ESTIMATECOSTRESULTS``); material and subcontract "
-            "lines are out of scope and pass. The hours comparison is "
+            "lines are out of scope and pass. The pass rate is computed "
+            "over the rows in scope (labor-costed lines with a "
+            "quantity, ~490k in production). The hours comparison is "
             "strictly ``> 0`` - null is coerced to zero and negative "
             "aggregates do not count as hours present. Missing "
             "required column → all rows fail."
         ),
         required_columns=dict(ACCE_AC6_REQUIRED_COLUMNS),
         check=check_acce_ac6,
+        applicable=acce_ac6_applicable,
     ),
     CustomRuleDef(
         id="DQ-ACCE-7",

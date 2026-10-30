@@ -63,6 +63,7 @@ Each rule is a `CustomRuleDef` with the following fields
 | `reference` | Optional. For Referential Integrity rules: `{"reference_dataset": str, "source_column": str, "reference_column": str, "lookup_column": str?}`. The UI surfaces it in the rule card details. |
 | `options` | Optional list of `CustomRuleOption(key, label, default, help, description, required_columns_when_enabled)`. Each option is rendered as an `st.toggle` below the rule's description; its value is persisted to `CustomDQRAssignment.params[key]` and routed to the check callable when it accepts a `params` argument. |
 | `select_options` | Optional list of `CustomRuleSelectOption(key, label, choices, default, help, description)`. Each option is rendered as an `st.selectbox` below the rule's description; `choices` is an ordered list of `(value, label)` pairs and the picked value is persisted to `CustomDQRAssignment.params[key]`. Used by every statistical-outlier rule (DQ-EPT-3, DQ-EPT-6, DQ-ADR-3, DQ-ADR-7, DQ-ADR-8, DQ-ACCE-3, DQ-ACCE-7, DQ-ACCE-8) to expose a customizable threshold (percentile or IQR multiplier), see [Outlier thresholds](#outlier-thresholds-e3--e6--a3--a7--a8--ac3--ac7--ac8). |
+| `applicable` | Optional `df -> Boolean Series` naming the rows the rule applies to. Rows outside the scope are **not applicable**: the dispatcher forces them to PASS (row scores, colours and the overall score are untouched) and the scorecard leaves them out of the rule's pass-rate denominator, so the rate is *failing rows / rows in scope*. The dashboard shows the denominator as **Rows in scope** and the report prints `pass / fail rows (rate) · N not applicable`. `None` (default) means every row is in scope. Declared by DQ-ACCE-5 (`acce_ac5_applicable`: equipment lines with a quantity) and DQ-ACCE-6 (`acce_ac6_applicable`: labor-costed lines with a quantity). |
 
 `effective_required_columns(rule, params)` composes the static
 `required_columns` map with whatever extras enabled options contribute via
@@ -2480,6 +2481,17 @@ equipment items whose design carries no populated property - the defect
 the rule is meant to catch. Widen the scope once the ingestion team
 exports design details for bulk component types.
 
+**Pass-rate denominator.** The rule declares its scope through
+`CustomRuleDef.applicable` (`acce_ac5_applicable`: equipment lines with a
+positive quantity), so its pass rate is *failing / rows in scope*: 179
+failing of 4,594 reads **96.1%**, not 99.97% of all 835,280 lines. The
+not-applicable lines still pass for the row score, so the overall score,
+the sub-scores and the Green / Yellow / Red buckets are unchanged; the
+dashboard shows the denominator as **Rows in scope** and the report adds
+`· N not applicable` to the pass / fail counts. `DQS_RULE_SCORES` stores
+the in-scope rate from 2026-10-30 on (earlier runs stored the all-rows
+rate).
+
 ### Where the inputs come from
 
 DQ-ACCE-5 operates on the **denormalized ACCE data product** built by
@@ -2621,6 +2633,15 @@ The component-grain alternative (group by `ACCE_ID` + `COMPONENT_SOURCE`,
 148 failing lines) was rejected because plant bulks such as
 `Project / Area - UT HDR` span 28k lines and one erection line with
 hours would mask every other.
+
+**Pass-rate denominator.** The rule declares its scope through
+`CustomRuleDef.applicable` (`acce_ac6_applicable`: labor-costed lines with
+a positive quantity, ~490k in production), so its pass rate is *failing /
+rows in scope* - 18 failing reads 99.99% either way here, but the
+denominator is the honest one. Not-applicable lines still pass for the
+row score; the dashboard shows **Rows in scope** and the report adds
+`· N not applicable`. `DQS_RULE_SCORES` stores the in-scope rate from
+2026-10-30 on.
 
 ### Where the inputs come from
 

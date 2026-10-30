@@ -1318,6 +1318,32 @@ def _ac5_expected_properties(
     return ()
 
 
+def _ac5_scope(df: pd.DataFrame) -> pd.Series:
+    """Rows DQ-ACCE-5 applies to: equipment lines (``UPPER(TRIM(DESCRIPTION))``
+    in :data:`_AC5_EQUIPMENT_DESCRIPTIONS`) with a strictly positive split
+    quantity. Assumes the required columns are present."""
+    key_qty = pd.to_numeric(df["QTY_KEY_QTY"], errors="coerce").fillna(0.0)
+    other_qty = pd.to_numeric(df["QTY_OTHER_QTY"], errors="coerce").fillna(0.0)
+    has_quantity = (key_qty > 0) | (other_qty > 0)
+    desc_upper = (
+        df["DESCRIPTION"].astype(object).astype(str).str.strip().str.upper()
+    )
+    return has_quantity & desc_upper.isin(_AC5_EQUIPMENT_DESCRIPTIONS)
+
+
+def acce_ac5_applicable(df: pd.DataFrame) -> pd.Series:
+    """``CustomRuleDef.applicable`` for DQ-ACCE-5: equipment lines with a
+    quantity. Every other line is *not applicable* - it passes and is left
+    out of the pass-rate denominator (production 2026-10-30: 4,594 lines in
+    scope out of 835,280, 179 failing → 96.1%, not 99.97%). When a required
+    column is missing every row counts as in scope so the structural
+    failure (all rows FAIL) stays visible as 0%."""
+    required = list(ACCE_AC5_REQUIRED_COLUMNS.values())
+    if any(col not in df.columns for col in required) or df.empty:
+        return pd.Series(True, index=df.index)
+    return _ac5_scope(df)
+
+
 def check_acce_ac5(df: pd.DataFrame) -> pd.Series:
     """DQ-ACCE-5: Key design details present when quantity exists (ACCE).
 
@@ -1369,14 +1395,7 @@ def check_acce_ac5(df: pd.DataFrame) -> pd.Series:
     if df.empty:
         return pd.Series(True, index=df.index)
 
-    key_qty = pd.to_numeric(df["QTY_KEY_QTY"], errors="coerce").fillna(0.0)
-    other_qty = pd.to_numeric(df["QTY_OTHER_QTY"], errors="coerce").fillna(0.0)
-    has_quantity = (key_qty > 0) | (other_qty > 0)
-    desc_upper = (
-        df["DESCRIPTION"].astype(object).astype(str).str.strip().str.upper()
-    )
-    is_equipment = desc_upper.isin(_AC5_EQUIPMENT_DESCRIPTIONS)
-    in_scope = has_quantity & is_equipment
+    in_scope = _ac5_scope(df)
     if not in_scope.any():
         return pd.Series(True, index=df.index)
 
@@ -1436,6 +1455,28 @@ def check_acce_ac5(df: pd.DataFrame) -> pd.Series:
     return (~in_scope) | design_ok
 
 
+def _ac6_scope(df: pd.DataFrame) -> pd.Series:
+    """Rows DQ-ACCE-6 applies to: a strictly positive split quantity AND a
+    strictly positive labor cost. Assumes the required columns are present."""
+    key_qty = pd.to_numeric(df["QTY_KEY_QTY"], errors="coerce").fillna(0.0)
+    other_qty = pd.to_numeric(df["QTY_OTHER_QTY"], errors="coerce").fillna(0.0)
+    labor = pd.to_numeric(df["COST_LABOR_COST"], errors="coerce").fillna(0.0)
+    return ((key_qty > 0) | (other_qty > 0)) & (labor > 0)
+
+
+def acce_ac6_applicable(df: pd.DataFrame) -> pd.Series:
+    """``CustomRuleDef.applicable`` for DQ-ACCE-6: labor-costed lines with a
+    quantity. Material / subcontract lines and lines without a quantity are
+    *not applicable* - they pass and are left out of the pass-rate
+    denominator (production 2026-10-30: ~490k lines in scope, 18 failing).
+    When a required column is missing every row counts as in scope so the
+    structural failure stays visible as 0%."""
+    required = list(ACCE_AC6_REQUIRED_COLUMNS.values())
+    if any(col not in df.columns for col in required) or df.empty:
+        return pd.Series(True, index=df.index)
+    return _ac6_scope(df)
+
+
 def check_acce_ac6(df: pd.DataFrame) -> pd.Series:
     """DQ-ACCE-6: Construction hours present when quantity exists (ACCE).
 
@@ -1480,16 +1521,11 @@ def check_acce_ac6(df: pd.DataFrame) -> pd.Series:
     if df.empty:
         return pd.Series(True, index=df.index)
 
-    key_qty = pd.to_numeric(df["QTY_KEY_QTY"], errors="coerce").fillna(0.0)
-    other_qty = pd.to_numeric(df["QTY_OTHER_QTY"], errors="coerce").fillna(0.0)
     mh = pd.to_numeric(df["COST_MH"], errors="coerce").fillna(0.0)
-    labor = pd.to_numeric(df["COST_LABOR_COST"], errors="coerce").fillna(0.0)
-
-    has_quantity = (key_qty > 0) | (other_qty > 0)
-    has_labor_cost = labor > 0
+    in_scope = _ac6_scope(df)
     # Strictly > 0 so negative aggregates don't count as hours present.
     has_construction_hours = mh > 0
-    return ~(has_quantity & has_labor_cost) | has_construction_hours
+    return (~in_scope) | has_construction_hours
 
 
 def check_acce_ac7(
