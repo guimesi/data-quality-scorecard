@@ -910,6 +910,11 @@ In addition to this README, see:
   SHAP-equivalent row-deficit waterfall), snapshot schema, 9-tab UI walk,
   optional scikit-learn swap-ins, testing, extension recipes and known
   limitations.
+- [documents/AIRTABLE_ACCE.md](documents/AIRTABLE_ACCE.md) - ready-to-type
+  Airtable records for the ACCE data product (CDEs with table / column /
+  type / sample / rules, and the four active rules with description,
+  technical validation and exception scenario), plus how the results push
+  links to them.
 - [documents/BLOCK_DIAGRAM.md](documents/BLOCK_DIAGRAM.md) - module / layer
   block diagram (Mermaid).
 - [documents/FLOWCHART.md](documents/FLOWCHART.md) - end-to-end user / data
